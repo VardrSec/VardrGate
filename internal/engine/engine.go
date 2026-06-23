@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/VardrSec/vardrgate/internal/client"
@@ -33,9 +33,9 @@ func DefaultEngine() *Engine {
 
 // Result is the complete output of a single test case run.
 type Result struct {
-	TestCaseID string
-	Executions []model.ExecutionResult
-	Findings   []model.Finding
+	TestCaseID string                  `json:"test_case_id"`
+	Executions []model.ExecutionResult `json:"executions"`
+	Findings   []model.Finding         `json:"findings"`
 }
 
 // Run validates the test case, executes the request for each identity,
@@ -45,7 +45,6 @@ func (e *Engine) Run(ctx context.Context, tc model.AuthorizationTestCase) (Resul
 		return Result{}, err
 	}
 
-	// Index expected decisions by identity ID for O(1) lookup.
 	expected := make(map[string]model.AccessDecision, len(tc.ExpectedAccess))
 	for _, ea := range tc.ExpectedAccess {
 		expected[ea.IdentityID] = ea.Decision
@@ -71,69 +70,108 @@ func (e *Engine) Run(ctx context.Context, tc model.AuthorizationTestCase) (Resul
 	return result, nil
 }
 
-// evaluate compares the observed result against the expected decision and
-// returns a Finding when the behavior warrants one.
+// evaluate compares the observed outcome against the expected decision.
+// Findings are only emitted for clear allow/deny signals; ambiguous outcomes
+// (404, 5xx, redirect) are not classified as authorization decisions.
 func evaluate(tc model.AuthorizationTestCase, identity model.Identity, exec model.ExecutionResult, expected model.AccessDecision) (model.Finding, bool) {
-	// Execution errors are evidence but not definitive findings on their own.
 	if exec.Error != "" {
 		return model.Finding{}, false
 	}
 
-	observed := observedDecision(exec.StatusCode)
-
-	if observed == expected {
-		return model.Finding{}, false
-	}
-
-	finding := model.Finding{
-		IdentityID: identity.ID,
-		DetectedAt: time.Now().UTC(),
-		Evidence: []string{
-			fmt.Sprintf("expected=%s observed=%s", expected, observed),
-			fmt.Sprintf("status_code=%d", exec.StatusCode),
-			fmt.Sprintf("identity=%s", identity.ID),
-			fmt.Sprintf("url=%s %s", tc.Request.Method, tc.Request.URL),
-		},
+	// Use the classified outcome set by the executor; fall back to classification
+	// when the executor did not set it (e.g. test stubs that only set StatusCode).
+	outcome := exec.ObservedOutcome
+	if outcome == "" {
+		outcome = model.ClassifyOutcome(exec.StatusCode, false)
 	}
 
 	switch {
-	case expected == model.AccessDecisionDeny && observed == model.AccessDecisionAllow:
-		finding.Category = model.CategoryPotentialBOLA
-		finding.Severity = model.SeverityHigh
-		finding.Confidence = model.ConfidenceMedium
-		finding.Message = fmt.Sprintf(
+	case expected == model.AccessDecisionDeny && outcome == model.OutcomeAllow:
+		return unexpectedAccessFinding(tc, identity, exec, outcome), true
+	case expected == model.AccessDecisionAllow && outcome == model.OutcomeDeny:
+		return accessDeniedFinding(tc, identity, exec, outcome), true
+	default:
+		// Ambiguous outcomes (not_found, server_error, redirect, client_error)
+		// are not sufficient to classify an authorization finding alone.
+		return model.Finding{}, false
+	}
+}
+
+// unexpectedAccessFinding emits an unexpected_access finding by default.
+// It escalates to potential_bola only when the identity carries a TenantID,
+// indicating cross-tenant object access context.
+func unexpectedAccessFinding(tc model.AuthorizationTestCase, identity model.Identity, exec model.ExecutionResult, outcome model.ObservedOutcome) model.Finding {
+	f := model.Finding{
+		IdentityID: identity.ID,
+		Severity:   model.SeverityHigh,
+		Confidence: model.ConfidenceMedium,
+		DetectedAt: time.Now().UTC(),
+		Evidence:   buildEvidence(tc, identity, exec, outcome),
+	}
+	if identity.TenantID != "" {
+		f.Category = model.CategoryPotentialBOLA
+		f.Message = fmt.Sprintf(
+			"identity %q (tenant %q) received access that should have been denied",
+			identity.ID, identity.TenantID,
+		)
+	} else {
+		f.Category = model.CategoryUnexpectedAccess
+		f.Message = fmt.Sprintf(
 			"identity %q received access that should have been denied", identity.ID,
 		)
-	case expected == model.AccessDecisionAllow && observed == model.AccessDecisionDeny:
-		finding.Category = model.CategoryAuthorizationMismatch
-		finding.Severity = model.SeverityLow
-		finding.Confidence = model.ConfidenceHigh
-		finding.Message = fmt.Sprintf(
-			"identity %q was denied access that should have been allowed", identity.ID,
-		)
-	default:
-		finding.Category = model.CategoryUnexpectedAccess
-		finding.Severity = model.SeverityMedium
-		finding.Confidence = model.ConfidenceLow
-		finding.Message = fmt.Sprintf(
-			"identity %q received unexpected access decision (expected %s, got %s)",
-			identity.ID, expected, observed,
-		)
 	}
-
-	return finding, true
+	return f
 }
 
-// observedDecision maps an HTTP status code to an AccessDecision.
-// 2xx → allow; 401/403 → deny; anything else → deny (conservative).
-func observedDecision(code int) model.AccessDecision {
-	if code >= http.StatusOK && code < http.StatusMultipleChoices {
-		return model.AccessDecisionAllow
+func accessDeniedFinding(tc model.AuthorizationTestCase, identity model.Identity, exec model.ExecutionResult, outcome model.ObservedOutcome) model.Finding {
+	return model.Finding{
+		Category:   model.CategoryAuthorizationMismatch,
+		Severity:   model.SeverityLow,
+		Confidence: model.ConfidenceHigh,
+		IdentityID: identity.ID,
+		Message:    fmt.Sprintf("identity %q was denied access that should have been allowed", identity.ID),
+		DetectedAt: time.Now().UTC(),
+		Evidence:   buildEvidence(tc, identity, exec, outcome),
 	}
-	return model.AccessDecisionDeny
 }
 
-// validate ensures the test case has the minimum required fields before execution.
+func buildEvidence(tc model.AuthorizationTestCase, identity model.Identity, exec model.ExecutionResult, outcome model.ObservedOutcome) []string {
+	return []string{
+		fmt.Sprintf("observed_outcome=%s", outcome),
+		fmt.Sprintf("status_code=%d", exec.StatusCode),
+		fmt.Sprintf("identity_id=%s", identity.ID),
+		fmt.Sprintf("url=%s %s", tc.Request.Method, sanitizeURL(tc.Request.URL)),
+	}
+}
+
+// sensitiveQueryParams are redacted from URLs appearing in evidence strings.
+var sensitiveQueryParams = []string{
+	"api_key", "apikey", "token", "access_token",
+	"secret", "key", "password", "auth", "authorization",
+}
+
+// sanitizeURL removes known sensitive query parameters from URLs before
+// they are written into evidence strings.
+func sanitizeURL(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return "[invalid-url]"
+	}
+	q := u.Query()
+	redacted := false
+	for _, p := range sensitiveQueryParams {
+		if q.Has(p) {
+			q.Set(p, "[REDACTED]")
+			redacted = true
+		}
+	}
+	if redacted {
+		u.RawQuery = q.Encode()
+	}
+	return u.String()
+}
+
+// validate ensures the test case has the minimum required fields.
 func validate(tc model.AuthorizationTestCase) error {
 	if tc.ID == "" {
 		return errors.New("test case must have an id")

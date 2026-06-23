@@ -2,12 +2,16 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 
 	"github.com/VardrSec/vardrgate/internal/engine"
 	"github.com/VardrSec/vardrgate/internal/model"
 )
+
+// maxRequestBodyBytes limits the size of a POST /tests/execute request body.
+const maxRequestBodyBytes = 1 << 20 // 1 MB
 
 // Handler owns the ServeMux and all route registrations.
 type Handler struct {
@@ -42,8 +46,15 @@ func (h *Handler) handleTestsExecute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodyBytes)
+
 	var tc model.AuthorizationTestCase
 	if err := json.NewDecoder(r.Body).Decode(&tc); err != nil {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			h.writeError(w, "request body too large", http.StatusRequestEntityTooLarge)
+			return
+		}
 		h.writeError(w, "invalid request body: "+err.Error(), http.StatusBadRequest)
 		return
 	}

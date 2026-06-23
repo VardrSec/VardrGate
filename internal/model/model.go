@@ -8,8 +8,14 @@ import (
 // CredentialType identifies how a credential is applied to a request.
 type CredentialType string
 
-// AccessDecision is the expected or observed authorization outcome for an identity.
+// AccessDecision is the expected authorization outcome for an identity.
 type AccessDecision string
+
+// ObservedOutcome is the classified result of executing a request.
+type ObservedOutcome string
+
+// ExecutionErrorKind classifies why an execution failed before a response was received.
+type ExecutionErrorKind string
 
 // Confidence expresses how certain a finding is.
 type Confidence string
@@ -30,6 +36,20 @@ const (
 	AccessDecisionDeny  AccessDecision = "deny"
 	AccessDecisionSkip  AccessDecision = "skip"
 
+	OutcomeAllow       ObservedOutcome = "allow"        // 2xx
+	OutcomeDeny        ObservedOutcome = "deny"         // 401, 403
+	OutcomeNotFound    ObservedOutcome = "not_found"    // 404
+	OutcomeRedirect    ObservedOutcome = "redirect"     // 3xx
+	OutcomeServerError ObservedOutcome = "server_error" // 5xx
+	OutcomeClientError ObservedOutcome = "client_error" // 4xx other than 401/403/404
+	OutcomeError       ObservedOutcome = "error"        // network/timeout/validation failure
+
+	ErrorKindURLValidation    ExecutionErrorKind = "url_validation"
+	ErrorKindBuildRequest     ExecutionErrorKind = "build_request"
+	ErrorKindNetwork          ExecutionErrorKind = "network"
+	ErrorKindBodySizeExceeded ExecutionErrorKind = "body_size_exceeded"
+	ErrorKindBodyRead         ExecutionErrorKind = "body_read"
+
 	ConfidenceLow    Confidence = "low"
 	ConfidenceMedium Confidence = "medium"
 	ConfidenceHigh   Confidence = "high"
@@ -45,19 +65,65 @@ const (
 	CategoryAuthorizationMismatch FindingCategory = "authorization_mismatch"
 )
 
+// ClassifyOutcome maps an HTTP status code to an ObservedOutcome.
+// Pass hasError=true when execution failed before a response was received.
+func ClassifyOutcome(statusCode int, hasError bool) ObservedOutcome {
+	if hasError {
+		return OutcomeError
+	}
+	switch {
+	case statusCode >= 200 && statusCode < 300:
+		return OutcomeAllow
+	case statusCode == 401 || statusCode == 403:
+		return OutcomeDeny
+	case statusCode == 404:
+		return OutcomeNotFound
+	case statusCode >= 300 && statusCode < 400:
+		return OutcomeRedirect
+	case statusCode >= 500:
+		return OutcomeServerError
+	case statusCode >= 400:
+		return OutcomeClientError
+	default:
+		return OutcomeError
+	}
+}
+
 // Identity represents a principal (user, role, service account) used in a test.
 type Identity struct {
 	ID          string     `json:"id"`
+	Name        string     `json:"name,omitempty"`
+	Role        string     `json:"role,omitempty"`
+	TenantID    string     `json:"tenant_id,omitempty"`
 	Description string     `json:"description,omitempty"`
 	Credential  Credential `json:"credential"`
 }
 
-// Credential holds the type and header name for applying an identity's secret.
-// Value is intentionally excluded from JSON to prevent credential leakage.
+// Credential carries type and header metadata.
+// Value is excluded from JSON output via json:"-" on the struct field.
+// UnmarshalJSON allows API callers to supply "value" in request JSON;
+// the default MarshalJSON never writes it to any response.
 type Credential struct {
 	Type   CredentialType `json:"type"`
 	Header string         `json:"header,omitempty"`
 	Value  string         `json:"-"`
+}
+
+// UnmarshalJSON reads "value" from API input without ever writing it to output.
+func (c *Credential) UnmarshalJSON(data []byte) error {
+	type wire struct {
+		Type   CredentialType `json:"type"`
+		Header string         `json:"header"`
+		Value  string         `json:"value"`
+	}
+	var w wire
+	if err := json.Unmarshal(data, &w); err != nil {
+		return err
+	}
+	c.Type = w.Type
+	c.Header = w.Header
+	c.Value = w.Value
+	return nil
 }
 
 // RequestTemplate describes the HTTP request to execute for each identity.
@@ -76,15 +142,17 @@ type ExpectedAccess struct {
 	Note       string         `json:"note,omitempty"`
 }
 
-// ExecutionResult captures the raw HTTP response for one identity.
+// ExecutionResult captures the HTTP response for one identity.
 // Body is excluded from JSON; callers access it directly for comparison.
 type ExecutionResult struct {
-	IdentityID string            `json:"identity_id"`
-	StatusCode int               `json:"status_code"`
-	Headers    map[string]string `json:"headers,omitempty"`
-	Body       []byte            `json:"-"`
-	DurationMS int64             `json:"duration_ms"`
-	Error      string            `json:"error,omitempty"`
+	IdentityID      string             `json:"identity_id"`
+	StatusCode      int                `json:"status_code"`
+	ObservedOutcome ObservedOutcome    `json:"observed_outcome,omitempty"`
+	Headers         map[string]string  `json:"headers,omitempty"`
+	Body            []byte             `json:"-"`
+	DurationMS      int64              `json:"duration_ms"`
+	Error           string             `json:"error,omitempty"`
+	ErrorKind       ExecutionErrorKind `json:"error_kind,omitempty"`
 }
 
 // ComparisonResult summarizes differences observed across identity executions.

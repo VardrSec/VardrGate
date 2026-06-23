@@ -9,42 +9,76 @@ import (
 	"time"
 
 	"github.com/VardrSec/vardrgate/internal/model"
+	"github.com/VardrSec/vardrgate/internal/urlcheck"
 )
 
-const defaultTimeout = 30 * time.Second
+const (
+	defaultTimeout      = 30 * time.Second
+	defaultMaxBodyBytes = 5 * 1024 * 1024 // 5 MB
+)
+
+// Config controls client behaviour. Zero values use safe defaults.
+type Config struct {
+	Timeout             time.Duration
+	MaxBodyBytes        int64
+	AllowPrivateTargets bool // permit loopback and private-network targets
+}
 
 // Client executes HTTP requests on behalf of an identity.
 // It never logs or exposes raw credential values.
 type Client struct {
-	http    *http.Client
-	timeout time.Duration
+	http *http.Client
+	cfg  Config
 }
 
-// New returns a Client using the provided http.Client.
-// Pass a custom http.Client to control TLS, redirect policy, and transport.
+// New returns a Client with safe defaults:
+// private and loopback targets blocked, 30 s timeout, 5 MB body limit.
 func New(httpClient *http.Client) *Client {
+	return NewWithConfig(httpClient, Config{})
+}
+
+// NewWithConfig returns a Client with the provided config.
+// Zero-value fields use safe defaults.
+func NewWithConfig(httpClient *http.Client, cfg Config) *Client {
 	if httpClient == nil {
 		httpClient = &http.Client{
-			// Do not follow redirects by default; authorization tests must
-			// observe the raw decision, not the post-redirect destination.
+			// Do not follow redirects; authorization tests must observe the
+			// raw decision, not the post-redirect destination.
 			CheckRedirect: func(*http.Request, []*http.Request) error {
 				return http.ErrUseLastResponse
 			},
 		}
 	}
-	return &Client{http: httpClient, timeout: defaultTimeout}
+	if cfg.Timeout == 0 {
+		cfg.Timeout = defaultTimeout
+	}
+	if cfg.MaxBodyBytes == 0 {
+		cfg.MaxBodyBytes = defaultMaxBodyBytes
+	}
+	return &Client{http: httpClient, cfg: cfg}
 }
 
-// Execute performs the request described by tmpl for the given identity and
-// returns a populated ExecutionResult. Errors during execution are captured
-// inside the result, not returned as Go errors, so the engine can continue
+// Execute performs the request described by tmpl for the given identity.
+// All errors are captured inside the result so the engine can continue
 // with remaining identities.
 func (c *Client) Execute(ctx context.Context, identity model.Identity, tmpl model.RequestTemplate) model.ExecutionResult {
 	result := model.ExecutionResult{IdentityID: identity.ID}
 
-	req, err := c.buildRequest(ctx, identity, tmpl)
+	if err := urlcheck.Check(ctx, tmpl.URL, c.cfg.AllowPrivateTargets); err != nil {
+		result.Error = err.Error()
+		result.ErrorKind = model.ErrorKindURLValidation
+		result.ObservedOutcome = model.OutcomeError
+		return result
+	}
+
+	reqCtx, cancel := context.WithTimeout(ctx, c.cfg.Timeout)
+	defer cancel()
+
+	req, err := c.buildRequest(reqCtx, identity, tmpl)
 	if err != nil {
 		result.Error = fmt.Sprintf("build request: %s", err)
+		result.ErrorKind = model.ErrorKindBuildRequest
+		result.ObservedOutcome = model.OutcomeError
 		return result
 	}
 
@@ -54,44 +88,51 @@ func (c *Client) Execute(ctx context.Context, identity model.Identity, tmpl mode
 
 	if err != nil {
 		result.Error = fmt.Sprintf("execute request: %s", err)
+		result.ErrorKind = model.ErrorKindNetwork
+		result.ObservedOutcome = model.OutcomeError
 		return result
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	lr := io.LimitReader(resp.Body, c.cfg.MaxBodyBytes+1)
+	body, err := io.ReadAll(lr)
 	if err != nil {
 		result.Error = fmt.Sprintf("read body: %s", err)
+		result.ErrorKind = model.ErrorKindBodyRead
+		result.ObservedOutcome = model.OutcomeError
+		return result
+	}
+	if int64(len(body)) > c.cfg.MaxBodyBytes {
+		result.Error = fmt.Sprintf("response body exceeded maximum of %d bytes", c.cfg.MaxBodyBytes)
+		result.ErrorKind = model.ErrorKindBodySizeExceeded
+		result.ObservedOutcome = model.OutcomeError
 		return result
 	}
 
 	result.StatusCode = resp.StatusCode
+	result.ObservedOutcome = model.ClassifyOutcome(resp.StatusCode, false)
 	result.Body = body
 	result.Headers = selectedHeaders(resp.Header)
 	return result
 }
 
 // buildRequest constructs an *http.Request with credentials applied.
+// ctx must already carry the per-request timeout.
 func (c *Client) buildRequest(ctx context.Context, identity model.Identity, tmpl model.RequestTemplate) (*http.Request, error) {
 	var body io.Reader
 	if len(tmpl.Body) > 0 {
 		body = bytes.NewReader(tmpl.Body)
 	}
 
-	reqCtx, cancel := context.WithTimeout(ctx, c.timeout)
-	_ = cancel // caller's context controls overall lifetime; timeout provides a ceiling
-
-	req, err := http.NewRequestWithContext(reqCtx, tmpl.Method, tmpl.URL, body)
+	req, err := http.NewRequestWithContext(ctx, tmpl.Method, tmpl.URL, body)
 	if err != nil {
-		cancel()
 		return nil, err
 	}
 
-	// Copy template headers first so credential application can override.
 	for k, v := range tmpl.Headers {
 		req.Header.Set(k, v)
 	}
 
-	// Apply query parameters.
 	if len(tmpl.QueryParams) > 0 {
 		q := req.URL.Query()
 		for k, v := range tmpl.QueryParams {

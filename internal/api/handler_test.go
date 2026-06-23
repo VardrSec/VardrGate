@@ -21,9 +21,11 @@ type stubExecutor struct {
 }
 
 func (s *stubExecutor) Execute(_ context.Context, identity model.Identity, _ model.RequestTemplate) model.ExecutionResult {
+	code := s.responses[identity.ID]
 	return model.ExecutionResult{
-		IdentityID: identity.ID,
-		StatusCode: s.responses[identity.ID],
+		IdentityID:      identity.ID,
+		StatusCode:      code,
+		ObservedOutcome: model.ClassifyOutcome(code, false),
 	}
 }
 
@@ -40,24 +42,18 @@ func newTestHandlerWithResponses(responses map[string]int) *Handler {
 // --- GET /health ---
 
 func TestHealthStatus(t *testing.T) {
-	h := newTestHandler()
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	rr := httptest.NewRecorder()
-
-	h.ServeHTTP(rr, req)
-
+	newTestHandler().ServeHTTP(rr, req)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
 	}
 }
 
 func TestHealthContentType(t *testing.T) {
-	h := newTestHandler()
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	rr := httptest.NewRecorder()
-
-	h.ServeHTTP(rr, req)
-
+	newTestHandler().ServeHTTP(rr, req)
 	ct := rr.Header().Get("Content-Type")
 	if !strings.HasPrefix(ct, "application/json") {
 		t.Fatalf("expected Content-Type application/json, got %q", ct)
@@ -65,34 +61,21 @@ func TestHealthContentType(t *testing.T) {
 }
 
 func TestHealthBody(t *testing.T) {
-	h := newTestHandler()
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	rr := httptest.NewRecorder()
-
-	h.ServeHTTP(rr, req)
-
+	newTestHandler().ServeHTTP(rr, req)
 	body := strings.TrimSpace(rr.Body.String())
-	want := `{"status":"ok"}`
-	if body != want {
-		t.Fatalf("expected body %q, got %q", want, body)
+	if body != `{"status":"ok"}` {
+		t.Fatalf("expected {\"status\":\"ok\"}, got %q", body)
 	}
 }
 
 func TestHealthUnsupportedMethods(t *testing.T) {
-	methods := []string{
-		http.MethodPost,
-		http.MethodPut,
-		http.MethodDelete,
-		http.MethodPatch,
-	}
-	h := newTestHandler()
-	for _, method := range methods {
+	for _, method := range []string{http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodPatch} {
 		t.Run(method, func(t *testing.T) {
 			req := httptest.NewRequest(method, "/health", nil)
 			rr := httptest.NewRecorder()
-
-			h.ServeHTTP(rr, req)
-
+			newTestHandler().ServeHTTP(rr, req)
 			if rr.Code != http.StatusMethodNotAllowed {
 				t.Fatalf("%s /health: expected 405, got %d", method, rr.Code)
 			}
@@ -121,16 +104,11 @@ func validTestCase() model.AuthorizationTestCase {
 }
 
 func TestTestsExecute_Returns200OnSuccess(t *testing.T) {
-	h := newTestHandlerWithResponses(map[string]int{
-		"admin": http.StatusOK,
-		"user":  http.StatusForbidden,
-	})
+	h := newTestHandlerWithResponses(map[string]int{"admin": 200, "user": 403})
 	body, _ := json.Marshal(validTestCase())
 	req := httptest.NewRequest(http.MethodPost, "/tests/execute", bytes.NewReader(body))
 	rr := httptest.NewRecorder()
-
 	h.ServeHTTP(rr, req)
-
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
 	}
@@ -141,77 +119,57 @@ func TestTestsExecute_ContentTypeJSON(t *testing.T) {
 	body, _ := json.Marshal(validTestCase())
 	req := httptest.NewRequest(http.MethodPost, "/tests/execute", bytes.NewReader(body))
 	rr := httptest.NewRecorder()
-
 	h.ServeHTTP(rr, req)
-
-	ct := rr.Header().Get("Content-Type")
-	if !strings.HasPrefix(ct, "application/json") {
-		t.Fatalf("expected application/json, got %q", ct)
+	if !strings.HasPrefix(rr.Header().Get("Content-Type"), "application/json") {
+		t.Fatalf("expected application/json, got %q", rr.Header().Get("Content-Type"))
 	}
 }
 
-func TestTestsExecute_ResponseContainsExecutionsAndFindings(t *testing.T) {
-	h := newTestHandlerWithResponses(map[string]int{
-		"admin": http.StatusOK,
-		"user":  http.StatusOK, // should have been denied → finding
-	})
+func TestTestsExecute_ResponseContainsSnakeCaseFields(t *testing.T) {
+	h := newTestHandlerWithResponses(map[string]int{"admin": 200, "user": 200})
 	body, _ := json.Marshal(validTestCase())
 	req := httptest.NewRequest(http.MethodPost, "/tests/execute", bytes.NewReader(body))
 	rr := httptest.NewRecorder()
-
 	h.ServeHTTP(rr, req)
 
 	var resp map[string]json.RawMessage
 	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if _, ok := resp["Executions"]; !ok {
-		if _, ok2 := resp["executions"]; !ok2 {
-			t.Error("response missing executions field")
-		}
-	}
-	if _, ok := resp["Findings"]; !ok {
-		if _, ok2 := resp["findings"]; !ok2 {
-			t.Error("response missing findings field")
+	for _, field := range []string{"test_case_id", "executions", "findings"} {
+		if _, ok := resp[field]; !ok {
+			t.Errorf("response missing field %q", field)
 		}
 	}
 }
 
 func TestTestsExecute_InvalidBody_Returns400(t *testing.T) {
-	h := newTestHandler()
 	req := httptest.NewRequest(http.MethodPost, "/tests/execute", strings.NewReader("not json"))
 	rr := httptest.NewRecorder()
-
-	h.ServeHTTP(rr, req)
-
+	newTestHandler().ServeHTTP(rr, req)
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", rr.Code)
 	}
 }
 
 func TestTestsExecute_InvalidTestCase_Returns422(t *testing.T) {
-	h := newTestHandler()
 	tc := validTestCase()
-	tc.ID = "" // triggers validation error
+	tc.ID = ""
 	body, _ := json.Marshal(tc)
 	req := httptest.NewRequest(http.MethodPost, "/tests/execute", bytes.NewReader(body))
 	rr := httptest.NewRecorder()
-
-	h.ServeHTTP(rr, req)
-
+	newTestHandler().ServeHTTP(rr, req)
 	if rr.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("expected 422, got %d", rr.Code)
 	}
 }
 
 func TestTestsExecute_UnsupportedMethods(t *testing.T) {
-	methods := []string{http.MethodGet, http.MethodPut, http.MethodDelete}
-	h := newTestHandler()
-	for _, method := range methods {
+	for _, method := range []string{http.MethodGet, http.MethodPut, http.MethodDelete} {
 		t.Run(method, func(t *testing.T) {
 			req := httptest.NewRequest(method, "/tests/execute", nil)
 			rr := httptest.NewRecorder()
-			h.ServeHTTP(rr, req)
+			newTestHandler().ServeHTTP(rr, req)
 			if rr.Code != http.StatusMethodNotAllowed {
 				t.Fatalf("%s /tests/execute: expected 405, got %d", method, rr.Code)
 			}
@@ -224,7 +182,6 @@ func TestTestsExecute_NoFindingsWhenExpectationsMet(t *testing.T) {
 	body, _ := json.Marshal(validTestCase())
 	req := httptest.NewRequest(http.MethodPost, "/tests/execute", bytes.NewReader(body))
 	rr := httptest.NewRecorder()
-
 	h.ServeHTTP(rr, req)
 
 	var result engine.Result
@@ -233,5 +190,40 @@ func TestTestsExecute_NoFindingsWhenExpectationsMet(t *testing.T) {
 	}
 	if len(result.Findings) != 0 {
 		t.Fatalf("expected no findings, got %d", len(result.Findings))
+	}
+}
+
+// Issue 9: request body exceeding maxRequestBodyBytes must return 413.
+func TestTestsExecute_RequestBodyTooLarge_Returns413(t *testing.T) {
+	large := strings.Repeat("x", maxRequestBodyBytes+1)
+	body := `{"id":"t","padding":"` + large + `"}`
+	req := httptest.NewRequest(http.MethodPost, "/tests/execute", strings.NewReader(body))
+	rr := httptest.NewRecorder()
+	newTestHandler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("expected 413, got %d", rr.Code)
+	}
+}
+
+// Issue 1: credential value supplied in request JSON must reach the identity
+// without appearing in the response JSON.
+func TestTestsExecute_CredentialValueNotInResponse(t *testing.T) {
+	// Build raw JSON with an explicit credential "value" field.
+	payload := `{
+		"id":"tc-cred",
+		"identities":[{"id":"u","credential":{"type":"bearer","value":"super-secret"}}],
+		"request":{"method":"GET","url":"https://example.com/"},
+		"expected_access":[{"identity_id":"u","decision":"skip"}]
+	}`
+	req := httptest.NewRequest(http.MethodPost, "/tests/execute", strings.NewReader(payload))
+	rr := httptest.NewRecorder()
+	newTestHandlerWithResponses(map[string]int{"u": 200}).ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	respBody := rr.Body.String()
+	if strings.Contains(respBody, "super-secret") {
+		t.Errorf("credential value leaked into response: %s", respBody)
 	}
 }
