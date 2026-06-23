@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/VardrSec/vardrgate/internal/api"
+	"github.com/VardrSec/vardrgate/internal/engine"
 )
 
 func main() {
@@ -24,7 +25,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	handler := api.New(log)
+	eng := engine.DefaultEngine()
+	handler := api.New(log, eng)
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%d", port),
 		Handler: handler,

@@ -1,0 +1,55 @@
+{
+  "id": "bola-resource-ownership-check",
+  "description": "Verify that a regular user cannot read another user's resource. The admin identity owns the resource; the attacker identity should be denied.",
+  "identities": [
+    {
+      "id": "admin",
+      "description": "Resource owner with full access",
+      "credential": {
+        "type": "bearer",
+        "value": "REPLACE_WITH_ADMIN_TOKEN"
+      }
+    },
+    {
+      "id": "attacker",
+      "description": "Authenticated user who does not own the resource",
+      "credential": {
+        "type": "bearer",
+        "value": "REPLACE_WITH_ATTACKER_TOKEN"
+      }
+    },
+    {
+      "id": "anonymous",
+      "description": "Unauthenticated caller",
+      "credential": {
+        "type": "static_header",
+        "header": "",
+        "value": ""
+      }
+    }
+  ],
+  "request": {
+    "method": "GET",
+    "url": "https://api.example.com/users/42/profile",
+    "headers": {
+      "Accept": "application/json"
+    }
+  },
+  "expected_access": [
+    {
+      "identity_id": "admin",
+      "decision": "allow",
+      "note": "Owner should always have read access to their own resource"
+    },
+    {
+      "identity_id": "attacker",
+      "decision": "deny",
+      "note": "Cross-user access without explicit sharing must be denied (BOLA)"
+    },
+    {
+      "identity_id": "anonymous",
+      "decision": "deny",
+      "note": "Unauthenticated requests must be rejected"
+    }
+  ]
+}
