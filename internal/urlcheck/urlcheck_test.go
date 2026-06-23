@@ -2,6 +2,7 @@ package urlcheck
 
 import (
 	"context"
+	"net"
 	"strings"
 	"testing"
 )
@@ -137,5 +138,49 @@ func TestCheck_AllowsPublicIP(t *testing.T) {
 	// 8.8.8.8 is a well-known public IP — not loopback, private, link-local, or multicast.
 	if err := Check(context.Background(), "https://8.8.8.8/dns-query", false); err != nil {
 		t.Errorf("unexpected error for public IP: %v", err)
+	}
+}
+
+// TestCheck_AllowsHostname verifies that hostname-based URLs pass the pre-flight
+// check without DNS resolution. IP validation for hostnames happens at dial time
+// via CheckIP in the transport's DialContext to prevent DNS rebinding.
+func TestCheck_AllowsHostname(t *testing.T) {
+	hosts := []string{
+		"https://example.com/path",
+		"http://api.internal.example.com/v1/resource",
+	}
+	for _, u := range hosts {
+		if err := Check(context.Background(), u, false); err != nil {
+			t.Errorf("Check(%q): hostname should pass pre-flight, got: %v", u, err)
+		}
+	}
+}
+
+func TestCheckIP_BlocksAlways(t *testing.T) {
+	// These are blocked regardless of allowPrivate.
+	cases := []struct {
+		ip      string
+		wantErr string
+	}{
+		{"0.0.0.0", "unspecified"},
+		{"::", "unspecified"},
+		{"169.254.1.1", "link-local"},
+		// 239.0.0.1 is administratively-scoped multicast (not link-local),
+		// so IsMulticast fires rather than IsLinkLocalMulticast.
+		{"239.0.0.1", "multicast"},
+	}
+	for _, c := range cases {
+		ip := net.ParseIP(c.ip)
+		if ip == nil {
+			t.Fatalf("bad test IP: %s", c.ip)
+		}
+		err := CheckIP(ip, true) // even with allowPrivate
+		if err == nil {
+			t.Errorf("CheckIP(%s, allowPrivate=true): expected error containing %q, got nil", c.ip, c.wantErr)
+			continue
+		}
+		if !strings.Contains(err.Error(), c.wantErr) {
+			t.Errorf("CheckIP(%s): error %q does not contain %q", c.ip, err.Error(), c.wantErr)
+		}
 	}
 }

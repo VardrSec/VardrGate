@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 
@@ -47,15 +48,23 @@ func (h *Handler) handleTestsExecute(w http.ResponseWriter, r *http.Request) {
 	}
 
 	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodyBytes)
+	dec := json.NewDecoder(r.Body)
 
 	var tc model.AuthorizationTestCase
-	if err := json.NewDecoder(r.Body).Decode(&tc); err != nil {
+	if err := dec.Decode(&tc); err != nil {
 		var maxBytesErr *http.MaxBytesError
 		if errors.As(err, &maxBytesErr) {
 			h.writeError(w, "request body too large", http.StatusRequestEntityTooLarge)
 			return
 		}
 		h.writeError(w, "invalid request body: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Require exactly one JSON value; trailing content is rejected.
+	var extra json.RawMessage
+	if err := dec.Decode(&extra); err != io.EOF {
+		h.writeError(w, "request body must contain exactly one JSON value", http.StatusBadRequest)
 		return
 	}
 

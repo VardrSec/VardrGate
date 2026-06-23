@@ -85,14 +85,16 @@ func TestRun_UnexpectedAccess_WhenDeniedIdentityGetsAllow(t *testing.T) {
 	}
 }
 
-// Issue 6: deny→allow WITH TenantID must be escalated to potential_bola.
-func TestRun_PotentialBOLA_WhenTenantIDSet(t *testing.T) {
+// TenantID alone is not sufficient to establish a cross-tenant object-access
+// relationship. The finding must remain unexpected_access until resource-
+// ownership context (owner identity, target tenant, object ID) is modelled.
+func TestRun_TenantIDAloneDoesNotElevateToBOLA(t *testing.T) {
 	tc := baseTC()
-	tc.Identities[1].TenantID = "tenant-b" // user belongs to a different tenant
+	tc.Identities[1].TenantID = "tenant-b"
 
 	eng := New(&stubExecutor{responses: map[string]int{
 		"admin": http.StatusOK,
-		"user":  http.StatusOK, // cross-tenant access
+		"user":  http.StatusOK,
 	}})
 
 	result, err := eng.Run(context.Background(), tc)
@@ -102,12 +104,9 @@ func TestRun_PotentialBOLA_WhenTenantIDSet(t *testing.T) {
 	if len(result.Findings) != 1 {
 		t.Fatalf("expected 1 finding, got %d", len(result.Findings))
 	}
-	f := result.Findings[0]
-	if f.Category != model.CategoryPotentialBOLA {
-		t.Errorf("expected potential_bola when TenantID set, got %q", f.Category)
-	}
-	if !strings.Contains(f.Message, "tenant-b") {
-		t.Errorf("expected TenantID in message, got %q", f.Message)
+	if result.Findings[0].Category != model.CategoryUnexpectedAccess {
+		t.Errorf("TenantID alone must not elevate to potential_bola; got %q",
+			result.Findings[0].Category)
 	}
 }
 

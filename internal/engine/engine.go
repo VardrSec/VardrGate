@@ -97,30 +97,20 @@ func evaluate(tc model.AuthorizationTestCase, identity model.Identity, exec mode
 	}
 }
 
-// unexpectedAccessFinding emits an unexpected_access finding by default.
-// It escalates to potential_bola only when the identity carries a TenantID,
-// indicating cross-tenant object access context.
+// unexpectedAccessFinding emits an unexpected_access finding.
+// potential_bola requires explicit resource-ownership context (owner identity,
+// target tenant, object ID) that is not yet modelled; TenantID alone is
+// insufficient to establish a cross-tenant object-access relationship.
 func unexpectedAccessFinding(tc model.AuthorizationTestCase, identity model.Identity, exec model.ExecutionResult, outcome model.ObservedOutcome) model.Finding {
-	f := model.Finding{
-		IdentityID: identity.ID,
+	return model.Finding{
+		Category:   model.CategoryUnexpectedAccess,
 		Severity:   model.SeverityHigh,
 		Confidence: model.ConfidenceMedium,
+		IdentityID: identity.ID,
+		Message:    fmt.Sprintf("identity %q received access that should have been denied", identity.ID),
 		DetectedAt: time.Now().UTC(),
 		Evidence:   buildEvidence(tc, identity, exec, outcome),
 	}
-	if identity.TenantID != "" {
-		f.Category = model.CategoryPotentialBOLA
-		f.Message = fmt.Sprintf(
-			"identity %q (tenant %q) received access that should have been denied",
-			identity.ID, identity.TenantID,
-		)
-	} else {
-		f.Category = model.CategoryUnexpectedAccess
-		f.Message = fmt.Sprintf(
-			"identity %q received access that should have been denied", identity.ID,
-		)
-	}
-	return f
 }
 
 func accessDeniedFinding(tc model.AuthorizationTestCase, identity model.Identity, exec model.ExecutionResult, outcome model.ObservedOutcome) model.Finding {

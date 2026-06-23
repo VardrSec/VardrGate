@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"time"
 
@@ -39,23 +40,63 @@ func New(httpClient *http.Client) *Client {
 
 // NewWithConfig returns a Client with the provided config.
 // Zero-value fields use safe defaults.
+//
+// When httpClient is nil a default http.Client is constructed with a custom
+// DialContext that resolves hostnames and validates every candidate address
+// against the blocking policy at connect time. This prevents DNS rebinding:
+// the IP used for the connection is the same one that was validated, with no
+// second resolution between check and dial.
 func NewWithConfig(httpClient *http.Client, cfg Config) *Client {
-	if httpClient == nil {
-		httpClient = &http.Client{
-			// Do not follow redirects; authorization tests must observe the
-			// raw decision, not the post-redirect destination.
-			CheckRedirect: func(*http.Request, []*http.Request) error {
-				return http.ErrUseLastResponse
-			},
-		}
-	}
 	if cfg.Timeout == 0 {
 		cfg.Timeout = defaultTimeout
 	}
 	if cfg.MaxBodyBytes == 0 {
 		cfg.MaxBodyBytes = defaultMaxBodyBytes
 	}
+	if httpClient == nil {
+		httpClient = buildHTTPClient(cfg.AllowPrivateTargets)
+	}
 	return &Client{http: httpClient, cfg: cfg}
+}
+
+// buildHTTPClient constructs an http.Client whose DialContext resolves
+// hostnames and validates every candidate IP before opening a connection.
+// Dialing uses the pre-validated IP directly so no second DNS resolution occurs.
+func buildHTTPClient(allowPrivate bool) *http.Client {
+	dialer := &net.Dialer{}
+	transport := &http.Transport{
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			host, port, err := net.SplitHostPort(addr)
+			if err != nil {
+				return nil, fmt.Errorf("split host/port %q: %w", addr, err)
+			}
+
+			addrs, err := net.DefaultResolver.LookupIPAddr(ctx, host)
+			if err != nil {
+				return nil, fmt.Errorf("cannot resolve %q: %w", host, err)
+			}
+			if len(addrs) == 0 {
+				return nil, fmt.Errorf("host %q resolved to no addresses", host)
+			}
+
+			for _, a := range addrs {
+				if err := urlcheck.CheckIP(a.IP, allowPrivate); err != nil {
+					return nil, fmt.Errorf("target address blocked: %w", err)
+				}
+			}
+
+			// Dial the first validated address directly — no re-resolution.
+			return dialer.DialContext(ctx, network, net.JoinHostPort(addrs[0].IP.String(), port))
+		},
+	}
+	return &http.Client{
+		// Do not follow redirects; authorization tests must observe the
+		// raw decision, not the post-redirect destination.
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+		Transport: transport,
+	}
 }
 
 // Execute performs the request described by tmpl for the given identity.
@@ -64,6 +105,8 @@ func NewWithConfig(httpClient *http.Client, cfg Config) *Client {
 func (c *Client) Execute(ctx context.Context, identity model.Identity, tmpl model.RequestTemplate) model.ExecutionResult {
 	result := model.ExecutionResult{IdentityID: identity.ID}
 
+	// Pre-flight: validate scheme and literal IPs before spending the timeout budget.
+	// Hostname-based targets are validated at connect time by the DialContext.
 	if err := urlcheck.Check(ctx, tmpl.URL, c.cfg.AllowPrivateTargets); err != nil {
 		result.Error = err.Error()
 		result.ErrorKind = model.ErrorKindURLValidation

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/VardrSec/vardrgate/internal/api"
+	"github.com/VardrSec/vardrgate/internal/client"
 	"github.com/VardrSec/vardrgate/internal/engine"
 )
 
@@ -25,8 +26,19 @@ func main() {
 		os.Exit(1)
 	}
 
-	eng := engine.DefaultEngine()
+	allowPrivate, err := resolveAllowPrivateTargets()
+	if err != nil {
+		log.Error("invalid ALLOW_PRIVATE_TARGETS", "error", err)
+		os.Exit(1)
+	}
+	if allowPrivate {
+		log.Warn("ALLOW_PRIVATE_TARGETS is enabled; loopback and private-network targets are permitted")
+	}
+
+	c := client.NewWithConfig(nil, client.Config{AllowPrivateTargets: allowPrivate})
+	eng := engine.New(c)
 	handler := api.New(log, eng)
+
 	srv := &http.Server{
 		Addr:              fmt.Sprintf(":%d", port),
 		Handler:           handler,
@@ -72,4 +84,16 @@ func resolvePort() (int, error) {
 		return 0, fmt.Errorf("PORT must be an integer between 1 and 65535, got %q", raw)
 	}
 	return n, nil
+}
+
+func resolveAllowPrivateTargets() (bool, error) {
+	raw := os.Getenv("ALLOW_PRIVATE_TARGETS")
+	if raw == "" {
+		return false, nil
+	}
+	v, err := strconv.ParseBool(raw)
+	if err != nil {
+		return false, fmt.Errorf("ALLOW_PRIVATE_TARGETS must be true or false, got %q", raw)
+	}
+	return v, nil
 }

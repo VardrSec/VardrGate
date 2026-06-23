@@ -205,6 +205,18 @@ func TestTestsExecute_RequestBodyTooLarge_Returns413(t *testing.T) {
 	}
 }
 
+// Issue 5: a body containing more than one JSON value must be rejected.
+func TestTestsExecute_TrailingJSON_Returns400(t *testing.T) {
+	tc, _ := json.Marshal(validTestCase())
+	body := string(tc) + `{"extra":"trailing"}`
+	req := httptest.NewRequest(http.MethodPost, "/tests/execute", strings.NewReader(body))
+	rr := httptest.NewRecorder()
+	newTestHandlerWithResponses(map[string]int{"admin": 200, "user": 403}).ServeHTTP(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for trailing JSON, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
 // Issue 1: credential value supplied in request JSON must reach the identity
 // without appearing in the response JSON.
 func TestTestsExecute_CredentialValueNotInResponse(t *testing.T) {
