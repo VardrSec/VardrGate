@@ -1,214 +1,169 @@
-Technology
+# VardrGate — Engineering Reference
 
-Use:
+## What this project is
 
-Go 1.24 or newer
-Go standard library wherever practical
-net/http for HTTP clients and server functionality
-http.ServeMux for the initial API router
-log/slog for structured logging
-Go's built-in testing package
-httptest for HTTP tests
-go vet and go test
-golangci-lint only after the initial project structure is working
+VardrGate is an API authorization test runner. It accepts a test case, executes a single HTTP request as multiple identities, classifies each observed outcome against the expected access decision, and returns structured findings. It is a backend service with no frontend, no database, and no external dependencies.
 
-Do not add a frontend yet.
+## Technology
 
-Do not add PostgreSQL, Redis, Docker, background workers, Kubernetes, message queues, or cloud deployment unless explicitly requested.
+- Go 1.24 or newer
+- Go standard library only — no third-party frameworks
+- `net/http` for HTTP clients and server
+- `http.ServeMux` for routing
+- `log/slog` for structured logging
+- `go test`, `go vet`, `gofmt` before every commit
 
-Do not add a third-party framework when the Go standard library is sufficient.
+Do not add PostgreSQL, Redis, Docker, Kubernetes, message queues, background workers, OpenAPI importers, or cloud deployment unless explicitly requested.
 
-Architecture
+## Repository layout
 
-Keep the initial codebase small and modular.
-
-Expected structure:
-
+```
 cmd/vardrgate/
-└── main.go
+└── main.go                  startup, env config, dependency wiring, graceful shutdown
 
 internal/
 ├── api/
-│   ├── handler.go
+│   ├── handler.go           GET /health, POST /tests/execute
 │   └── handler_test.go
-├── model/
-│   └── model.go
 ├── client/
-│   ├── client.go
+│   ├── client.go            HTTP execution, credential application, SSRF protection
 │   └── client_test.go
 ├── compare/
-│   ├── compare.go
+│   ├── compare.go           status-code, body, JSON, and sensitive-field comparison
 │   └── compare_test.go
-└── engine/
-    ├── engine.go
-    └── engine_test.go
+├── engine/
+│   ├── engine.go            test-case validation, execution loop, finding evaluation
+│   └── engine_test.go
+├── model/
+│   ├── model.go             all domain types, constants, ClassifyOutcome
+│   └── model_test.go        credential marshal/unmarshal, ClassifyOutcome table
+└── urlcheck/
+    ├── urlcheck.go          URL scheme validation, CheckIP, DialContext-ready exports
+    └── urlcheck_test.go
 
-Responsibilities:
+docs/
+└── mvp.md                   MVP workflow definition
 
-internal/model
+examples/
+├── bola_check.json          three-identity unauthorized-access scenario
+└── ownership_check.json     local demo against an httptest-style target
+```
 
-Define typed structs and constants for:
+## Package responsibilities
 
-Identity
-Credential
-RequestTemplate
-ExpectedAccess
-ExecutionResult
-ComparisonResult
-Finding
-AuthorizationTestCase
+### `internal/model`
 
-Avoid untyped maps where a concrete struct is appropriate.
+Owns all domain types. No business logic except `ClassifyOutcome`, which converts an HTTP status code to an `ObservedOutcome` constant. All types that cross the API boundary carry JSON tags. `Credential.Value` has `json:"-"` and a custom `UnmarshalJSON` so callers can supply the secret in request JSON but it is never written to any response, finding, or log.
 
-Use custom string types and constants for values such as:
+Current types: `Identity`, `Credential`, `RequestTemplate`, `ExpectedAccess`, `ExecutionResult`, `ComparisonResult`, `Finding`, `AuthorizationTestCase`.
 
-credential type
-expected access decision
-confidence
-severity
-finding category
+Current custom string types: `CredentialType`, `AccessDecision`, `ObservedOutcome`, `ExecutionErrorKind`, `Confidence`, `Severity`, `FindingCategory`.
 
-Add JSON tags to structures that will be exposed through the API.
+### `internal/urlcheck`
 
-Do not expose credential values in response models.
+Validates URLs and IP addresses before any network request is made.
 
-internal/client
+- `Check` validates scheme (`http`/`https` only), host presence, and literal IP addresses.
+- `CheckIP` is exported so the transport `DialContext` can reuse the same policy at connect time.
+- Hostname targets are **not** resolved in `Check`; DNS resolution and IP validation happen inside `buildHTTPClient`'s `DialContext` to prevent DNS rebinding.
 
-Responsible only for HTTP request execution.
+Always blocked (even with `AllowPrivateTargets=true`): unspecified, link-local, multicast.
+Blocked by default, opt-in via `AllowPrivateTargets`: loopback, RFC-1918/4193 private ranges.
 
-Requirements:
+### `internal/client`
 
-Use net/http.
-Accept an injected http.Client.
-Support common HTTP methods.
-Support headers, query parameters, and JSON bodies.
-Apply identity credentials without modifying unrelated request data.
-Capture status code, selected headers, response body, duration, and errors.
-Use request contexts and configurable timeouts.
-Do not follow redirects unless explicitly configured.
-Do not disable TLS verification by default.
-Do not log raw credentials.
-internal/compare
+Executes a single HTTP request for one identity. Owns credential application, URL pre-flight validation, and SSRF protection.
 
-Compare execution results across identities.
+Key behaviors:
+- `New(nil)` produces a safe default client: private targets blocked, 30 s timeout, 5 MB body limit.
+- `NewWithConfig` accepts a `Config` for non-default settings.
+- The default `http.Client` is built by `buildHTTPClient`, which installs a custom `DialContext`. The dialer resolves the hostname, validates every returned IP with `CheckIP`, and dials the first pre-validated address directly — no second DNS resolution between check and connect.
+- `context.WithTimeout` cancel is always deferred in `Execute`.
+- Redirects are not followed.
+- TLS verification is on by default.
+- Credentials are never logged.
+- `Redact(cred)` returns a safe copy for use in error messages.
 
-Initial comparisons should include:
+### `internal/engine`
 
-Status-code differences
-Response-body equality
-Normalized JSON equality
-Response-size differences
-Presence or absence of configured sensitive fields
+Coordinates execution. Validates the test case, iterates identities, calls the `Executor` interface, and evaluates findings.
 
-Do not claim a vulnerability based only on one weak signal.
+Finding rules:
+- `unexpected_access` (severity: high): expected `deny`, observed `allow` (2xx).
+- `authorization_mismatch` (severity: low): expected `allow`, observed `deny` (401/403).
+- `potential_bola` is **not emitted yet** — it requires resource-ownership context (owner identity, target tenant, object ID) that is not yet modelled. `TenantID` alone is insufficient.
+- Execution errors suppress findings for that identity (single weak signal).
+- `decision: skip` records execution but emits no finding.
+- Ambiguous outcomes (404, 5xx, 3xx) when expected `deny` produce no finding.
 
-internal/engine
+The `Executor` interface is defined in the engine package and satisfied by `*client.Client`. Tests use a `stubExecutor`.
 
-Coordinate authorization test execution.
+`engine.Result` has JSON tags (`test_case_id`, `executions`, `findings`).
 
-The engine should:
+### `internal/compare`
 
-Validate the test case.
-Execute the request for each configured identity.
-Record evidence.
-Compare expected and observed access.
-Return findings and raw execution results.
+Compares two `ExecutionResult` values. Standalone utilities — not yet wired into the engine's finding evaluation.
 
-Keep request execution separate from finding evaluation.
+Comparisons: status-code equality, raw body equality, normalised JSON equality (key-order independent), response-size difference, presence/absence of sensitive fields (`token`, `secret`, `api_key`, etc.).
 
-internal/api
+`Evidence(a, b, cr)` extracts comparison output into evidence strings ready to attach to a `Finding`.
 
-Expose a minimal HTTP API.
+### `internal/api`
 
-Initial endpoints:
+Exposes the HTTP API. No business logic.
 
-GET /health
-POST /tests/execute
+- `New(log, eng)` registers routes on a `ServeMux` and returns a `Handler`.
+- `GET /health` — 200 `{"status":"ok"}`.
+- `POST /tests/execute` — 1 MB `MaxBytesReader`, single-decoder, second `Decode` must return `io.EOF` (rejects trailing content), 400/413/422/405 on error.
+- `writeJSON` and `writeError` are shared helpers; all responses carry `Content-Type: application/json`.
 
-Use http.ServeMux initially.
+### `cmd/vardrgate`
 
-Do not add user accounts, dashboards, projects, organizations, or billing.
+Startup only. Reads `PORT` (1–65535, default 8080) and `ALLOW_PRIVATE_TARGETS` (bool, default false) from the environment. Wires `client → engine → handler`. HTTP server has `ReadHeaderTimeout` 5 s, `ReadTimeout` 30 s, `WriteTimeout` 60 s, `IdleTimeout` 120 s. Graceful shutdown waits up to 10 s on `SIGINT`/`SIGTERM`.
 
-cmd/vardrgate
+## Development rules
 
-Contains only application startup and dependency wiring.
+Before committing:
+1. Read the files you plan to change.
+2. Make the smallest coherent change.
+3. Add or update tests for every behavioral change.
+4. Run `gofmt -w` on changed files.
+5. Run `go test ./...` — suite must be green.
+6. Run `go vet ./...` — must be clean.
+7. Do not rewrite unrelated files.
+8. Do not introduce speculative interfaces or abstractions.
+9. Do not add external dependencies without a written justification.
+10. Stop when the task is complete.
 
-Do not place business logic in main.go.
-
-Go Development Rules
-
-When making changes:
-
-Inspect the existing code before editing.
-Preserve working behavior.
-Make the smallest coherent change.
-Do not rewrite unrelated files.
-Do not introduce speculative interfaces.
-Define interfaces where substitution is needed, not automatically for every struct.
-Do not add dependencies without explaining why.
-Add or update tests for behavioral changes.
-Run gofmt on changed Go files.
-Run go test ./....
-Run go vet ./....
-Report exactly what changed and what remains.
-Stop when the requested task is complete.
-
-Do not implement future roadmap features unless explicitly requested.
-
-Go Code Quality
+## Code quality standards
 
 Use:
-
-Small packages with clear ownership
-Explicit constructors when initialization matters
-Context propagation for network operations
-Sentinel errors or typed errors when callers need to distinguish failures
-Table-driven tests
-httptest.Server or custom RoundTripper implementations for HTTP tests
-Dependency injection for HTTP clients, clocks, and other nondeterministic behavior where necessary
-Defensive copying of sensitive maps where mutation could cause security problems
+- Small packages with clear single ownership
+- Explicit constructors when initialization matters
+- Context propagation for all network operations
+- Sentinel or typed errors when callers need to distinguish failures
+- Table-driven tests
+- `httptest.Server` or `roundTripFunc` for HTTP tests
+- Dependency injection for `http.Client`, clocks, executors
 
 Avoid:
+- Global mutable state
+- `panic` for recoverable errors
+- Empty interfaces unless genuinely required
+- Premature generics
+- Large multipurpose packages
+- Hidden goroutine lifecycles
+- Unbounded concurrency
+- Logging credentials or secrets
+- Ignoring returned errors
 
-Global mutable state
-panic for recoverable errors
-Empty interfaces unless genuinely necessary
-Premature generic abstractions
-Interfaces defined far away from their consumers
-Large multipurpose packages
-Generic utils packages
-Hidden goroutine lifecycles
-Unbounded concurrency
-Logging secrets
-Ignoring returned errors
-Initial Development Sequence
+## What not to build yet
 
-Implement only one stage at a time.
-
-Stage 1
-Initialize the Go module
-Create the application entry point
-Create the HTTP server
-Add GET /health
-Define core domain models
-Add basic tests
-Add a graceful shutdown path
-Stage 2
-Build the safe HTTP execution client
-Apply credentials
-Add credential redaction
-Add mocked HTTP tests
-Stage 3
-Build the authorization execution engine
-Evaluate expected versus observed access
-Add engine tests
-Stage 4
-Implement response comparison
-Generate initial potential-BOLA findings
-Add evidence references
-Stage 5
-Add POST /tests/execute
-Add end-to-end HTTP API tests
-Add an example test definition
-
-Do not begin a later stage until the current stage passes its tests.
+- Frontend or dashboard
+- Database or persistence layer
+- OpenAPI / Swagger import
+- AI-agent features
+- User accounts, organizations, billing
+- `potential_bola` findings (needs resource-ownership model first)
+- Concurrency in the execution loop
+- Additional API endpoints

@@ -1,0 +1,59 @@
+{
+  "_comment": "Demo test case for local development. Targets localhost — requires ALLOW_PRIVATE_TARGETS=true. Replace the URL and credential values before running against a real API.",
+  "id": "ownership-check-demo",
+  "description": "Verify that only the resource owner can read a user profile. The owner should receive 200; other authenticated users and anonymous callers should be denied.",
+  "identities": [
+    {
+      "id": "owner",
+      "name": "Resource Owner",
+      "role": "user",
+      "credential": {
+        "type": "bearer",
+        "value": "REPLACE_WITH_OWNER_TOKEN"
+      }
+    },
+    {
+      "id": "other_user",
+      "name": "Other Authenticated User",
+      "role": "user",
+      "credential": {
+        "type": "bearer",
+        "value": "REPLACE_WITH_OTHER_USER_TOKEN"
+      }
+    },
+    {
+      "id": "anonymous",
+      "name": "Unauthenticated Caller",
+      "role": "none",
+      "credential": {
+        "type": "static_header",
+        "header": "",
+        "value": ""
+      }
+    }
+  ],
+  "request": {
+    "method": "GET",
+    "url": "http://localhost:8081/users/42/profile",
+    "headers": {
+      "Accept": "application/json"
+    }
+  },
+  "expected_access": [
+    {
+      "identity_id": "owner",
+      "decision": "allow",
+      "note": "Owner must be able to read their own profile"
+    },
+    {
+      "identity_id": "other_user",
+      "decision": "deny",
+      "note": "Cross-user profile access must be denied"
+    },
+    {
+      "identity_id": "anonymous",
+      "decision": "deny",
+      "note": "Unauthenticated requests must be rejected"
+    }
+  ]
+}
