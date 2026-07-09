@@ -53,6 +53,7 @@ CREATE TABLE IF NOT EXISTS runners (
 CREATE TABLE IF NOT EXISTS audit (
 	seq    INTEGER PRIMARY KEY AUTOINCREMENT,
 	at     TEXT NOT NULL,
+	tenant TEXT,
 	action TEXT NOT NULL,
 	job_id TEXT,
 	actor  TEXT,
@@ -243,8 +244,8 @@ func (s *SQLite) Audit(entry AuditEntry) {
 		entry.At = s.now()
 	}
 	_, _ = s.db.Exec(
-		`INSERT INTO audit(at, action, job_id, actor, detail) VALUES(?, ?, ?, ?, ?)`,
-		entry.At.Format(time.RFC3339Nano), entry.Action, entry.JobID, entry.Actor, entry.Detail,
+		`INSERT INTO audit(at, tenant, action, job_id, actor, detail) VALUES(?, ?, ?, ?, ?, ?)`,
+		entry.At.Format(time.RFC3339Nano), entry.Tenant, entry.Action, entry.JobID, entry.Actor, entry.Detail,
 	)
 }
 
@@ -252,7 +253,7 @@ func (s *SQLite) AuditLog(limit int) []AuditEntry {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	// Fetch the newest rows, then reverse to oldest→newest for a stable timeline.
-	query := `SELECT at, action, job_id, actor, detail FROM audit ORDER BY seq DESC`
+	query := `SELECT at, tenant, action, job_id, actor, detail FROM audit ORDER BY seq DESC`
 	args := []any{}
 	if limit > 0 {
 		query += ` LIMIT ?`
@@ -267,12 +268,12 @@ func (s *SQLite) AuditLog(limit int) []AuditEntry {
 	for rows.Next() {
 		var e AuditEntry
 		var at string
-		var jobID, actor, detail sql.NullString
-		if err := rows.Scan(&at, &e.Action, &jobID, &actor, &detail); err != nil {
+		var tenant, jobID, actor, detail sql.NullString
+		if err := rows.Scan(&at, &tenant, &e.Action, &jobID, &actor, &detail); err != nil {
 			continue
 		}
 		e.At, _ = time.Parse(time.RFC3339Nano, at)
-		e.JobID, e.Actor, e.Detail = jobID.String, actor.String, detail.String
+		e.Tenant, e.JobID, e.Actor, e.Detail = tenant.String, jobID.String, actor.String, detail.String
 		desc = append(desc, e)
 	}
 	// Reverse to oldest→newest.

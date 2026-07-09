@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -101,9 +102,11 @@ func serve() {
 	c := client.NewWithConfig(nil, client.Config{AllowPrivateTargets: allowPrivate})
 	eng := engine.New(c)
 
-	apiKey := os.Getenv("VARDRGATE_API_KEY")
-	if apiKey == "" {
-		log.Warn("VARDRGATE_API_KEY is not set; the /jobs and /runner endpoints are unauthenticated (development only)")
+	keys := resolveAPIKeys()
+	if len(keys) == 0 {
+		log.Warn("no API keys configured; the /jobs, /runner, and /audit endpoints are unauthenticated (development only)")
+	} else {
+		log.Info("API key authentication enabled", "tenants", len(distinctTenants(keys)))
 	}
 
 	st, closeStore, err := resolveStore(log)
@@ -113,7 +116,7 @@ func serve() {
 	}
 	defer closeStore()
 
-	handler := api.New(log, eng, st, apiKey)
+	handler := api.New(log, eng, st, keys)
 
 	srv := &http.Server{
 		Addr:              fmt.Sprintf(":%d", port),
@@ -178,6 +181,39 @@ func resolveStore(log *slog.Logger) (store.Store, func(), error) {
 	}
 	log.Info("using durable job store", "path", path)
 	return sq, func() { sq.Close() }, nil
+}
+
+// resolveAPIKeys builds the bearer-token → tenant map from the environment.
+//
+//	VARDRGATE_API_KEYS="tenant-a:key1,tenant-b:key2"  → per-tenant isolation
+//	VARDRGATE_API_KEY="key"                           → single "default" tenant
+//
+// VARDRGATE_API_KEYS takes precedence. An empty result disables auth (dev only).
+func resolveAPIKeys() map[string]string {
+	keys := map[string]string{}
+	if multi := os.Getenv("VARDRGATE_API_KEYS"); multi != "" {
+		for _, pair := range strings.Split(multi, ",") {
+			pair = strings.TrimSpace(pair)
+			tenant, key, ok := strings.Cut(pair, ":")
+			tenant, key = strings.TrimSpace(tenant), strings.TrimSpace(key)
+			if ok && tenant != "" && key != "" {
+				keys[key] = tenant
+			}
+		}
+		return keys
+	}
+	if single := os.Getenv("VARDRGATE_API_KEY"); single != "" {
+		keys[single] = "default"
+	}
+	return keys
+}
+
+func distinctTenants(keys map[string]string) map[string]struct{} {
+	out := map[string]struct{}{}
+	for _, t := range keys {
+		out[t] = struct{}{}
+	}
+	return out
 }
 
 func resolveAllowPrivateTargets() (bool, error) {

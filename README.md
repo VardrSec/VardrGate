@@ -57,7 +57,8 @@ Environment variables (serve mode):
 |---|---|---|
 | `PORT` | `8080` | Listening port (1–65535) |
 | `ALLOW_PRIVATE_TARGETS` | `false` | Permit loopback and RFC-1918 targets. Enable only for local lab testing. |
-| `VARDRGATE_API_KEY` | _(unset)_ | Bearer token required on the runner endpoints (`/jobs`, `/runner`). Unset disables auth for local dev. |
+| `VARDRGATE_API_KEY` | _(unset)_ | Single bearer token for the runner endpoints (`/jobs`, `/runner`, `/audit`); maps to the `default` tenant. Unset disables auth for local dev. |
+| `VARDRGATE_API_KEYS` | _(unset)_ | Per-tenant keys `"tenant-a:key1,tenant-b:key2"` for tenant isolation; takes precedence over `VARDRGATE_API_KEY`. |
 | `VARDRGATE_DB` | _(unset)_ | Path to a SQLite database for a durable job queue (jobs survive restart). Unset uses an in-memory store. |
 
 ## Declarative policies
@@ -168,10 +169,13 @@ See [`docs/adr/0003-runner-job-queue.md`](docs/adr/0003-runner-job-queue.md).
 | `POST /runner/heartbeat` | Report runner status and capabilities |
 | `GET /audit` | Append-only audit trail of queue actions (`?limit=N`) |
 
-All of these require `Authorization: Bearer $VARDRGATE_API_KEY` when a key is
-configured. Set `VARDRGATE_DB` to a file path for a durable queue (SQLite) whose
-jobs survive a restart; unset uses an in-memory store. PostgreSQL is the intended
-production driver and implements the same `Store` interface.
+All of these require a bearer token when keys are configured. With
+`VARDRGATE_API_KEYS` each token maps to a tenant, and every operation is scoped to
+that tenant — a caller can only see and act on its own jobs and audit entries;
+cross-tenant access returns 404. Set `VARDRGATE_DB` to a file path for a durable
+queue (SQLite) whose jobs survive a restart; unset uses an in-memory store.
+PostgreSQL is the intended production driver and implements the same `Store`
+interface.
 
 ## Security defaults
 

@@ -32,12 +32,12 @@ func (s *stubExecutor) Execute(_ context.Context, identity model.Identity, _ mod
 
 func newTestHandler() *Handler {
 	eng := engine.New(&stubExecutor{responses: map[string]int{}})
-	return New(slog.New(slog.NewTextHandler(io.Discard, nil)), eng, store.NewMemory(), "")
+	return New(slog.New(slog.NewTextHandler(io.Discard, nil)), eng, store.NewMemory(), nil)
 }
 
 func newTestHandlerWithResponses(responses map[string]int) *Handler {
 	eng := engine.New(&stubExecutor{responses: responses})
-	return New(slog.New(slog.NewTextHandler(io.Discard, nil)), eng, store.NewMemory(), "")
+	return New(slog.New(slog.NewTextHandler(io.Discard, nil)), eng, store.NewMemory(), nil)
 }
 
 // --- GET /health ---

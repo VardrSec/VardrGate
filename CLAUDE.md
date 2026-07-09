@@ -152,7 +152,7 @@ Exposes the HTTP API. No business logic.
 - `GET /health` — 200 `{"status":"ok"}`.
 - `POST /tests/execute` — synchronous execution; 1 MB `MaxBytesReader`, single-decoder, second `Decode` must return `io.EOF`, stable error codes.
 - Runner job queue (in `jobs.go`), matching VardrRunner's client shapes: `POST /jobs`, `GET /jobs/pending`, `GET /jobs/{id}`, `POST /jobs/{id}/claim` (409 on double-claim), `PATCH /jobs/{id}`, `POST /jobs/{id}/done|failed|events|upload`, `POST /runner/heartbeat`. Uses Go 1.22 method+path routing.
-- `protected`/`authOK` enforce a bearer `apiKey` on `/jobs` and `/runner` (constant-time compare); `/health` and `/tests/execute` stay open. Empty key = dev mode.
+- `protected`/`resolveTenant` enforce per-tenant bearer keys (token→tenant map, constant-time compare) on `/jobs`, `/runner`, `/audit`; the resolved tenant is carried on the request context. Every job records its owning tenant; `requireOwned` returns 404 for cross-tenant access (existence never revealed), and pending/audit lists are tenant-filtered. `/health` and `/tests/execute` stay open. Empty key map = dev mode (`default` tenant). See ADR 0005.
 - `writeJSON` and `writeError` (stable `code` envelope) are shared helpers; all responses carry `Content-Type: application/json`.
 
 ### `cmd/vardrgate`

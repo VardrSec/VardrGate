@@ -33,6 +33,7 @@ func (h *Handler) handleCreateJob(w http.ResponseWriter, r *http.Request) {
 		req.TargetSource = "config"
 	}
 	job, err := h.store.Create(store.Job{
+		Tenant:       h.tenant(r),
 		ToolType:     req.ToolType,
 		TargetSource: req.TargetSource,
 		ProgramID:    req.ProgramID,
@@ -46,20 +47,22 @@ func (h *Handler) handleCreateJob(w http.ResponseWriter, r *http.Request) {
 	h.writeJSON(w, http.StatusCreated, job)
 }
 
-// handlePendingJobs returns the queue of pending jobs.
+// handlePendingJobs returns the queue of pending jobs for the caller's tenant.
 func (h *Handler) handlePendingJobs(w http.ResponseWriter, r *http.Request) {
-	jobs := h.store.Pending()
-	if jobs == nil {
-		jobs = []store.Job{}
+	tenant := h.tenant(r)
+	jobs := []store.Job{}
+	for _, j := range h.store.Pending() {
+		if j.Tenant == tenant {
+			jobs = append(jobs, j)
+		}
 	}
 	h.writeJSON(w, http.StatusOK, map[string]any{"jobs": jobs})
 }
 
 // handleGetJob returns a single job, including its result once uploaded.
 func (h *Handler) handleGetJob(w http.ResponseWriter, r *http.Request) {
-	job, ok := h.store.Get(r.PathValue("id"))
+	job, ok := h.requireOwned(w, r, r.PathValue("id"))
 	if !ok {
-		h.writeError(w, codeNotFound, "job not found", http.StatusNotFound)
 		return
 	}
 	h.writeJSON(w, http.StatusOK, job)
@@ -67,6 +70,9 @@ func (h *Handler) handleGetJob(w http.ResponseWriter, r *http.Request) {
 
 // handleClaimJob atomically claims a pending job for the calling runner.
 func (h *Handler) handleClaimJob(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireOwned(w, r, r.PathValue("id")); !ok {
+		return
+	}
 	runner := r.Header.Get("User-Agent")
 	job, err := h.store.Claim(r.PathValue("id"), runner)
 	switch err {
@@ -82,6 +88,18 @@ func (h *Handler) handleClaimJob(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// requireOwned fetches a job and confirms it belongs to the caller's tenant.
+// A missing job and a cross-tenant job are both reported as 404 so the queue
+// never reveals the existence of another tenant's jobs.
+func (h *Handler) requireOwned(w http.ResponseWriter, r *http.Request, id string) (store.Job, bool) {
+	job, ok := h.store.Get(id)
+	if !ok || job.Tenant != h.tenant(r) {
+		h.writeError(w, codeNotFound, "job not found", http.StatusNotFound)
+		return store.Job{}, false
+	}
+	return job, true
+}
+
 // handleCompleteJob is the PATCH /jobs/{id} completion path VardrRunner uses.
 func (h *Handler) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 	var req struct {
@@ -91,11 +109,17 @@ func (h *Handler) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 	if !h.decodeJSON(w, r, &req) {
 		return
 	}
+	if _, ok := h.requireOwned(w, r, r.PathValue("id")); !ok {
+		return
+	}
 	h.complete(w, r, r.PathValue("id"), req.Status, req.ErrorMessage)
 }
 
 // handleDoneJob marks a job done (POST /jobs/{id}/done).
 func (h *Handler) handleDoneJob(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireOwned(w, r, r.PathValue("id")); !ok {
+		return
+	}
 	h.complete(w, r, r.PathValue("id"), store.StatusDone, "")
 }
 
@@ -107,6 +131,9 @@ func (h *Handler) handleFailedJob(w http.ResponseWriter, r *http.Request) {
 	}
 	// Body is optional; ignore decode errors and fall back to empty reason.
 	_ = json.NewDecoder(io.LimitReader(r.Body, maxRequestBodyBytes)).Decode(&req)
+	if _, ok := h.requireOwned(w, r, r.PathValue("id")); !ok {
+		return
+	}
 	reason := req.Error
 	if reason == "" {
 		reason = req.Reason
@@ -143,6 +170,9 @@ func (h *Handler) handleJobEvent(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, codeValidationFailed, "kind is required", http.StatusUnprocessableEntity)
 		return
 	}
+	if _, ok := h.requireOwned(w, r, r.PathValue("id")); !ok {
+		return
+	}
 	if err := h.store.AppendEvent(r.PathValue("id"), store.Event{Kind: req.Kind, Text: req.Text}); err != nil {
 		h.writeError(w, codeNotFound, "job not found", http.StatusNotFound)
 		return
@@ -155,8 +185,7 @@ func (h *Handler) handleJobEvent(w http.ResponseWriter, r *http.Request) {
 // direct POST and VardrRunner's file-upload style work.
 func (h *Handler) handleJobUpload(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	if _, ok := h.store.Get(id); !ok {
-		h.writeError(w, codeNotFound, "job not found", http.StatusNotFound)
+	if _, ok := h.requireOwned(w, r, id); !ok {
 		return
 	}
 
@@ -232,17 +261,26 @@ func (h *Handler) handleAuditLog(w http.ResponseWriter, r *http.Request) {
 			limit = n
 		}
 	}
-	entries := h.store.AuditLog(limit)
-	if entries == nil {
-		entries = []store.AuditEntry{}
+	// Fetch the full log and filter to the caller's tenant, then apply the limit
+	// so the count is meaningful within the tenant's own timeline.
+	tenant := h.tenant(r)
+	entries := []store.AuditEntry{}
+	for _, e := range h.store.AuditLog(0) {
+		if e.Tenant == tenant {
+			entries = append(entries, e)
+		}
+	}
+	if limit > 0 && len(entries) > limit {
+		entries = entries[len(entries)-limit:]
 	}
 	h.writeJSON(w, http.StatusOK, map[string]any{"audit": entries})
 }
 
-// audit records one append-only action. actor falls back to the caller's
-// User-Agent when the specific detail does not already identify who acted.
+// audit records one append-only action, tagged with the caller's tenant. actor
+// falls back to the caller's User-Agent when detail does not identify who acted.
 func (h *Handler) audit(r *http.Request, action, jobID, detail string) {
 	h.store.Audit(store.AuditEntry{
+		Tenant: h.tenant(r),
 		Action: action,
 		JobID:  jobID,
 		Actor:  r.Header.Get("User-Agent"),

@@ -8,6 +8,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Tenant isolation**: per-tenant API keys
+  (`VARDRGATE_API_KEYS="tenant-a:key1,tenant-b:key2"`) scope every queue
+  operation to the caller's tenant. Jobs and audit entries are tagged with the
+  owning tenant; cross-tenant access to a job returns 404 (existence is never
+  revealed); pending and audit lists are tenant-filtered. A single
+  `VARDRGATE_API_KEY` still works and maps to the `default` tenant. See ADR 0005.
 - **Audit log**: an append-only trail of queue actions (`job_created`,
   `job_claimed`, `job_result_uploaded`, `job_completed`, `runner_heartbeat`)
   recorded by both stores and exposed at `GET /audit` (`?limit=N`, bearer-protected).

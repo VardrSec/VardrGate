@@ -15,9 +15,17 @@ import (
 )
 
 func newJobHandler(apiKey string) (*Handler, store.Store) {
+	var keys map[string]string
+	if apiKey != "" {
+		keys = map[string]string{apiKey: "default"}
+	}
+	return newJobHandlerKeys(keys)
+}
+
+func newJobHandlerKeys(keys map[string]string) (*Handler, store.Store) {
 	st := store.NewMemory()
 	eng := engine.New(&stubExecutor{responses: map[string]int{}})
-	h := New(slog.New(slog.NewTextHandler(io.Discard, nil)), eng, st, apiKey)
+	h := New(slog.New(slog.NewTextHandler(io.Discard, nil)), eng, st, keys)
 	return h, st
 }
 
@@ -277,5 +285,93 @@ func TestAudit_RequiresAuthWhenKeySet(t *testing.T) {
 	h, _ := newJobHandler("s3cr3t")
 	if rr := do(h, http.MethodGet, "/audit", "", ""); rr.Code != http.StatusUnauthorized {
 		t.Fatalf("expected 401 without token, got %d", rr.Code)
+	}
+}
+
+// --- tenant isolation ---
+
+func TestTenantIsolation_JobsAndAudit(t *testing.T) {
+	h, _ := newJobHandlerKeys(map[string]string{"key-a": "tenant-a", "key-b": "tenant-b"})
+
+	// tenant-a creates a job.
+	rr := do(h, http.MethodPost, "/jobs", "key-a",
+		`{"tool_type":"vardrgate_api_test","program_id":"p","config":{"test_case":{"id":"x"}}}`)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("create: expected 201, got %d", rr.Code)
+	}
+	var job store.Job
+	json.NewDecoder(rr.Body).Decode(&job)
+	if job.Tenant != "tenant-a" {
+		t.Fatalf("expected job tenant tenant-a, got %q", job.Tenant)
+	}
+
+	// tenant-b must not see it in pending.
+	rr = do(h, http.MethodGet, "/jobs/pending", "key-b", "")
+	var pending struct {
+		Jobs []store.Job `json:"jobs"`
+	}
+	json.NewDecoder(rr.Body).Decode(&pending)
+	if len(pending.Jobs) != 0 {
+		t.Errorf("tenant-b saw %d jobs; expected 0", len(pending.Jobs))
+	}
+
+	// tenant-a does see it.
+	rr = do(h, http.MethodGet, "/jobs/pending", "key-a", "")
+	json.NewDecoder(rr.Body).Decode(&pending)
+	if len(pending.Jobs) != 1 {
+		t.Errorf("tenant-a saw %d jobs; expected 1", len(pending.Jobs))
+	}
+
+	// tenant-b cannot GET, claim, or complete tenant-a's job — all 404
+	// (existence is never revealed across tenants).
+	for _, tc := range []struct {
+		method, path string
+		body         string
+	}{
+		{http.MethodGet, "/jobs/" + job.ID, ""},
+		{http.MethodPost, "/jobs/" + job.ID + "/claim", ""},
+		{http.MethodPost, "/jobs/" + job.ID + "/done", ""},
+		{http.MethodPost, "/jobs/" + job.ID + "/events", `{"kind":"running"}`},
+		{http.MethodPost, "/jobs/" + job.ID + "/upload", `{"findings":[]}`},
+	} {
+		rr := do(h, tc.method, tc.path, "key-b", tc.body)
+		if rr.Code != http.StatusNotFound {
+			t.Errorf("%s %s as tenant-b: expected 404, got %d", tc.method, tc.path, rr.Code)
+		}
+	}
+
+	// tenant-a's audit shows its own action; tenant-b's audit is empty.
+	rr = do(h, http.MethodGet, "/audit", "key-a", "")
+	var auditA struct {
+		Audit []store.AuditEntry `json:"audit"`
+	}
+	json.NewDecoder(rr.Body).Decode(&auditA)
+	if len(auditA.Audit) == 0 {
+		t.Error("tenant-a audit should not be empty")
+	}
+	for _, e := range auditA.Audit {
+		if e.Tenant != "tenant-a" {
+			t.Errorf("tenant-a audit leaked entry for %q", e.Tenant)
+		}
+	}
+
+	rr = do(h, http.MethodGet, "/audit", "key-b", "")
+	var auditB struct {
+		Audit []store.AuditEntry `json:"audit"`
+	}
+	json.NewDecoder(rr.Body).Decode(&auditB)
+	if len(auditB.Audit) != 0 {
+		t.Errorf("tenant-b audit should be empty, got %d entries", len(auditB.Audit))
+	}
+}
+
+func TestTenantIsolation_OwnerCanClaim(t *testing.T) {
+	h, _ := newJobHandlerKeys(map[string]string{"key-a": "tenant-a"})
+	rr := do(h, http.MethodPost, "/jobs", "key-a",
+		`{"tool_type":"vardrgate_api_test","program_id":"p","config":{"test_case":{"id":"x"}}}`)
+	var job store.Job
+	json.NewDecoder(rr.Body).Decode(&job)
+	if rr := do(h, http.MethodPost, "/jobs/"+job.ID+"/claim", "key-a", ""); rr.Code != http.StatusOK {
+		t.Fatalf("owner claim: expected 200, got %d", rr.Code)
 	}
 }

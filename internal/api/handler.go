@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
@@ -30,23 +31,34 @@ const (
 	codeConflict         = "conflict"
 )
 
+// defaultTenant owns all jobs when authentication is disabled or a single key is
+// configured without an explicit tenant.
+const defaultTenant = "default"
+
+type ctxKey int
+
+const tenantCtxKey ctxKey = 0
+
 // Handler owns the ServeMux and all route registrations.
 type Handler struct {
 	log    *slog.Logger
 	mux    *http.ServeMux
 	engine *engine.Engine
 	store  store.Store
-	apiKey string
+	// keys maps a bearer token to the tenant it authenticates. An empty/nil map
+	// disables auth (dev only); every caller is then the default tenant.
+	keys map[string]string
 }
 
 // New wires routes and returns a ready-to-serve Handler.
 //
-// st backs the runner job queue. apiKey, when non-empty, is required as a bearer
-// token on the /jobs and /runner endpoints; the synchronous /health and
-// /tests/execute endpoints are always open. An empty apiKey disables auth
+// st backs the runner job queue. keys maps each accepted bearer token to a
+// tenant; a token is required on the /jobs, /runner, and /audit endpoints, and
+// scopes the caller to that tenant's jobs. The synchronous /health and
+// /tests/execute endpoints are always open. An empty keys map disables auth
 // (dev only) — main logs a warning in that case.
-func New(log *slog.Logger, eng *engine.Engine, st store.Store, apiKey string) *Handler {
-	h := &Handler{log: log, mux: http.NewServeMux(), engine: eng, store: st, apiKey: apiKey}
+func New(log *slog.Logger, eng *engine.Engine, st store.Store, keys map[string]string) *Handler {
+	h := &Handler{log: log, mux: http.NewServeMux(), engine: eng, store: st, keys: keys}
 
 	h.mux.HandleFunc("/health", h.handleHealth)
 	h.mux.HandleFunc("/tests/execute", h.handleTestsExecute)
@@ -67,29 +79,48 @@ func New(log *slog.Logger, eng *engine.Engine, st store.Store, apiKey string) *H
 	return h
 }
 
-// protected rejects a request unless it carries the configured bearer token.
-// When no key is configured, requests pass through (dev mode).
+// protected rejects a request unless it carries a configured bearer token, and
+// tags it with the resolved tenant. When no keys are configured, requests pass
+// through as the default tenant (dev mode).
 func (h *Handler) protected(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if !h.authOK(r) {
+		tenant, ok := h.resolveTenant(r)
+		if !ok {
 			h.writeError(w, codeUnauthorized, "missing or invalid API key", http.StatusUnauthorized)
 			return
 		}
-		next(w, r)
+		next(w, r.WithContext(context.WithValue(r.Context(), tenantCtxKey, tenant)))
 	}
 }
 
-func (h *Handler) authOK(r *http.Request) bool {
-	if h.apiKey == "" {
-		return true
+// resolveTenant returns the tenant a request authenticates as. The bearer token
+// is compared against every configured key in constant time so a mismatch does
+// not leak which key was closest.
+func (h *Handler) resolveTenant(r *http.Request) (string, bool) {
+	if len(h.keys) == 0 {
+		return defaultTenant, true
 	}
 	const prefix = "Bearer "
 	auth := r.Header.Get("Authorization")
 	if !strings.HasPrefix(auth, prefix) {
-		return false
+		return "", false
 	}
-	token := strings.TrimPrefix(auth, prefix)
-	return subtle.ConstantTimeCompare([]byte(token), []byte(h.apiKey)) == 1
+	token := []byte(strings.TrimPrefix(auth, prefix))
+	tenant, matched := "", false
+	for key, t := range h.keys {
+		if subtle.ConstantTimeCompare(token, []byte(key)) == 1 {
+			tenant, matched = t, true
+		}
+	}
+	return tenant, matched
+}
+
+// tenant returns the tenant tagged onto the request by protected.
+func (h *Handler) tenant(r *http.Request) string {
+	if t, ok := r.Context().Value(tenantCtxKey).(string); ok {
+		return t
+	}
+	return defaultTenant
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {

@@ -46,6 +46,7 @@ type Event struct {
 // (for vardrgate_api_test jobs, a job.Config with test_case and execution).
 type Job struct {
 	ID           string          `json:"id"`
+	Tenant       string          `json:"tenant,omitempty"`
 	ToolType     string          `json:"tool_type"`
 	TargetSource string          `json:"target_source"`
 	ProgramID    string          `json:"program_id"`
@@ -72,6 +73,7 @@ type RunnerInfo struct {
 // log is who-did-what-when evidence for enterprise review; it is never mutated.
 type AuditEntry struct {
 	At     time.Time `json:"at"`
+	Tenant string    `json:"tenant,omitempty"`
 	Action string    `json:"action"`
 	JobID  string    `json:"job_id,omitempty"`
 	Actor  string    `json:"actor,omitempty"`
