@@ -8,6 +8,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Audit log**: an append-only trail of queue actions (`job_created`,
+  `job_claimed`, `job_result_uploaded`, `job_completed`, `runner_heartbeat`)
+  recorded by both stores and exposed at `GET /audit` (`?limit=N`, bearer-protected).
+  Persists with the durable store.
 - **Durable job store** (`store.SQLite`, `modernc.org/sqlite`): set `VARDRGATE_DB`
   to a file path and jobs survive a restart. Same `Store` interface as the
   in-memory store, selected at startup; unset keeps the in-memory store. The

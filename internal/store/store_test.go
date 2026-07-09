@@ -168,6 +168,52 @@ func TestHeartbeat_UpsertsAndLists(t *testing.T) {
 	}
 }
 
+func TestAudit_AppendsAndTailsByLimit(t *testing.T) {
+	for name, m := range stores(t) {
+		t.Run(name, func(t *testing.T) {
+			m.Audit(AuditEntry{Action: "job_created", JobID: "a"})
+			m.Audit(AuditEntry{Action: "job_claimed", JobID: "a", Actor: "r1"})
+			m.Audit(AuditEntry{Action: "job_completed", JobID: "a", Detail: "done"})
+
+			all := m.AuditLog(0)
+			if len(all) != 3 {
+				t.Fatalf("expected 3 entries, got %d", len(all))
+			}
+			// Oldest → newest ordering.
+			if all[0].Action != "job_created" || all[2].Action != "job_completed" {
+				t.Errorf("unexpected order: %+v", all)
+			}
+			if all[0].At.IsZero() {
+				t.Error("expected timestamp set")
+			}
+
+			last2 := m.AuditLog(2)
+			if len(last2) != 2 || last2[0].Action != "job_claimed" || last2[1].Action != "job_completed" {
+				t.Errorf("limit did not return the newest 2 in order: %+v", last2)
+			}
+		})
+	}
+}
+
+func TestAudit_SurvivesReopen(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "audit.db")
+	first, err := NewSQLite(path)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	first.Audit(AuditEntry{Action: "job_created", JobID: "x"})
+	first.Close()
+
+	second, err := NewSQLite(path)
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	defer second.Close()
+	if entries := second.AuditLog(0); len(entries) != 1 || entries[0].Action != "job_created" {
+		t.Errorf("audit entry did not survive reopen: %+v", entries)
+	}
+}
+
 // TestSQLite_SurvivesReopen is the whole point of a persistent store: a job
 // enqueued before a restart is still there afterward.
 func TestSQLite_SurvivesReopen(t *testing.T) {

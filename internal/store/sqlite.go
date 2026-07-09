@@ -49,6 +49,14 @@ CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
 CREATE TABLE IF NOT EXISTS runners (
 	hostname TEXT PRIMARY KEY,
 	data     TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS audit (
+	seq    INTEGER PRIMARY KEY AUTOINCREMENT,
+	at     TEXT NOT NULL,
+	action TEXT NOT NULL,
+	job_id TEXT,
+	actor  TEXT,
+	detail TEXT
 );`
 	if _, err := db.Exec(schema); err != nil {
 		db.Close()
@@ -226,6 +234,52 @@ func (s *SQLite) Runners() []RunnerInfo {
 		}
 	}
 	return out
+}
+
+func (s *SQLite) Audit(entry AuditEntry) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if entry.At.IsZero() {
+		entry.At = s.now()
+	}
+	_, _ = s.db.Exec(
+		`INSERT INTO audit(at, action, job_id, actor, detail) VALUES(?, ?, ?, ?, ?)`,
+		entry.At.Format(time.RFC3339Nano), entry.Action, entry.JobID, entry.Actor, entry.Detail,
+	)
+}
+
+func (s *SQLite) AuditLog(limit int) []AuditEntry {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	// Fetch the newest rows, then reverse to oldest→newest for a stable timeline.
+	query := `SELECT at, action, job_id, actor, detail FROM audit ORDER BY seq DESC`
+	args := []any{}
+	if limit > 0 {
+		query += ` LIMIT ?`
+		args = append(args, limit)
+	}
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var desc []AuditEntry
+	for rows.Next() {
+		var e AuditEntry
+		var at string
+		var jobID, actor, detail sql.NullString
+		if err := rows.Scan(&at, &e.Action, &jobID, &actor, &detail); err != nil {
+			continue
+		}
+		e.At, _ = time.Parse(time.RFC3339Nano, at)
+		e.JobID, e.Actor, e.Detail = jobID.String, actor.String, detail.String
+		desc = append(desc, e)
+	}
+	// Reverse to oldest→newest.
+	for i, j := 0, len(desc)-1; i < j; i, j = i+1, j-1 {
+		desc[i], desc[j] = desc[j], desc[i]
+	}
+	return desc
 }
 
 // load reads and decodes a job. Returns sql.ErrNoRows when absent.

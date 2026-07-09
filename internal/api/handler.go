@@ -62,6 +62,7 @@ func New(log *slog.Logger, eng *engine.Engine, st store.Store, apiKey string) *H
 	h.mux.HandleFunc("POST /jobs/{id}/events", h.protected(h.handleJobEvent))
 	h.mux.HandleFunc("POST /jobs/{id}/upload", h.protected(h.handleJobUpload))
 	h.mux.HandleFunc("POST /runner/heartbeat", h.protected(h.handleHeartbeat))
+	h.mux.HandleFunc("GET /audit", h.protected(h.handleAuditLog))
 
 	return h
 }

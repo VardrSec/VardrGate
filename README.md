@@ -166,6 +166,7 @@ See [`docs/adr/0003-runner-job-queue.md`](docs/adr/0003-runner-job-queue.md).
 | `POST /jobs/{id}/events` | Stream a lifecycle event |
 | `POST /jobs/{id}/upload` | Upload the sanitized result JSON |
 | `POST /runner/heartbeat` | Report runner status and capabilities |
+| `GET /audit` | Append-only audit trail of queue actions (`?limit=N`) |
 
 All of these require `Authorization: Bearer $VARDRGATE_API_KEY` when a key is
 configured. Set `VARDRGATE_DB` to a file path for a durable queue (SQLite) whose

@@ -223,3 +223,59 @@ func TestJobs_UploadMultipart(t *testing.T) {
 func storeGet(h *Handler, id string) (store.Job, bool) {
 	return h.store.Get(id)
 }
+
+func TestAudit_RecordsLifecycleAndEndpointReturnsIt(t *testing.T) {
+	h, _ := newJobHandler("")
+
+	job := createJob(t, h, "")
+	do(h, http.MethodPost, "/jobs/"+job.ID+"/claim", "", "")
+	do(h, http.MethodPost, "/jobs/"+job.ID+"/upload", "", `{"findings":[]}`)
+	do(h, http.MethodPost, "/jobs/"+job.ID+"/done", "", "")
+	do(h, http.MethodPost, "/runner/heartbeat", "", `{"hostname":"box-1"}`)
+
+	rr := do(h, http.MethodGet, "/audit", "", "")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("audit: expected 200, got %d", rr.Code)
+	}
+	var resp struct {
+		Audit []store.AuditEntry `json:"audit"`
+	}
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	got := make(map[string]bool)
+	for _, e := range resp.Audit {
+		got[e.Action] = true
+	}
+	for _, want := range []string{
+		"job_created", "job_claimed", "job_result_uploaded", "job_completed", "runner_heartbeat",
+	} {
+		if !got[want] {
+			t.Errorf("audit log missing action %q; got %+v", want, resp.Audit)
+		}
+	}
+}
+
+func TestAudit_LimitParam(t *testing.T) {
+	h, _ := newJobHandler("")
+	createJob(t, h, "")
+	createJob(t, h, "")
+	createJob(t, h, "")
+
+	rr := do(h, http.MethodGet, "/audit?limit=2", "", "")
+	var resp struct {
+		Audit []store.AuditEntry `json:"audit"`
+	}
+	json.NewDecoder(rr.Body).Decode(&resp)
+	if len(resp.Audit) != 2 {
+		t.Fatalf("expected 2 entries with limit=2, got %d", len(resp.Audit))
+	}
+}
+
+func TestAudit_RequiresAuthWhenKeySet(t *testing.T) {
+	h, _ := newJobHandler("s3cr3t")
+	if rr := do(h, http.MethodGet, "/audit", "", ""); rr.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 without token, got %d", rr.Code)
+	}
+}

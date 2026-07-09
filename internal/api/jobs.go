@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/VardrSec/vardrgate/internal/store"
@@ -41,6 +42,7 @@ func (h *Handler) handleCreateJob(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, codeValidationFailed, err.Error(), http.StatusUnprocessableEntity)
 		return
 	}
+	h.audit(r, "job_created", job.ID, job.ToolType)
 	h.writeJSON(w, http.StatusCreated, job)
 }
 
@@ -69,6 +71,7 @@ func (h *Handler) handleClaimJob(w http.ResponseWriter, r *http.Request) {
 	job, err := h.store.Claim(r.PathValue("id"), runner)
 	switch err {
 	case nil:
+		h.audit(r, "job_claimed", job.ID, runner)
 		h.writeJSON(w, http.StatusOK, job)
 	case store.ErrNotFound:
 		h.writeError(w, codeNotFound, "job not found", http.StatusNotFound)
@@ -88,12 +91,12 @@ func (h *Handler) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 	if !h.decodeJSON(w, r, &req) {
 		return
 	}
-	h.complete(w, r.PathValue("id"), req.Status, req.ErrorMessage)
+	h.complete(w, r, r.PathValue("id"), req.Status, req.ErrorMessage)
 }
 
 // handleDoneJob marks a job done (POST /jobs/{id}/done).
 func (h *Handler) handleDoneJob(w http.ResponseWriter, r *http.Request) {
-	h.complete(w, r.PathValue("id"), store.StatusDone, "")
+	h.complete(w, r, r.PathValue("id"), store.StatusDone, "")
 }
 
 // handleFailedJob marks a job failed with a reason (POST /jobs/{id}/failed).
@@ -108,14 +111,15 @@ func (h *Handler) handleFailedJob(w http.ResponseWriter, r *http.Request) {
 	if reason == "" {
 		reason = req.Reason
 	}
-	h.complete(w, r.PathValue("id"), store.StatusFailed, reason)
+	h.complete(w, r, r.PathValue("id"), store.StatusFailed, reason)
 }
 
-func (h *Handler) complete(w http.ResponseWriter, id, status, errMsg string) {
+func (h *Handler) complete(w http.ResponseWriter, r *http.Request, id, status, errMsg string) {
 	err := h.store.Complete(id, status, errMsg)
 	switch err {
 	case nil:
 		job, _ := h.store.Get(id)
+		h.audit(r, "job_completed", id, status)
 		h.writeJSON(w, http.StatusOK, job)
 	case store.ErrNotFound:
 		h.writeError(w, codeNotFound, "job not found", http.StatusNotFound)
@@ -190,6 +194,7 @@ func (h *Handler) handleJobUpload(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, codeNotFound, "job not found", http.StatusNotFound)
 		return
 	}
+	h.audit(r, "job_result_uploaded", id, "")
 	h.writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
@@ -214,7 +219,35 @@ func (h *Handler) handleHeartbeat(w http.ResponseWriter, r *http.Request) {
 		OS:       req.OS,
 		Tools:    req.Tools,
 	})
+	h.audit(r, "runner_heartbeat", "", req.Hostname)
 	h.writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+// handleAuditLog returns the append-only audit trail, newest last. An optional
+// ?limit=N caps the number of most-recent entries returned.
+func (h *Handler) handleAuditLog(w http.ResponseWriter, r *http.Request) {
+	limit := 0
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+			limit = n
+		}
+	}
+	entries := h.store.AuditLog(limit)
+	if entries == nil {
+		entries = []store.AuditEntry{}
+	}
+	h.writeJSON(w, http.StatusOK, map[string]any{"audit": entries})
+}
+
+// audit records one append-only action. actor falls back to the caller's
+// User-Agent when the specific detail does not already identify who acted.
+func (h *Handler) audit(r *http.Request, action, jobID, detail string) {
+	h.store.Audit(store.AuditEntry{
+		Action: action,
+		JobID:  jobID,
+		Actor:  r.Header.Get("User-Agent"),
+		Detail: detail,
+	})
 }
 
 // decodeJSON reads exactly one JSON value from a size-limited body into v.

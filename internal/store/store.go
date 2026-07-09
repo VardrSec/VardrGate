@@ -68,6 +68,16 @@ type RunnerInfo struct {
 	LastSeen time.Time `json:"last_seen"`
 }
 
+// AuditEntry is one append-only record of a significant queue action. The audit
+// log is who-did-what-when evidence for enterprise review; it is never mutated.
+type AuditEntry struct {
+	At     time.Time `json:"at"`
+	Action string    `json:"action"`
+	JobID  string    `json:"job_id,omitempty"`
+	Actor  string    `json:"actor,omitempty"`
+	Detail string    `json:"detail,omitempty"`
+}
+
 // Store is the job queue and runner registry.
 type Store interface {
 	Create(job Job) (Job, error)
@@ -79,6 +89,8 @@ type Store interface {
 	Complete(id, status, errMsg string) error
 	Heartbeat(info RunnerInfo)
 	Runners() []RunnerInfo
+	Audit(entry AuditEntry)
+	AuditLog(limit int) []AuditEntry
 }
 
 // Memory is a thread-safe in-memory Store. It is the default backend until a
@@ -87,6 +99,7 @@ type Memory struct {
 	mu      sync.Mutex
 	jobs    map[string]*Job
 	runners map[string]RunnerInfo
+	audit   []AuditEntry
 	now     func() time.Time
 }
 
@@ -221,6 +234,33 @@ func (m *Memory) Runners() []RunnerInfo {
 		out = append(out, r)
 	}
 	sort.Slice(out, func(i, k int) bool { return out[i].Hostname < out[k].Hostname })
+	return out
+}
+
+func (m *Memory) Audit(entry AuditEntry) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if entry.At.IsZero() {
+		entry.At = m.now()
+	}
+	m.audit = append(m.audit, entry)
+}
+
+func (m *Memory) AuditLog(limit int) []AuditEntry {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return tailEntries(m.audit, limit)
+}
+
+// tailEntries returns the most recent limit entries (oldest→newest). limit <= 0
+// returns all entries.
+func tailEntries(all []AuditEntry, limit int) []AuditEntry {
+	start := 0
+	if limit > 0 && len(all) > limit {
+		start = len(all) - limit
+	}
+	out := make([]AuditEntry, len(all)-start)
+	copy(out, all[start:])
 	return out
 }
 
