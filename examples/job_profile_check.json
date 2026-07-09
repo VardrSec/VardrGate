@@ -1,0 +1,52 @@
+{
+  "id": "job_local_demo",
+  "type": "vardrgate_api_test",
+  "program_id": 0,
+  "config": {
+    "policy_id": "profile-ownership",
+    "test_case": {
+      "id": "profile-ownership-check",
+      "description": "Only the profile owner may read /users/42/profile. Other authenticated users and anonymous callers must be denied. Requires ALLOW_PRIVATE_TARGETS-style local testing; replace tokens and URL before real use.",
+      "identities": [
+        {
+          "id": "owner",
+          "name": "Resource Owner",
+          "role": "owner",
+          "credential": { "type": "bearer", "value": "REPLACE_WITH_OWNER_TOKEN" }
+        },
+        {
+          "id": "other_user",
+          "name": "Other Authenticated User",
+          "role": "other_user",
+          "credential": { "type": "bearer", "value": "REPLACE_WITH_OTHER_USER_TOKEN" }
+        },
+        {
+          "id": "anonymous",
+          "name": "Unauthenticated Caller",
+          "role": "anonymous",
+          "credential": { "type": "static_header", "header": "", "value": "" }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "url": "http://localhost:8081/users/42/profile",
+        "headers": { "Accept": "application/json" }
+      },
+      "resource": {
+        "type": "user_profile",
+        "object_id": "42",
+        "owner_identity": "owner"
+      },
+      "expected_access": [
+        { "identity_id": "owner", "decision": "allow" },
+        { "identity_id": "other_user", "decision": "deny" },
+        { "identity_id": "anonymous", "decision": "deny" }
+      ]
+    },
+    "execution": {
+      "timeout_seconds": 30,
+      "max_response_bytes": 5242880,
+      "allow_private_targets": true
+    }
+  }
+}

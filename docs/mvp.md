@@ -32,15 +32,26 @@ An engineer has two or more identities with different permissions on the same re
 
 If `other_user` or `anonymous` receives a 2xx, VardrGate emits an `unexpected_access` finding.
 
-## What the MVP does not cover
+## Beyond the MVP (now shipped — Phase 1)
 
-| Concern | Reason not in MVP |
+The following were originally out of scope and are now implemented. See
+[`CHANGELOG.md`](../CHANGELOG.md) and the ADRs.
+
+| Capability | Notes |
 |---|---|
-| `potential_bola` classification | Requires resource-ownership model (owner identity, target tenant, object ID) not yet built |
-| Response-body comparison in findings | `compare` package exists but is not wired into the engine yet |
+| `potential_bola`, `cross_tenant_access`, `privilege_escalation` | Emitted when the test case supplies resource-ownership / tenant / role context |
+| Response-body comparison in findings | Offending response compared against a legitimate baseline; matching body flagged |
+| Vertical privilege escalation | Via `resource.required_role` + `role_hierarchy` |
+| Declarative policies | `internal/policy` compiles a YAML control into a test case |
+| Offline execution | `vardrgate run --job job.json --out result.json` |
+
+## Still not covered
+
+| Concern | Reason |
+|---|---|
 | Concurrent execution | Sequential per-identity execution is correct and sufficient at this scale |
-| Persisted results | Out of scope; callers store what they need |
-| Vertical privilege escalation | Requires role hierarchy model not yet built |
+| Persisted results | Out of scope; callers store what they need (Phase 3) |
+| API inventory / spec import | Phase 2 |
 
 ## Inputs at MVP
 

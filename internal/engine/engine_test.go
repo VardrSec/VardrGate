@@ -13,6 +13,7 @@ import (
 type stubExecutor struct {
 	responses map[string]int
 	err       map[string]string
+	body      map[string][]byte
 }
 
 func (s *stubExecutor) Execute(_ context.Context, identity model.Identity, _ model.RequestTemplate) model.ExecutionResult {
@@ -25,6 +26,9 @@ func (s *stubExecutor) Execute(_ context.Context, identity model.Identity, _ mod
 	if code, ok := s.responses[identity.ID]; ok {
 		r.StatusCode = code
 		r.ObservedOutcome = model.ClassifyOutcome(code, false)
+	}
+	if b, ok := s.body[identity.ID]; ok {
+		r.Body = b
 	}
 	return r
 }
@@ -319,7 +323,9 @@ func TestEvidence_DoesNotContainCredentialValues(t *testing.T) {
 		ObservedOutcome: model.OutcomeAllow,
 	}
 
-	finding, ok := evaluate(tc, identity, exec, model.AccessDecisionDeny)
+	eng := New(&stubExecutor{})
+	execByID := map[string]model.ExecutionResult{identity.ID: exec}
+	finding, ok := eng.evaluate(tc, identity, execByID, model.AccessDecisionDeny)
 	if !ok {
 		t.Fatal("expected a finding")
 	}
@@ -327,5 +333,188 @@ func TestEvidence_DoesNotContainCredentialValues(t *testing.T) {
 		if strings.Contains(e, "tok-u") {
 			t.Errorf("evidence string contains credential value: %q", e)
 		}
+	}
+}
+
+func TestSanitizeURL_StripsUserinfo(t *testing.T) {
+	got := sanitizeURL("https://user:hunter2@example.com/resource/1")
+	if strings.Contains(got, "hunter2") || strings.Contains(got, "user:") {
+		t.Errorf("sanitizeURL did not strip userinfo: %s", got)
+	}
+}
+
+func TestRun_CrossTenantAccess(t *testing.T) {
+	tc := baseTC()
+	tc.Identities[1].TenantID = "tenant-b"
+	tc.Resource = &model.Resource{Type: "invoice", ObjectID: "1", TenantID: "tenant-a"}
+
+	eng := New(&stubExecutor{responses: map[string]int{"admin": 200, "user": 200}})
+	result, err := eng.Run(context.Background(), tc)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Findings) != 1 {
+		t.Fatalf("expected 1 finding, got %d", len(result.Findings))
+	}
+	f := result.Findings[0]
+	if f.Category != model.CategoryCrossTenantAccess {
+		t.Errorf("expected cross_tenant_access, got %q", f.Category)
+	}
+	if f.Severity != model.SeverityCritical {
+		t.Errorf("expected critical severity, got %q", f.Severity)
+	}
+}
+
+func TestRun_PotentialBOLA(t *testing.T) {
+	tc := baseTC()
+	tc.Resource = &model.Resource{Type: "user_profile", ObjectID: "42", OwnerIdentity: "admin"}
+
+	eng := New(&stubExecutor{responses: map[string]int{"admin": 200, "user": 200}})
+	result, err := eng.Run(context.Background(), tc)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Findings) != 1 {
+		t.Fatalf("expected 1 finding, got %d", len(result.Findings))
+	}
+	if result.Findings[0].Category != model.CategoryPotentialBOLA {
+		t.Errorf("expected potential_bola, got %q", result.Findings[0].Category)
+	}
+}
+
+func TestRun_PrivilegeEscalation(t *testing.T) {
+	tc := baseTC()
+	tc.Identities[0].Role = "admin"
+	tc.Identities[1].Role = "user"
+	tc.RoleHierarchy = []string{"user", "admin"}
+	tc.Resource = &model.Resource{Type: "admin_panel", RequiredRole: "admin"}
+
+	eng := New(&stubExecutor{responses: map[string]int{"admin": 200, "user": 200}})
+	result, err := eng.Run(context.Background(), tc)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Findings) != 1 {
+		t.Fatalf("expected 1 finding, got %d", len(result.Findings))
+	}
+	if result.Findings[0].Category != model.CategoryPrivilegeEscalation {
+		t.Errorf("expected privilege_escalation, got %q", result.Findings[0].Category)
+	}
+}
+
+// A resource with owner context but no tenant mismatch and no role gap must not
+// over-classify when the offending identity IS the owner-adjacent baseline only.
+func TestRun_BOLANotEmittedWhenOwnerContextAbsent(t *testing.T) {
+	tc := baseTC()
+	tc.Resource = &model.Resource{Type: "user_profile", ObjectID: "42"} // no owner_identity
+
+	eng := New(&stubExecutor{responses: map[string]int{"admin": 200, "user": 200}})
+	result, _ := eng.Run(context.Background(), tc)
+	if len(result.Findings) != 1 {
+		t.Fatalf("expected 1 finding, got %d", len(result.Findings))
+	}
+	if result.Findings[0].Category != model.CategoryUnexpectedAccess {
+		t.Errorf("without owner_identity, expected unexpected_access, got %q", result.Findings[0].Category)
+	}
+}
+
+func TestRun_ComparisonEvidenceWhenBodiesMatch(t *testing.T) {
+	tc := baseTC()
+	tc.Resource = &model.Resource{Type: "user_profile", ObjectID: "42", OwnerIdentity: "admin"}
+
+	body := []byte(`{"id":42,"email":"a@b.com"}`)
+	eng := New(&stubExecutor{
+		responses: map[string]int{"admin": 200, "user": 200},
+		body:      map[string][]byte{"admin": body, "user": body},
+	})
+	result, err := eng.Run(context.Background(), tc)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Findings) != 1 {
+		t.Fatalf("expected 1 finding, got %d", len(result.Findings))
+	}
+	var matched bool
+	for _, e := range result.Findings[0].Evidence {
+		if strings.Contains(e, "response_body_matches_baseline") {
+			matched = true
+		}
+	}
+	if !matched {
+		t.Errorf("expected comparison evidence noting matching bodies, got %+v", result.Findings[0].Evidence)
+	}
+}
+
+func TestValidate_DuplicateIdentityID(t *testing.T) {
+	tc := baseTC()
+	tc.Identities[1].ID = "admin"
+	tc.ExpectedAccess[1].IdentityID = "admin"
+	_, err := New(&stubExecutor{}).Run(context.Background(), tc)
+	if err == nil || !strings.Contains(err.Error(), "duplicate") {
+		t.Fatalf("expected duplicate id error, got %v", err)
+	}
+}
+
+func TestValidate_UnknownExpectedIdentity(t *testing.T) {
+	tc := baseTC()
+	tc.ExpectedAccess[1].IdentityID = "ghost"
+	_, err := New(&stubExecutor{}).Run(context.Background(), tc)
+	if err == nil || !strings.Contains(err.Error(), "unknown identity") {
+		t.Fatalf("expected unknown identity error, got %v", err)
+	}
+}
+
+func TestValidate_BearerRequiresValue(t *testing.T) {
+	tc := baseTC()
+	tc.Identities[0].Credential = model.Credential{Type: model.CredentialTypeBearer}
+	_, err := New(&stubExecutor{}).Run(context.Background(), tc)
+	if err == nil || !strings.Contains(err.Error(), "bearer credential requires a value") {
+		t.Fatalf("expected bearer value error, got %v", err)
+	}
+}
+
+func TestValidate_UnknownCredentialType(t *testing.T) {
+	tc := baseTC()
+	tc.Identities[0].Credential = model.Credential{Type: "magic"}
+	_, err := New(&stubExecutor{}).Run(context.Background(), tc)
+	if err == nil || !strings.Contains(err.Error(), "unknown credential type") {
+		t.Fatalf("expected unknown credential type error, got %v", err)
+	}
+}
+
+func TestValidate_StaticHeaderValueRequiresHeader(t *testing.T) {
+	tc := baseTC()
+	tc.Identities[0].Credential = model.Credential{Type: model.CredentialTypeStaticHeader, Value: "x"}
+	_, err := New(&stubExecutor{}).Run(context.Background(), tc)
+	if err == nil || !strings.Contains(err.Error(), "requires a header name") {
+		t.Fatalf("expected static_header header error, got %v", err)
+	}
+}
+
+func TestValidate_AnonymousStaticHeaderAllowed(t *testing.T) {
+	tc := baseTC()
+	tc.Identities[1].Credential = model.Credential{Type: model.CredentialTypeStaticHeader}
+	_, err := New(&stubExecutor{responses: map[string]int{"admin": 200, "user": 403}}).Run(context.Background(), tc)
+	if err != nil {
+		t.Fatalf("empty static_header (anonymous) should be valid, got %v", err)
+	}
+}
+
+func TestValidate_RequiredRoleMustBeInHierarchy(t *testing.T) {
+	tc := baseTC()
+	tc.Resource = &model.Resource{RequiredRole: "superuser"}
+	tc.RoleHierarchy = []string{"user", "admin"}
+	_, err := New(&stubExecutor{}).Run(context.Background(), tc)
+	if err == nil || !strings.Contains(err.Error(), "role_hierarchy") {
+		t.Fatalf("expected required_role hierarchy error, got %v", err)
+	}
+}
+
+func TestValidate_ResourceOwnerMustExist(t *testing.T) {
+	tc := baseTC()
+	tc.Resource = &model.Resource{OwnerIdentity: "ghost"}
+	_, err := New(&stubExecutor{}).Run(context.Background(), tc)
+	if err == nil || !strings.Contains(err.Error(), "owner_identity") {
+		t.Fatalf("expected owner_identity error, got %v", err)
 	}
 }

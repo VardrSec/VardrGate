@@ -61,6 +61,8 @@ const (
 	SeverityCritical Severity = "critical"
 
 	CategoryPotentialBOLA         FindingCategory = "potential_bola"
+	CategoryCrossTenantAccess     FindingCategory = "cross_tenant_access"
+	CategoryPrivilegeEscalation   FindingCategory = "privilege_escalation"
 	CategoryUnexpectedAccess      FindingCategory = "unexpected_access"
 	CategoryAuthorizationMismatch FindingCategory = "authorization_mismatch"
 )
@@ -174,11 +176,39 @@ type Finding struct {
 	DetectedAt time.Time       `json:"detected_at"`
 }
 
+// Resource describes the object an authorization test targets. It gives the
+// engine the ownership and tenant context needed to distinguish a plain
+// unexpected_access from a potential_bola or cross_tenant_access finding.
+//
+// All fields are optional. When Resource is nil or its context fields are
+// empty, the engine falls back to unexpected_access — it never guesses a
+// higher-severity category without explicit context.
+type Resource struct {
+	// Type is a human label for the object class, e.g. "user_profile".
+	Type string `json:"type,omitempty"`
+	// ObjectID is the concrete identifier of the object under test.
+	ObjectID string `json:"object_id,omitempty"`
+	// OwnerIdentity is the id of the identity that legitimately owns the object.
+	// A non-owner identity that reaches the object is a potential_bola signal.
+	OwnerIdentity string `json:"owner_identity,omitempty"`
+	// TenantID is the tenant the object belongs to. An identity whose TenantID
+	// differs is a cross_tenant_access signal.
+	TenantID string `json:"tenant_id,omitempty"`
+	// RequiredRole is the least-privileged role permitted to access the object.
+	// Combined with RoleHierarchy it establishes privilege_escalation.
+	RequiredRole string `json:"required_role,omitempty"`
+}
+
 // AuthorizationTestCase is the top-level input to the engine.
 type AuthorizationTestCase struct {
-	ID             string           `json:"id"`
-	Description    string           `json:"description,omitempty"`
-	Identities     []Identity       `json:"identities"`
-	Request        RequestTemplate  `json:"request"`
+	ID          string          `json:"id"`
+	Description string          `json:"description,omitempty"`
+	Identities  []Identity      `json:"identities"`
+	Request     RequestTemplate `json:"request"`
+	// Resource supplies optional ownership/tenant context for classification.
+	Resource *Resource `json:"resource,omitempty"`
+	// RoleHierarchy lists roles from least to most privileged. It is only used
+	// to evaluate Resource.RequiredRole for privilege_escalation findings.
+	RoleHierarchy  []string         `json:"role_hierarchy,omitempty"`
 	ExpectedAccess []ExpectedAccess `json:"expected_access"`
 }

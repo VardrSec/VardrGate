@@ -1,17 +1,34 @@
 # VardrGate
 
-API authorization test runner. Send a single HTTP request as multiple identities and detect when access decisions do not match expectations.
+Continuous API authorization assurance. Describe how an endpoint *should* treat
+different callers, run the request as each of them, and get structured,
+evidence-backed findings when the real behaviour disagrees.
+
+VardrGate is the first execution primitive of a larger API security control
+plane (see [`enterprise-platform.md`](enterprise-platform.md) for the North
+Star). Today it proves authorization controls; it is designed to be driven
+locally, in CI, from the HTTP API, or by [VardrRunner](../VardrRunner).
 
 ## What it does
 
-VardrGate accepts a test case describing a request, a set of identities with credentials, and the expected authorization outcome for each identity. It executes the request once per identity, classifies the observed HTTP response, compares it against the expectation, and returns structured findings.
+Given a test case — a request, a set of identities with credentials, optional
+resource-ownership context, and the expected authorization decision per identity
+— VardrGate executes the request once per identity, classifies each observed
+response, and returns findings for every mismatch.
 
-**Current finding categories**
+### Finding categories
 
-| Category | Meaning |
-|---|---|
-| `unexpected_access` | Identity received a 2xx when it should have been denied |
-| `authorization_mismatch` | Identity received a 401/403 when it should have been allowed |
+| Category | Severity | Meaning |
+|---|---|---|
+| `cross_tenant_access` | critical | An identity from a different tenant reached the resource |
+| `potential_bola` | high | A non-owner identity reached an identified object |
+| `privilege_escalation` | high | An identity below the required role reached the resource |
+| `unexpected_access` | high | Denied identity received a 2xx (no ownership context to refine further) |
+| `authorization_mismatch` | low | Allowed identity received a 401/403 |
+
+The engine only elevates beyond `unexpected_access` when the test case supplies
+explicit ownership/tenant/role context. It never guesses a high-severity
+category from a weak signal. See [`docs/adr/0002-ownership-aware-classification.md`](docs/adr/0002-ownership-aware-classification.md).
 
 ## Quickstart
 
@@ -21,17 +38,48 @@ VardrGate accepts a test case describing a request, a set of identities with cre
 git clone https://github.com/VardrSec/VardrGate
 cd VardrGate
 go build ./cmd/vardrgate
-./vardrgate          # listens on :8080
+./vardrgate            # serve mode: listens on :8080
 ```
 
-Environment variables:
+### Run a single job offline (CI / VardrRunner contract)
+
+```sh
+./vardrgate run --job examples/job_profile_check.json --out result.json
+```
+
+`run` reads a job envelope, executes the embedded test case, and writes the
+sanitized result JSON. The binary defaults to `serve`; `run` is the offline path
+VardrRunner and CI use. See [`docs/adr/0001-policy-input-and-run-cli.md`](docs/adr/0001-policy-input-and-run-cli.md).
+
+Environment variables (serve mode):
 
 | Variable | Default | Description |
 |---|---|---|
 | `PORT` | `8080` | Listening port (1–65535) |
 | `ALLOW_PRIVATE_TARGETS` | `false` | Permit loopback and RFC-1918 targets. Enable only for local lab testing. |
 
-## API
+## Declarative policies
+
+A policy expresses an authorization control once, independent of environment.
+Bind it to a base URL, path parameters, and concrete identities (each identity's
+`role` matching a key under `expect`) to compile a runnable test case. See
+[`examples/profile_ownership.policy.yaml`](examples/profile_ownership.policy.yaml).
+
+```yaml
+api:
+  endpoint: GET /users/{user_id}/profile
+  owner: identity:owner
+  resource:
+    type: user_profile
+    id_param: user_id
+    tenant_field: tenant_id
+expect:
+  owner: allow
+  other_user: deny
+  anonymous: deny
+```
+
+## HTTP API
 
 ### `GET /health`
 
@@ -67,95 +115,76 @@ Execute an authorization test case.
     "query_params": {},
     "body": null
   },
+  "resource": {
+    "type": "user_profile",
+    "object_id": "42",
+    "owner_identity": "identity-id-of-legitimate-owner",
+    "tenant_id": "optional-tenant-of-the-object",
+    "required_role": "optional-least-privileged-role"
+  },
+  "role_hierarchy": ["viewer", "editor", "admin"],
   "expected_access": [
     { "identity_id": "string", "decision": "allow | deny | skip", "note": "optional" }
   ]
 }
 ```
 
-**Response** (`application/json`):
+`resource` and `role_hierarchy` are optional; without them findings stay at
+`unexpected_access` / `authorization_mismatch`.
 
-```json
-{
-  "test_case_id": "string",
-  "executions": [
-    {
-      "identity_id": "string",
-      "status_code": 200,
-      "observed_outcome": "allow | deny | not_found | redirect | server_error | client_error | error",
-      "headers": {},
-      "duration_ms": 142,
-      "error": "",
-      "error_kind": ""
-    }
-  ],
-  "findings": [
-    {
-      "category": "unexpected_access",
-      "severity": "high",
-      "confidence": "medium",
-      "identity_id": "string",
-      "message": "identity \"viewer\" received access that should have been denied",
-      "evidence": ["observed_outcome=allow", "status_code=200", "..."],
-      "detected_at": "2026-06-28T00:00:00Z"
-    }
-  ]
-}
-```
+**Response** (`application/json`): `test_case_id`, `executions[]` (status code,
+observed outcome, selected headers, duration, error), and `findings[]` (category,
+severity, confidence, identity, message, evidence, timestamp).
 
-**Error responses:**
+**Error responses** carry a stable `code` for client branching:
 
-| Status | Condition |
-|---|---|
-| 400 | Malformed JSON or trailing content after the JSON value |
-| 413 | Request body exceeds 1 MB |
-| 422 | Test case fails validation (missing id, no identities, bad decision value, etc.) |
-| 405 | Wrong HTTP method |
+| Status | `code` | Condition |
+|---|---|---|
+| 400 | `invalid_json` | Malformed JSON |
+| 400 | `trailing_content` | More than one JSON value in the body |
+| 413 | `body_too_large` | Request body exceeds 1 MB |
+| 422 | `validation_failed` | Test case fails validation |
+| 405 | `method_not_allowed` | Wrong HTTP method |
 
 ## Security defaults
 
 - Only `http` and `https` targets are accepted.
-- Loopback (127.x, ::1), link-local (169.254.x, fe80::), private ranges (RFC-1918/4193), unspecified (0.0.0.0), and multicast addresses are blocked by default.
-- DNS rebinding is prevented: hostnames are resolved once inside a custom `DialContext`, every returned address is validated, and the connection is made to the pre-validated IP directly.
-- Credential `value` fields are accepted in request input but are never included in any response, finding, or log.
-- Redirects are not followed; the raw authorization response is captured.
-- Response bodies are capped at 5 MB per identity.
-
-## Example
-
-See [`examples/bola_check.json`](examples/bola_check.json) for a three-identity test case.
-
-Run it against a local target (requires `ALLOW_PRIVATE_TARGETS=true`):
-
-```sh
-ALLOW_PRIVATE_TARGETS=true ./vardrgate &
-curl -s -X POST http://localhost:8080/tests/execute \
-  -H 'Content-Type: application/json' \
-  -d @examples/ownership_check.json | jq .
-```
+- Loopback, link-local, private (RFC-1918/4193), unspecified, and multicast
+  addresses are blocked by default.
+- DNS rebinding is prevented: hostnames are resolved once inside a custom
+  `DialContext`, every returned address is validated, and the connection is made
+  to the pre-validated IP directly.
+- Credential `value` fields are accepted as input but never appear in any
+  response, finding, or log; URL userinfo and sensitive query params are redacted
+  from evidence.
+- Redirects are not followed; response bodies are capped (5 MB default).
 
 ## Project layout
 
 ```
-cmd/vardrgate/       — startup and dependency wiring
+cmd/vardrgate/       — serve + run subcommands, dependency wiring
 internal/
   api/               — HTTP handlers (GET /health, POST /tests/execute)
   client/            — HTTP execution, credential application, SSRF protection
-  compare/           — response body and status-code comparison utilities
-  engine/            — test-case validation, execution coordination, finding evaluation
+  compare/           — response body / status-code comparison utilities
+  engine/            — validation, execution, ownership-aware finding evaluation
+  job/               — offline job envelope (vardrgate run)
   model/             — domain types and constants
-  urlcheck/          — URL and IP validation (scheme, blocked ranges, CheckIP)
+  policy/            — declarative YAML policy parsing and compilation
+  urlcheck/          — URL and IP validation
 docs/
-  mvp.md             — MVP workflow definition
-examples/            — example test case JSON files
+  mvp.md             — first supported workflow
+  adr/               — architecture decision records
+examples/            — test case, policy, and job examples
 ```
 
 ## Development
 
 ```sh
-go test ./...
+go test -race ./...
 go vet ./...
-gofmt -w .
+gofmt -l .
 ```
 
-All stages pass before the next begins. No external dependencies.
+CI runs formatting, vet, race tests, and build on every push. See
+[`CHANGELOG.md`](CHANGELOG.md) for release notes.

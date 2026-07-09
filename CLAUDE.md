@@ -2,16 +2,17 @@
 
 ## What this project is
 
-VardrGate is an API authorization test runner. It accepts a test case, executes a single HTTP request as multiple identities, classifies each observed outcome against the expected access decision, and returns structured findings. It is a backend service with no frontend, no database, and no external dependencies.
+VardrGate is an API authorization assurance engine. It accepts a test case (or a declarative policy compiled into one), executes a single HTTP request as multiple identities, classifies each observed outcome against the expected access decision with optional ownership/tenant/role context, and returns structured, evidence-backed findings. It can be driven three ways: the HTTP API (`POST /tests/execute`), the offline CLI (`vardrgate run --job`), or as a library. It is the first execution primitive of the larger platform in `enterprise-platform.md`. No frontend, no database.
 
 ## Technology
 
 - Go 1.24 or newer
-- Go standard library only — no third-party frameworks
+- Standard library for everything except policy parsing
+- `gopkg.in/yaml.v3` — the **only** external dependency, for YAML policy files (see ADR 0001). Do not add further dependencies without an ADR.
 - `net/http` for HTTP clients and server
 - `http.ServeMux` for routing
 - `log/slog` for structured logging
-- `go test`, `go vet`, `gofmt` before every commit
+- `go test -race`, `go vet`, `gofmt` before every commit
 
 Do not add PostgreSQL, Redis, Docker, Kubernetes, message queues, background workers, OpenAPI importers, or cloud deployment unless explicitly requested.
 
@@ -19,11 +20,11 @@ Do not add PostgreSQL, Redis, Docker, Kubernetes, message queues, background wor
 
 ```
 cmd/vardrgate/
-└── main.go                  startup, env config, dependency wiring, graceful shutdown
+└── main.go                  serve + run subcommands, env config, wiring, shutdown
 
 internal/
 ├── api/
-│   ├── handler.go           GET /health, POST /tests/execute
+│   ├── handler.go           GET /health, POST /tests/execute, stable error codes
 │   └── handler_test.go
 ├── client/
 │   ├── client.go            HTTP execution, credential application, SSRF protection
@@ -32,21 +33,33 @@ internal/
 │   ├── compare.go           status-code, body, JSON, and sensitive-field comparison
 │   └── compare_test.go
 ├── engine/
-│   ├── engine.go            test-case validation, execution loop, finding evaluation
+│   ├── engine.go            validation, execution loop, ownership-aware findings
 │   └── engine_test.go
+├── job/
+│   ├── job.go               offline job envelope for `vardrgate run`
+│   └── job_test.go
 ├── model/
-│   ├── model.go             all domain types, constants, ClassifyOutcome
-│   └── model_test.go        credential marshal/unmarshal, ClassifyOutcome table
+│   ├── model.go             domain types, constants, Resource, ClassifyOutcome
+│   └── model_test.go
+├── policy/
+│   ├── policy.go            YAML policy parse + compile to test case
+│   └── policy_test.go
 └── urlcheck/
     ├── urlcheck.go          URL scheme validation, CheckIP, DialContext-ready exports
     └── urlcheck_test.go
 
 docs/
-└── mvp.md                   MVP workflow definition
+├── mvp.md                   first supported workflow
+└── adr/                     architecture decision records (0001 policy+CLI, 0002 classification)
 
 examples/
-├── bola_check.json          three-identity unauthorized-access scenario
-└── ownership_check.json     local demo against an httptest-style target
+├── bola_check.json              three-identity unauthorized-access scenario
+├── ownership_check.json         local demo against an httptest-style target
+├── job_profile_check.json       `vardrgate run` job envelope
+└── profile_ownership.policy.yaml declarative policy example
+
+.github/workflows/ci.yml     gofmt + vet + race tests + build
+CHANGELOG.md                 Keep a Changelog / SemVer
 ```
 
 ## Package responsibilities
@@ -88,17 +101,33 @@ Key behaviors:
 
 Coordinates execution. Validates the test case, iterates identities, calls the `Executor` interface, and evaluates findings.
 
-Finding rules:
-- `unexpected_access` (severity: high): expected `deny`, observed `allow` (2xx).
-- `authorization_mismatch` (severity: low): expected `allow`, observed `deny` (401/403).
-- `potential_bola` is **not emitted yet** — it requires resource-ownership context (owner identity, target tenant, object ID) that is not yet modelled. `TenantID` alone is insufficient.
-- Execution errors suppress findings for that identity (single weak signal).
+Finding rules for a deny→allow result, most to least specific (see ADR 0002):
+- `cross_tenant_access` (critical): identity's tenant differs from `resource.tenant_id`.
+- `potential_bola` (high): non-owner identity reached an identified object (`resource.owner_identity` set and `resource.type`/`object_id` present).
+- `privilege_escalation` (high): identity's role ranks below `resource.required_role` in `role_hierarchy`.
+- `unexpected_access` (high): no ownership context — conservative fallback.
+
+Other rules:
+- `authorization_mismatch` (low): expected `allow`, observed `deny` (401/403).
+- Every elevated category requires explicit context in the test case; `TenantID` alone still yields `unexpected_access`. The engine never guesses from a weak signal.
+- Findings include response-comparison evidence: the offending response is compared against a baseline (the owner, or any allowed identity); a matching body is flagged.
+- Execution errors suppress findings for that identity.
 - `decision: skip` records execution but emits no finding.
 - Ambiguous outcomes (404, 5xx, 3xx) when expected `deny` produce no finding.
 
-The `Executor` interface is defined in the engine package and satisfied by `*client.Client`. Tests use a `stubExecutor`.
+Validation rejects: duplicate identity ids, expected-access references to unknown identities, invalid credential type/header/value combinations, and resource references to unknown owner identities or roles absent from `role_hierarchy`.
+
+The `Executor` interface is defined in the engine package and satisfied by `*client.Client`. Tests use a `stubExecutor`. `Run` executes all identities first, then evaluates findings so it can compare against a baseline.
 
 `engine.Result` has JSON tags (`test_case_id`, `executions`, `findings`).
+
+### `internal/policy`
+
+Parses a declarative YAML policy (`api`/`expect`/`response`) and `Compile`s it into a `model.AuthorizationTestCase` given `Bindings` (base URL, path params, identities whose `role` matches an `expect` key, optional resource tenant). Unknown YAML fields are rejected. This is what makes a control reusable across environments.
+
+### `internal/job`
+
+Parses the offline job envelope (`type`, `program_id`, `config.test_case`, `config.execution`) used by `vardrgate run`. Also accepts a bare test case. `ClientConfig()` derives `client.Config` from the execution block. No coupling to VardrRunner beyond this JSON shape.
 
 ### `internal/compare`
 
@@ -119,7 +148,7 @@ Exposes the HTTP API. No business logic.
 
 ### `cmd/vardrgate`
 
-Startup only. Reads `PORT` (1–65535, default 8080) and `ALLOW_PRIVATE_TARGETS` (bool, default false) from the environment. Wires `client → engine → handler`. HTTP server has `ReadHeaderTimeout` 5 s, `ReadTimeout` 30 s, `WriteTimeout` 60 s, `IdleTimeout` 120 s. Graceful shutdown waits up to 10 s on `SIGINT`/`SIGTERM`.
+Two subcommands. Default (`serve`) reads `PORT` (1–65535, default 8080) and `ALLOW_PRIVATE_TARGETS` (bool, default false), wires `client → engine → handler`, and runs the HTTP server (`ReadHeaderTimeout` 5 s, `ReadTimeout` 30 s, `WriteTimeout` 60 s, `IdleTimeout` 120 s; 10 s graceful shutdown on `SIGINT`/`SIGTERM`). `run --job <file> --out <file>` executes one job envelope offline and writes the result JSON (stdout if `--out` omitted); exits non-zero on error for CI/VardrRunner gating.
 
 ## Development rules
 
@@ -159,11 +188,13 @@ Avoid:
 
 ## What not to build yet
 
-- Frontend or dashboard
-- Database or persistence layer
-- OpenAPI / Swagger import
-- AI-agent features
-- User accounts, organizations, billing
-- `potential_bola` findings (needs resource-ownership model first)
+Phase 1 of `enterprise-platform.md` is now in place (resource ownership, ownership-aware findings, compare wiring, YAML policies, the `run` CLI). Do **not** yet build later phases unless asked:
+
+- Frontend or dashboard (Phase 4)
+- Database or persistence layer (Phase 3)
+- Runner lifecycle endpoints (`/jobs/*`, `/runner/heartbeat`) and control plane (Phase 3) — the `run` CLI is the current integration boundary; VardrRunner drives it
+- OpenAPI / Postman import and test generation (Phase 2)
+- Additional vulnerability packs (rate-limit, CORS, JWT, GraphQL) (Phase 5)
+- User accounts, organizations, SSO, billing
 - Concurrency in the execution loop
-- Additional API endpoints
+- Additional HTTP API endpoints

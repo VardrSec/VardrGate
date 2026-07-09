@@ -85,6 +85,24 @@ func TestHealthUnsupportedMethods(t *testing.T) {
 
 // --- POST /tests/execute ---
 
+// validTestCaseJSON is raw request JSON including credential "value" fields.
+// Marshalling a model.AuthorizationTestCase drops credential values (json:"-"),
+// so requests that must pass validation are built as raw JSON instead.
+func validTestCaseJSON() string {
+	return `{
+		"id":"tc-api-1",
+		"identities":[
+			{"id":"admin","credential":{"type":"bearer","value":"tok-a"}},
+			{"id":"user","credential":{"type":"bearer","value":"tok-u"}}
+		],
+		"request":{"method":"GET","url":"https://example.com/resource/1"},
+		"expected_access":[
+			{"identity_id":"admin","decision":"allow"},
+			{"identity_id":"user","decision":"deny"}
+		]
+	}`
+}
+
 func validTestCase() model.AuthorizationTestCase {
 	return model.AuthorizationTestCase{
 		ID: "tc-api-1",
@@ -105,8 +123,7 @@ func validTestCase() model.AuthorizationTestCase {
 
 func TestTestsExecute_Returns200OnSuccess(t *testing.T) {
 	h := newTestHandlerWithResponses(map[string]int{"admin": 200, "user": 403})
-	body, _ := json.Marshal(validTestCase())
-	req := httptest.NewRequest(http.MethodPost, "/tests/execute", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/tests/execute", strings.NewReader(validTestCaseJSON()))
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
 	if rr.Code != http.StatusOK {
@@ -116,8 +133,7 @@ func TestTestsExecute_Returns200OnSuccess(t *testing.T) {
 
 func TestTestsExecute_ContentTypeJSON(t *testing.T) {
 	h := newTestHandlerWithResponses(map[string]int{"admin": 200, "user": 403})
-	body, _ := json.Marshal(validTestCase())
-	req := httptest.NewRequest(http.MethodPost, "/tests/execute", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/tests/execute", strings.NewReader(validTestCaseJSON()))
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
 	if !strings.HasPrefix(rr.Header().Get("Content-Type"), "application/json") {
@@ -127,8 +143,7 @@ func TestTestsExecute_ContentTypeJSON(t *testing.T) {
 
 func TestTestsExecute_ResponseContainsSnakeCaseFields(t *testing.T) {
 	h := newTestHandlerWithResponses(map[string]int{"admin": 200, "user": 200})
-	body, _ := json.Marshal(validTestCase())
-	req := httptest.NewRequest(http.MethodPost, "/tests/execute", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/tests/execute", strings.NewReader(validTestCaseJSON()))
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
 
@@ -179,8 +194,7 @@ func TestTestsExecute_UnsupportedMethods(t *testing.T) {
 
 func TestTestsExecute_NoFindingsWhenExpectationsMet(t *testing.T) {
 	h := newTestHandlerWithResponses(map[string]int{"admin": 200, "user": 403})
-	body, _ := json.Marshal(validTestCase())
-	req := httptest.NewRequest(http.MethodPost, "/tests/execute", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/tests/execute", strings.NewReader(validTestCaseJSON()))
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
 
@@ -207,13 +221,52 @@ func TestTestsExecute_RequestBodyTooLarge_Returns413(t *testing.T) {
 
 // Issue 5: a body containing more than one JSON value must be rejected.
 func TestTestsExecute_TrailingJSON_Returns400(t *testing.T) {
-	tc, _ := json.Marshal(validTestCase())
-	body := string(tc) + `{"extra":"trailing"}`
+	body := validTestCaseJSON() + `{"extra":"trailing"}`
 	req := httptest.NewRequest(http.MethodPost, "/tests/execute", strings.NewReader(body))
 	rr := httptest.NewRecorder()
 	newTestHandlerWithResponses(map[string]int{"admin": 200, "user": 403}).ServeHTTP(rr, req)
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 for trailing JSON, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestTestsExecute_ErrorEnvelopeHasStableCode(t *testing.T) {
+	cases := []struct {
+		name     string
+		body     string
+		method   string
+		wantCode string
+	}{
+		{"invalid_json", "not json", http.MethodPost, codeInvalidJSON},
+		{"method_not_allowed", "", http.MethodGet, codeMethodNotAllowed},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			req := httptest.NewRequest(c.method, "/tests/execute", strings.NewReader(c.body))
+			rr := httptest.NewRecorder()
+			newTestHandler().ServeHTTP(rr, req)
+			var resp map[string]string
+			if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+				t.Fatalf("decode: %v", err)
+			}
+			if resp["code"] != c.wantCode {
+				t.Errorf("expected code %q, got %q (body=%s)", c.wantCode, resp["code"], rr.Body.String())
+			}
+		})
+	}
+}
+
+func TestTestsExecute_ValidationError_HasValidationCode(t *testing.T) {
+	tc := validTestCase()
+	tc.ID = ""
+	body, _ := json.Marshal(tc)
+	req := httptest.NewRequest(http.MethodPost, "/tests/execute", bytes.NewReader(body))
+	rr := httptest.NewRecorder()
+	newTestHandler().ServeHTTP(rr, req)
+	var resp map[string]string
+	_ = json.NewDecoder(rr.Body).Decode(&resp)
+	if resp["code"] != codeValidationFailed {
+		t.Errorf("expected code %q, got %q", codeValidationFailed, resp["code"])
 	}
 }
 

@@ -1,0 +1,24 @@
+# Declarative authorization control for a user-profile endpoint.
+#
+# A policy describes expected behaviour independent of environment. Bind it to a
+# base URL, path parameters, and concrete identities (each identity's `role`
+# must match a key under `expect`) to produce a runnable test case.
+api:
+  endpoint: GET /users/{user_id}/profile
+  owner: identity:owner
+  resource:
+    type: user_profile
+    id_param: user_id
+    tenant_field: tenant_id
+
+expect:
+  owner: allow
+  other_user: deny
+  anonymous: deny
+
+response:
+  deny_status: [401, 403, 404]
+  sensitive_fields:
+    forbidden_for:
+      - other_user
+      - anonymous

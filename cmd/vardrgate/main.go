@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -15,9 +17,69 @@ import (
 	"github.com/VardrSec/vardrgate/internal/api"
 	"github.com/VardrSec/vardrgate/internal/client"
 	"github.com/VardrSec/vardrgate/internal/engine"
+	"github.com/VardrSec/vardrgate/internal/job"
 )
 
 func main() {
+	// Subcommands: "serve" (default) runs the HTTP API; "run" executes a single
+	// job file offline — the contract VardrRunner and CI use.
+	if len(os.Args) > 1 && os.Args[1] == "run" {
+		if err := runJob(os.Args[2:]); err != nil {
+			fmt.Fprintln(os.Stderr, "error:", err)
+			os.Exit(1)
+		}
+		return
+	}
+	if len(os.Args) > 1 && os.Args[1] == "serve" {
+		os.Args = append(os.Args[:1], os.Args[2:]...)
+	}
+	serve()
+}
+
+// runJob executes one job envelope and writes the sanitized result as JSON.
+// It never blocks on the network longer than the job's execution budget and
+// exits non-zero on any error so callers (VardrRunner, CI) can gate on it.
+func runJob(args []string) error {
+	fs := flag.NewFlagSet("run", flag.ContinueOnError)
+	jobPath := fs.String("job", "", "path to the job JSON file (required)")
+	outPath := fs.String("out", "", "path to write the result JSON (default: stdout)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *jobPath == "" {
+		return errors.New("--job is required")
+	}
+
+	env, err := job.Load(*jobPath)
+	if err != nil {
+		return err
+	}
+
+	c := client.NewWithConfig(nil, env.ClientConfig())
+	eng := engine.New(c)
+
+	result, err := eng.Run(context.Background(), env.TestCase())
+	if err != nil {
+		return fmt.Errorf("run job: %w", err)
+	}
+
+	out, err := json.MarshalIndent(result, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode result: %w", err)
+	}
+	out = append(out, '\n')
+
+	if *outPath == "" {
+		_, err = os.Stdout.Write(out)
+		return err
+	}
+	if err := os.WriteFile(*outPath, out, 0o644); err != nil {
+		return fmt.Errorf("write result: %w", err)
+	}
+	return nil
+}
+
+func serve() {
 	log := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 
 	port, err := resolvePort()

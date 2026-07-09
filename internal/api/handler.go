@@ -14,6 +14,16 @@ import (
 // maxRequestBodyBytes limits the size of a POST /tests/execute request body.
 const maxRequestBodyBytes = 1 << 20 // 1 MB
 
+// Stable error codes. These are part of the API contract: clients may branch on
+// them, so they must not change without a version bump.
+const (
+	codeMethodNotAllowed = "method_not_allowed"
+	codeBodyTooLarge     = "body_too_large"
+	codeInvalidJSON      = "invalid_json"
+	codeTrailingContent  = "trailing_content"
+	codeValidationFailed = "validation_failed"
+)
+
 // Handler owns the ServeMux and all route registrations.
 type Handler struct {
 	log    *slog.Logger
@@ -35,7 +45,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) handleHealth(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		h.writeError(w, "method not allowed", http.StatusMethodNotAllowed)
+		h.writeError(w, codeMethodNotAllowed, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 	h.writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -43,7 +53,7 @@ func (h *Handler) handleHealth(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) handleTestsExecute(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		h.writeError(w, "method not allowed", http.StatusMethodNotAllowed)
+		h.writeError(w, codeMethodNotAllowed, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -54,23 +64,23 @@ func (h *Handler) handleTestsExecute(w http.ResponseWriter, r *http.Request) {
 	if err := dec.Decode(&tc); err != nil {
 		var maxBytesErr *http.MaxBytesError
 		if errors.As(err, &maxBytesErr) {
-			h.writeError(w, "request body too large", http.StatusRequestEntityTooLarge)
+			h.writeError(w, codeBodyTooLarge, "request body too large", http.StatusRequestEntityTooLarge)
 			return
 		}
-		h.writeError(w, "invalid request body: "+err.Error(), http.StatusBadRequest)
+		h.writeError(w, codeInvalidJSON, "invalid request body: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	// Require exactly one JSON value; trailing content is rejected.
 	var extra json.RawMessage
 	if err := dec.Decode(&extra); err != io.EOF {
-		h.writeError(w, "request body must contain exactly one JSON value", http.StatusBadRequest)
+		h.writeError(w, codeTrailingContent, "request body must contain exactly one JSON value", http.StatusBadRequest)
 		return
 	}
 
 	result, err := h.engine.Run(r.Context(), tc)
 	if err != nil {
-		h.writeError(w, err.Error(), http.StatusUnprocessableEntity)
+		h.writeError(w, codeValidationFailed, err.Error(), http.StatusUnprocessableEntity)
 		return
 	}
 
@@ -85,6 +95,7 @@ func (h *Handler) writeJSON(w http.ResponseWriter, status int, v any) {
 	}
 }
 
-func (h *Handler) writeError(w http.ResponseWriter, msg string, status int) {
-	h.writeJSON(w, status, map[string]string{"error": msg})
+// writeError emits the stable error envelope {"code","error"}.
+func (h *Handler) writeError(w http.ResponseWriter, code, msg string, status int) {
+	h.writeJSON(w, status, map[string]string{"code": code, "error": msg})
 }
