@@ -57,6 +57,7 @@ Environment variables (serve mode):
 |---|---|---|
 | `PORT` | `8080` | Listening port (1–65535) |
 | `ALLOW_PRIVATE_TARGETS` | `false` | Permit loopback and RFC-1918 targets. Enable only for local lab testing. |
+| `VARDRGATE_API_KEY` | _(unset)_ | Bearer token required on the runner endpoints (`/jobs`, `/runner`). Unset disables auth for local dev. |
 
 ## Declarative policies
 
@@ -146,6 +147,29 @@ severity, confidence, identity, message, evidence, timestamp).
 | 422 | `validation_failed` | Test case fails validation |
 | 405 | `method_not_allowed` | Wrong HTTP method |
 
+## Runner job queue
+
+For continuous, distributed execution, VardrGate exposes a job queue that
+[VardrRunner](../VardrRunner) drives: it polls for pending jobs, claims them,
+streams events, uploads results, and marks them done or failed. The endpoint
+shapes match VardrRunner's existing client, so VardrGate is a drop-in backend.
+See [`docs/adr/0003-runner-job-queue.md`](docs/adr/0003-runner-job-queue.md).
+
+| Endpoint | Purpose |
+|---|---|
+| `POST /jobs` | Enqueue a job |
+| `GET /jobs/pending` | Poll queued jobs |
+| `GET /jobs/{id}` | Fetch a job and its result |
+| `POST /jobs/{id}/claim` | Atomically claim (409 if already claimed) |
+| `PATCH /jobs/{id}` · `POST /jobs/{id}/done` · `/failed` | Completion |
+| `POST /jobs/{id}/events` | Stream a lifecycle event |
+| `POST /jobs/{id}/upload` | Upload the sanitized result JSON |
+| `POST /runner/heartbeat` | Report runner status and capabilities |
+
+All of these require `Authorization: Bearer $VARDRGATE_API_KEY` when a key is
+configured. Jobs are held in memory today (an in-memory `Store`); a persistent
+PostgreSQL backend is the next Phase 3 step and implements the same interface.
+
 ## Security defaults
 
 - Only `http` and `https` targets are accepted.
@@ -171,6 +195,7 @@ internal/
   job/               — offline job envelope (vardrgate run)
   model/             — domain types and constants
   policy/            — declarative YAML policy parsing and compilation
+  store/             — runner job queue + registry (in-memory Store)
   urlcheck/          — URL and IP validation
 docs/
   mvp.md             — first supported workflow

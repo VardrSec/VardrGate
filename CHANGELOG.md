@@ -8,6 +8,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Runner job queue** (`internal/store` + HTTP endpoints): VardrGate can now be
+  driven by VardrRunner. A `Store` interface with an in-memory implementation
+  backs `POST /jobs`, `GET /jobs/pending`, `GET /jobs/{id}`,
+  `POST /jobs/{id}/claim` (atomic; 409 on double-claim),
+  `PATCH /jobs/{id}` + `POST /jobs/{id}/done|failed` (completion),
+  `POST /jobs/{id}/events`, `POST /jobs/{id}/upload`, and
+  `POST /runner/heartbeat`. Shapes match VardrRunner's existing client exactly.
+  See ADR 0003.
+- **Bearer auth** on the runner endpoints via `VARDRGATE_API_KEY`. `/health` and
+  `/tests/execute` remain open; an unset key disables auth for local dev (warned
+  at startup).
+
+### Added (Phase 1)
+
 - **Resource-ownership model** (`model.Resource`): optional owner identity,
   object id, tenant, and required-role context on a test case, plus a
   `role_hierarchy` for privilege ranking.

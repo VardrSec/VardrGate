@@ -44,6 +44,9 @@ internal/
 ├── policy/
 │   ├── policy.go            YAML policy parse + compile to test case
 │   └── policy_test.go
+├── store/
+│   ├── store.go             runner job queue + registry, Store interface (in-memory)
+│   └── store_test.go
 └── urlcheck/
     ├── urlcheck.go          URL scheme validation, CheckIP, DialContext-ready exports
     └── urlcheck_test.go
@@ -137,14 +140,20 @@ Comparisons: status-code equality, raw body equality, normalised JSON equality (
 
 `Evidence(a, b, cr)` extracts comparison output into evidence strings ready to attach to a `Finding`.
 
+### `internal/store`
+
+Runner job queue and runner registry behind a `Store` interface. `Memory` is the thread-safe in-memory implementation (default). Job lifecycle: `pending → claimed → running → done|failed`; `Claim` is atomic (`ErrAlreadyClaimed` on double-claim). Persistence (PostgreSQL) is a later Phase 3 step implementing the same interface. See ADR 0003.
+
 ### `internal/api`
 
 Exposes the HTTP API. No business logic.
 
-- `New(log, eng)` registers routes on a `ServeMux` and returns a `Handler`.
+- `New(log, eng, store, apiKey)` registers routes on a `ServeMux` and returns a `Handler`.
 - `GET /health` — 200 `{"status":"ok"}`.
-- `POST /tests/execute` — 1 MB `MaxBytesReader`, single-decoder, second `Decode` must return `io.EOF` (rejects trailing content), 400/413/422/405 on error.
-- `writeJSON` and `writeError` are shared helpers; all responses carry `Content-Type: application/json`.
+- `POST /tests/execute` — synchronous execution; 1 MB `MaxBytesReader`, single-decoder, second `Decode` must return `io.EOF`, stable error codes.
+- Runner job queue (in `jobs.go`), matching VardrRunner's client shapes: `POST /jobs`, `GET /jobs/pending`, `GET /jobs/{id}`, `POST /jobs/{id}/claim` (409 on double-claim), `PATCH /jobs/{id}`, `POST /jobs/{id}/done|failed|events|upload`, `POST /runner/heartbeat`. Uses Go 1.22 method+path routing.
+- `protected`/`authOK` enforce a bearer `apiKey` on `/jobs` and `/runner` (constant-time compare); `/health` and `/tests/execute` stay open. Empty key = dev mode.
+- `writeJSON` and `writeError` (stable `code` envelope) are shared helpers; all responses carry `Content-Type: application/json`.
 
 ### `cmd/vardrgate`
 
@@ -188,11 +197,11 @@ Avoid:
 
 ## What not to build yet
 
-Phase 1 of `enterprise-platform.md` is now in place (resource ownership, ownership-aware findings, compare wiring, YAML policies, the `run` CLI). Do **not** yet build later phases unless asked:
+Phase 1 is complete (resource ownership, ownership-aware findings, compare wiring, YAML policies, the `run` CLI). The first Phase 3 slice — the runner job queue endpoints + in-memory store — is also in place. Do **not** yet build later work unless asked:
 
+- Persistent `Store` (PostgreSQL) — the next Phase 3 step; the interface is ready for it
+- Multi-tenant control plane: orgs/projects/environments, tenant isolation, secret providers, audit logs (Phase 3)
 - Frontend or dashboard (Phase 4)
-- Database or persistence layer (Phase 3)
-- Runner lifecycle endpoints (`/jobs/*`, `/runner/heartbeat`) and control plane (Phase 3) — the `run` CLI is the current integration boundary; VardrRunner drives it
 - OpenAPI / Postman import and test generation (Phase 2)
 - Additional vulnerability packs (rate-limit, CORS, JWT, GraphQL) (Phase 5)
 - User accounts, organizations, SSO, billing

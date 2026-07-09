@@ -18,6 +18,7 @@ import (
 	"github.com/VardrSec/vardrgate/internal/client"
 	"github.com/VardrSec/vardrgate/internal/engine"
 	"github.com/VardrSec/vardrgate/internal/job"
+	"github.com/VardrSec/vardrgate/internal/store"
 )
 
 func main() {
@@ -99,7 +100,12 @@ func serve() {
 
 	c := client.NewWithConfig(nil, client.Config{AllowPrivateTargets: allowPrivate})
 	eng := engine.New(c)
-	handler := api.New(log, eng)
+
+	apiKey := os.Getenv("VARDRGATE_API_KEY")
+	if apiKey == "" {
+		log.Warn("VARDRGATE_API_KEY is not set; the /jobs and /runner endpoints are unauthenticated (development only)")
+	}
+	handler := api.New(log, eng, store.NewMemory(), apiKey)
 
 	srv := &http.Server{
 		Addr:              fmt.Sprintf(":%d", port),

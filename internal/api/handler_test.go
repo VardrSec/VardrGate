@@ -13,6 +13,7 @@ import (
 
 	"github.com/VardrSec/vardrgate/internal/engine"
 	"github.com/VardrSec/vardrgate/internal/model"
+	"github.com/VardrSec/vardrgate/internal/store"
 )
 
 // stubExecutor returns a fixed status code per identity ID.
@@ -31,12 +32,12 @@ func (s *stubExecutor) Execute(_ context.Context, identity model.Identity, _ mod
 
 func newTestHandler() *Handler {
 	eng := engine.New(&stubExecutor{responses: map[string]int{}})
-	return New(slog.New(slog.NewTextHandler(io.Discard, nil)), eng)
+	return New(slog.New(slog.NewTextHandler(io.Discard, nil)), eng, store.NewMemory(), "")
 }
 
 func newTestHandlerWithResponses(responses map[string]int) *Handler {
 	eng := engine.New(&stubExecutor{responses: responses})
-	return New(slog.New(slog.NewTextHandler(io.Discard, nil)), eng)
+	return New(slog.New(slog.NewTextHandler(io.Discard, nil)), eng, store.NewMemory(), "")
 }
 
 // --- GET /health ---
