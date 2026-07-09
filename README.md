@@ -58,6 +58,7 @@ Environment variables (serve mode):
 | `PORT` | `8080` | Listening port (1–65535) |
 | `ALLOW_PRIVATE_TARGETS` | `false` | Permit loopback and RFC-1918 targets. Enable only for local lab testing. |
 | `VARDRGATE_API_KEY` | _(unset)_ | Bearer token required on the runner endpoints (`/jobs`, `/runner`). Unset disables auth for local dev. |
+| `VARDRGATE_DB` | _(unset)_ | Path to a SQLite database for a durable job queue (jobs survive restart). Unset uses an in-memory store. |
 
 ## Declarative policies
 
@@ -167,8 +168,9 @@ See [`docs/adr/0003-runner-job-queue.md`](docs/adr/0003-runner-job-queue.md).
 | `POST /runner/heartbeat` | Report runner status and capabilities |
 
 All of these require `Authorization: Bearer $VARDRGATE_API_KEY` when a key is
-configured. Jobs are held in memory today (an in-memory `Store`); a persistent
-PostgreSQL backend is the next Phase 3 step and implements the same interface.
+configured. Set `VARDRGATE_DB` to a file path for a durable queue (SQLite) whose
+jobs survive a restart; unset uses an in-memory store. PostgreSQL is the intended
+production driver and implements the same `Store` interface.
 
 ## Security defaults
 

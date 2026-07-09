@@ -2,126 +2,201 @@ package store
 
 import (
 	"encoding/json"
+	"path/filepath"
 	"testing"
 )
 
-func TestCreate_AssignsIDAndPending(t *testing.T) {
-	m := NewMemory()
-	j, err := m.Create(Job{ToolType: "vardrgate_api_test", ProgramID: "p1"})
+// stores returns the Store implementations every conformance test runs against,
+// so Memory and SQLite are guaranteed to behave identically.
+func stores(t *testing.T) map[string]Store {
+	t.Helper()
+	sq, err := NewSQLite(":memory:")
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf("open sqlite: %v", err)
 	}
-	if j.ID == "" {
-		t.Error("expected generated id")
+	t.Cleanup(func() { sq.Close() })
+	return map[string]Store{
+		"memory": NewMemory(),
+		"sqlite": sq,
 	}
-	if j.Status != StatusPending {
-		t.Errorf("expected pending, got %q", j.Status)
-	}
-	if j.CreatedAt.IsZero() {
-		t.Error("expected created_at set")
+}
+
+func TestCreate_AssignsIDAndPending(t *testing.T) {
+	for name, m := range stores(t) {
+		t.Run(name, func(t *testing.T) {
+			j, err := m.Create(Job{ToolType: "vardrgate_api_test", ProgramID: "p1"})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if j.ID == "" {
+				t.Error("expected generated id")
+			}
+			if j.Status != StatusPending {
+				t.Errorf("expected pending, got %q", j.Status)
+			}
+			if j.CreatedAt.IsZero() {
+				t.Error("expected created_at set")
+			}
+		})
 	}
 }
 
 func TestPending_OnlyPendingSortedByCreation(t *testing.T) {
-	m := NewMemory()
-	a, _ := m.Create(Job{ProgramID: "p"})
-	b, _ := m.Create(Job{ProgramID: "p"})
-	if _, err := m.Claim(a.ID, "r1"); err != nil {
-		t.Fatalf("claim: %v", err)
-	}
-	pending := m.Pending()
-	if len(pending) != 1 || pending[0].ID != b.ID {
-		t.Fatalf("expected only b pending, got %+v", pending)
+	for name, m := range stores(t) {
+		t.Run(name, func(t *testing.T) {
+			a, _ := m.Create(Job{ProgramID: "p"})
+			b, _ := m.Create(Job{ProgramID: "p"})
+			if _, err := m.Claim(a.ID, "r1"); err != nil {
+				t.Fatalf("claim: %v", err)
+			}
+			pending := m.Pending()
+			if len(pending) != 1 || pending[0].ID != b.ID {
+				t.Fatalf("expected only b pending, got %+v", pending)
+			}
+		})
 	}
 }
 
 func TestClaim_AtomicAndRejectsDouble(t *testing.T) {
-	m := NewMemory()
-	j, _ := m.Create(Job{ProgramID: "p"})
-
-	if _, err := m.Claim(j.ID, "r1"); err != nil {
-		t.Fatalf("first claim should succeed: %v", err)
-	}
-	_, err := m.Claim(j.ID, "r2")
-	if err != ErrAlreadyClaimed {
-		t.Fatalf("expected ErrAlreadyClaimed, got %v", err)
+	for name, m := range stores(t) {
+		t.Run(name, func(t *testing.T) {
+			j, _ := m.Create(Job{ProgramID: "p"})
+			if _, err := m.Claim(j.ID, "r1"); err != nil {
+				t.Fatalf("first claim should succeed: %v", err)
+			}
+			if _, err := m.Claim(j.ID, "r2"); err != ErrAlreadyClaimed {
+				t.Fatalf("expected ErrAlreadyClaimed, got %v", err)
+			}
+		})
 	}
 }
 
 func TestClaim_NotFound(t *testing.T) {
-	if _, err := NewMemory().Claim("ghost", "r"); err != ErrNotFound {
-		t.Fatalf("expected ErrNotFound, got %v", err)
+	for name, m := range stores(t) {
+		t.Run(name, func(t *testing.T) {
+			if _, err := m.Claim("ghost", "r"); err != ErrNotFound {
+				t.Fatalf("expected ErrNotFound, got %v", err)
+			}
+		})
 	}
 }
 
 func TestAppendEvent_RunningAdvancesStatus(t *testing.T) {
-	m := NewMemory()
-	j, _ := m.Create(Job{ProgramID: "p"})
-	_, _ = m.Claim(j.ID, "r1")
-	if err := m.AppendEvent(j.ID, Event{Kind: "running", Text: "go"}); err != nil {
-		t.Fatalf("append: %v", err)
-	}
-	got, _ := m.Get(j.ID)
-	if got.Status != StatusRunning {
-		t.Errorf("expected running, got %q", got.Status)
-	}
-	if len(got.Events) != 1 || got.Events[0].At.IsZero() {
-		t.Errorf("event not recorded with timestamp: %+v", got.Events)
+	for name, m := range stores(t) {
+		t.Run(name, func(t *testing.T) {
+			j, _ := m.Create(Job{ProgramID: "p"})
+			_, _ = m.Claim(j.ID, "r1")
+			if err := m.AppendEvent(j.ID, Event{Kind: "running", Text: "go"}); err != nil {
+				t.Fatalf("append: %v", err)
+			}
+			got, _ := m.Get(j.ID)
+			if got.Status != StatusRunning {
+				t.Errorf("expected running, got %q", got.Status)
+			}
+			if len(got.Events) != 1 || got.Events[0].At.IsZero() {
+				t.Errorf("event not recorded with timestamp: %+v", got.Events)
+			}
+		})
 	}
 }
 
 func TestSetResultAndComplete(t *testing.T) {
-	m := NewMemory()
-	j, _ := m.Create(Job{ProgramID: "p"})
-	_, _ = m.Claim(j.ID, "r1")
-	if err := m.SetResult(j.ID, json.RawMessage(`{"findings":[]}`)); err != nil {
-		t.Fatalf("set result: %v", err)
-	}
-	if err := m.Complete(j.ID, StatusDone, ""); err != nil {
-		t.Fatalf("complete: %v", err)
-	}
-	got, _ := m.Get(j.ID)
-	if got.Status != StatusDone {
-		t.Errorf("expected done, got %q", got.Status)
-	}
-	if string(got.Result) != `{"findings":[]}` {
-		t.Errorf("result not stored: %s", got.Result)
+	for name, m := range stores(t) {
+		t.Run(name, func(t *testing.T) {
+			j, _ := m.Create(Job{ProgramID: "p"})
+			_, _ = m.Claim(j.ID, "r1")
+			if err := m.SetResult(j.ID, json.RawMessage(`{"findings":[]}`)); err != nil {
+				t.Fatalf("set result: %v", err)
+			}
+			if err := m.Complete(j.ID, StatusDone, ""); err != nil {
+				t.Fatalf("complete: %v", err)
+			}
+			got, _ := m.Get(j.ID)
+			if got.Status != StatusDone {
+				t.Errorf("expected done, got %q", got.Status)
+			}
+			if string(got.Result) != `{"findings":[]}` {
+				t.Errorf("result not stored: %s", got.Result)
+			}
+		})
 	}
 }
 
 func TestComplete_RejectsInvalidStatus(t *testing.T) {
-	m := NewMemory()
-	j, _ := m.Create(Job{ProgramID: "p"})
-	if err := m.Complete(j.ID, "banana", ""); err != ErrInvalidStatus {
-		t.Fatalf("expected ErrInvalidStatus, got %v", err)
+	for name, m := range stores(t) {
+		t.Run(name, func(t *testing.T) {
+			j, _ := m.Create(Job{ProgramID: "p"})
+			if err := m.Complete(j.ID, "banana", ""); err != ErrInvalidStatus {
+				t.Fatalf("expected ErrInvalidStatus, got %v", err)
+			}
+		})
 	}
 }
 
 func TestComplete_Failed_CarriesError(t *testing.T) {
-	m := NewMemory()
-	j, _ := m.Create(Job{ProgramID: "p"})
-	if err := m.Complete(j.ID, StatusFailed, "boom"); err != nil {
-		t.Fatalf("complete: %v", err)
-	}
-	got, _ := m.Get(j.ID)
-	if got.ErrorMessage != "boom" {
-		t.Errorf("expected error message, got %q", got.ErrorMessage)
+	for name, m := range stores(t) {
+		t.Run(name, func(t *testing.T) {
+			j, _ := m.Create(Job{ProgramID: "p"})
+			if err := m.Complete(j.ID, StatusFailed, "boom"); err != nil {
+				t.Fatalf("complete: %v", err)
+			}
+			got, _ := m.Get(j.ID)
+			if got.ErrorMessage != "boom" {
+				t.Errorf("expected error message, got %q", got.ErrorMessage)
+			}
+		})
 	}
 }
 
 func TestHeartbeat_UpsertsAndLists(t *testing.T) {
-	m := NewMemory()
-	m.Heartbeat(RunnerInfo{Hostname: "box-1", Version: "1.0", Tools: []string{"vardrgate"}})
-	m.Heartbeat(RunnerInfo{Hostname: "box-1", Version: "1.1"}) // upsert
-	m.Heartbeat(RunnerInfo{Hostname: "box-2"})
-	runners := m.Runners()
-	if len(runners) != 2 {
-		t.Fatalf("expected 2 runners, got %d", len(runners))
+	for name, m := range stores(t) {
+		t.Run(name, func(t *testing.T) {
+			m.Heartbeat(RunnerInfo{Hostname: "box-1", Version: "1.0", Tools: []string{"vardrgate"}})
+			m.Heartbeat(RunnerInfo{Hostname: "box-1", Version: "1.1"}) // upsert
+			m.Heartbeat(RunnerInfo{Hostname: "box-2"})
+			runners := m.Runners()
+			if len(runners) != 2 {
+				t.Fatalf("expected 2 runners, got %d", len(runners))
+			}
+			if runners[0].Hostname != "box-1" || runners[0].Version != "1.1" {
+				t.Errorf("expected upserted box-1 v1.1 first, got %+v", runners[0])
+			}
+			if runners[0].LastSeen.IsZero() {
+				t.Error("expected last_seen set")
+			}
+		})
 	}
-	if runners[0].Hostname != "box-1" || runners[0].Version != "1.1" {
-		t.Errorf("expected upserted box-1 v1.1 first, got %+v", runners[0])
+}
+
+// TestSQLite_SurvivesReopen is the whole point of a persistent store: a job
+// enqueued before a restart is still there afterward.
+func TestSQLite_SurvivesReopen(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "jobs.db")
+
+	first, err := NewSQLite(path)
+	if err != nil {
+		t.Fatalf("open: %v", err)
 	}
-	if runners[0].LastSeen.IsZero() {
-		t.Error("expected last_seen set")
+	job, err := first.Create(Job{ToolType: "vardrgate_api_test", ProgramID: "p1"})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if err := first.AppendEvent(job.ID, Event{Kind: "started"}); err != nil {
+		t.Fatalf("event: %v", err)
+	}
+	first.Close()
+
+	second, err := NewSQLite(path)
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	defer second.Close()
+
+	got, ok := second.Get(job.ID)
+	if !ok {
+		t.Fatal("job did not survive reopen")
+	}
+	if got.ID != job.ID || got.ToolType != "vardrgate_api_test" || len(got.Events) != 1 {
+		t.Errorf("job not fully persisted: %+v", got)
 	}
 }

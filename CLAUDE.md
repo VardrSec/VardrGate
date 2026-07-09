@@ -142,7 +142,7 @@ Comparisons: status-code equality, raw body equality, normalised JSON equality (
 
 ### `internal/store`
 
-Runner job queue and runner registry behind a `Store` interface. `Memory` is the thread-safe in-memory implementation (default). Job lifecycle: `pending → claimed → running → done|failed`; `Claim` is atomic (`ErrAlreadyClaimed` on double-claim). Persistence (PostgreSQL) is a later Phase 3 step implementing the same interface. See ADR 0003.
+Runner job queue and runner registry behind a `Store` interface. Two implementations: `Memory` (default) and `SQLite` (durable, `modernc.org/sqlite`, selected via `VARDRGATE_DB`; jobs survive restart). Job lifecycle: `pending → claimed → running → done|failed`; `Claim` is atomic (`ErrAlreadyClaimed` on double-claim). Both pass the same conformance suite in `store_test.go`. PostgreSQL is the intended production driver behind the same interface. See ADR 0003 (queue) and 0004 (persistence).
 
 ### `internal/api`
 

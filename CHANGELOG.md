@@ -8,6 +8,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Durable job store** (`store.SQLite`, `modernc.org/sqlite`): set `VARDRGATE_DB`
+  to a file path and jobs survive a restart. Same `Store` interface as the
+  in-memory store, selected at startup; unset keeps the in-memory store. The
+  conformance suite runs against both, and a test verifies survival across
+  reopen. PostgreSQL remains the intended production driver behind the same
+  interface. See ADR 0004.
 - **Runner job queue** (`internal/store` + HTTP endpoints): VardrGate can now be
   driven by VardrRunner. A `Store` interface with an in-memory implementation
   backs `POST /jobs`, `GET /jobs/pending`, `GET /jobs/{id}`,

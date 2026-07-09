@@ -105,7 +105,15 @@ func serve() {
 	if apiKey == "" {
 		log.Warn("VARDRGATE_API_KEY is not set; the /jobs and /runner endpoints are unauthenticated (development only)")
 	}
-	handler := api.New(log, eng, store.NewMemory(), apiKey)
+
+	st, closeStore, err := resolveStore(log)
+	if err != nil {
+		log.Error("failed to open job store", "error", err)
+		os.Exit(1)
+	}
+	defer closeStore()
+
+	handler := api.New(log, eng, st, apiKey)
 
 	srv := &http.Server{
 		Addr:              fmt.Sprintf(":%d", port),
@@ -152,6 +160,24 @@ func resolvePort() (int, error) {
 		return 0, fmt.Errorf("PORT must be an integer between 1 and 65535, got %q", raw)
 	}
 	return n, nil
+}
+
+// resolveStore selects the job store from the environment. VARDRGATE_DB, when
+// set, opens a durable SQLite store at that path (jobs survive restart);
+// otherwise an ephemeral in-memory store is used. The returned func closes the
+// store on shutdown.
+func resolveStore(log *slog.Logger) (store.Store, func(), error) {
+	path := os.Getenv("VARDRGATE_DB")
+	if path == "" {
+		log.Warn("VARDRGATE_DB is not set; using an in-memory job store (jobs do not survive restart)")
+		return store.NewMemory(), func() {}, nil
+	}
+	sq, err := store.NewSQLite(path)
+	if err != nil {
+		return nil, nil, err
+	}
+	log.Info("using durable job store", "path", path)
+	return sq, func() { sq.Close() }, nil
 }
 
 func resolveAllowPrivateTargets() (bool, error) {
