@@ -8,6 +8,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Missing-authentication detection**: when an anonymous identity (a
+  `static_header` credential with no header — i.e. no credentials sent) reaches a
+  resource it should be denied, the finding is now the more precise
+  `missing_authentication` (critical) rather than generic `unexpected_access`. It
+  is the highest-precedence refinement of a deny→allow result.
 - **Sensitive-data-exposure detection**: an identity marked `forbid_sensitive_data`
   (or a policy `response.sensitive_fields.forbidden_for` role) that receives a
   response containing sensitive fields now yields a `sensitive_data_exposure`

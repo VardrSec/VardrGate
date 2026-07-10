@@ -102,3 +102,20 @@ func TestClassifyOutcome(t *testing.T) {
 		}
 	}
 }
+
+func TestCredential_SendsNoAuth(t *testing.T) {
+	cases := []struct {
+		cred Credential
+		want bool
+	}{
+		{Credential{Type: CredentialTypeStaticHeader}, true},
+		{Credential{Type: CredentialTypeStaticHeader, Header: "X-Api", Value: "k"}, false},
+		{Credential{Type: CredentialTypeBearer, Value: "t"}, false},
+		{Credential{Type: CredentialTypeAPIKeyHeader, Value: "k"}, false},
+	}
+	for _, c := range cases {
+		if got := c.cred.SendsNoAuth(); got != c.want {
+			t.Errorf("SendsNoAuth(%+v)=%v, want %v", c.cred, got, c.want)
+		}
+	}
+}

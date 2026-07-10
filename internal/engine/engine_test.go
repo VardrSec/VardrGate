@@ -597,3 +597,36 @@ func TestRun_SensitiveDataCustomFields(t *testing.T) {
 		t.Errorf("expected sensitive_data_exposure for custom field, got %+v", result.Findings)
 	}
 }
+
+func TestRun_MissingAuthentication(t *testing.T) {
+	tc := baseTC()
+	// Replace "user" with an anonymous identity (static_header, no header/value).
+	tc.Identities[1] = model.Identity{ID: "anon", Credential: model.Credential{Type: model.CredentialTypeStaticHeader}}
+	tc.ExpectedAccess[1] = model.ExpectedAccess{IdentityID: "anon", Decision: model.AccessDecisionDeny}
+
+	eng := New(&stubExecutor{responses: map[string]int{"admin": 200, "anon": 200}})
+	result, err := eng.Run(context.Background(), tc)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Findings) != 1 {
+		t.Fatalf("expected 1 finding, got %d: %+v", len(result.Findings), result.Findings)
+	}
+	f := result.Findings[0]
+	if f.Category != model.CategoryMissingAuthentication {
+		t.Errorf("expected missing_authentication, got %q", f.Category)
+	}
+	if f.Severity != model.SeverityCritical {
+		t.Errorf("expected critical severity, got %q", f.Severity)
+	}
+}
+
+func TestRun_AuthenticatedStaysUnexpectedAccess(t *testing.T) {
+	// An authenticated (bearer) identity reaching a resource is unexpected_access,
+	// never missing_authentication.
+	eng := New(&stubExecutor{responses: map[string]int{"admin": 200, "user": 200}})
+	result, _ := eng.Run(context.Background(), baseTC())
+	if len(result.Findings) != 1 || result.Findings[0].Category != model.CategoryUnexpectedAccess {
+		t.Fatalf("expected unexpected_access for authenticated identity, got %+v", result.Findings)
+	}
+}

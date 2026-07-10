@@ -61,6 +61,7 @@ const (
 	SeverityCritical Severity = "critical"
 
 	CategoryPotentialBOLA         FindingCategory = "potential_bola"
+	CategoryMissingAuthentication FindingCategory = "missing_authentication"
 	CategoryCrossTenantAccess     FindingCategory = "cross_tenant_access"
 	CategoryPrivilegeEscalation   FindingCategory = "privilege_escalation"
 	CategoryUnexpectedAccess      FindingCategory = "unexpected_access"
@@ -110,6 +111,14 @@ type Credential struct {
 	Type   CredentialType `json:"type"`
 	Header string         `json:"header,omitempty"`
 	Value  string         `json:"-"`
+}
+
+// SendsNoAuth reports whether applying this credential adds no authentication to
+// the request — an anonymous identity. After validation, bearer and
+// api_key_header always carry a value; only a static_header with no header name
+// sends nothing.
+func (c Credential) SendsNoAuth() bool {
+	return c.Type == CredentialTypeStaticHeader && c.Header == ""
 }
 
 // UnmarshalJSON reads "value" from API input without ever writing it to output.

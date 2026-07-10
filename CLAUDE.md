@@ -105,6 +105,7 @@ Key behaviors:
 Coordinates execution. Validates the test case, iterates identities, calls the `Executor` interface, and evaluates findings.
 
 Finding rules for a deny→allow result, most to least specific (see ADR 0002):
+- `missing_authentication` (critical): the caller sent no credentials (`Credential.SendsNoAuth()` — a `static_header` with no header). Highest precedence.
 - `cross_tenant_access` (critical): identity's tenant differs from `resource.tenant_id`.
 - `potential_bola` (high): non-owner identity reached an identified object (`resource.owner_identity` set and `resource.type`/`object_id` present).
 - `privilege_escalation` (high): identity's role ranks below `resource.required_role` in `role_hierarchy`.

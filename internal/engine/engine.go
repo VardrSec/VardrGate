@@ -174,12 +174,20 @@ func unexpectedAccessFinding(tc model.AuthorizationTestCase, identity model.Iden
 // the most specific category the available context supports.
 //
 // Precedence, most to least specific:
-//  1. cross_tenant_access — identity's tenant differs from the resource's tenant.
-//  2. potential_bola      — a non-owner identity reached an identified object.
-//  3. privilege_escalation — identity's role ranks below the required role.
-//  4. unexpected_access   — no ownership context; conservative fallback.
+//  1. missing_authentication — the caller sent no credentials at all.
+//  2. cross_tenant_access — identity's tenant differs from the resource's tenant.
+//  3. potential_bola      — a non-owner identity reached an identified object.
+//  4. privilege_escalation — identity's role ranks below the required role.
+//  5. unexpected_access   — no ownership context; conservative fallback.
 func classifyUnexpectedAccess(tc model.AuthorizationTestCase, identity model.Identity) (model.FindingCategory, model.Severity, model.Confidence, string) {
 	res := tc.Resource
+
+	// An unauthenticated caller reaching a resource it should be denied is the
+	// most specific signal: authentication is missing or not enforced.
+	if identity.Credential.SendsNoAuth() {
+		return model.CategoryMissingAuthentication, model.SeverityCritical, model.ConfidenceHigh,
+			"unauthenticated_access: request carried no credentials"
+	}
 
 	if res != nil && res.TenantID != "" && identity.TenantID != "" && identity.TenantID != res.TenantID {
 		return model.CategoryCrossTenantAccess, model.SeverityCritical, model.ConfidenceHigh,

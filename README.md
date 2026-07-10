@@ -20,6 +20,7 @@ response, and returns findings for every mismatch.
 
 | Category | Severity | Meaning |
 |---|---|---|
+| `missing_authentication` | critical | An unauthenticated (anonymous) caller reached a resource it should be denied |
 | `cross_tenant_access` | critical | An identity from a different tenant reached the resource |
 | `potential_bola` | high | A non-owner identity reached an identified object |
 | `privilege_escalation` | high | An identity below the required role reached the resource |
