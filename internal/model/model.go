@@ -67,6 +67,7 @@ const (
 	CategoryUnexpectedAccess      FindingCategory = "unexpected_access"
 	CategoryAuthorizationMismatch FindingCategory = "authorization_mismatch"
 	CategorySensitiveDataExposure FindingCategory = "sensitive_data_exposure"
+	CategoryCORSMisconfiguration  FindingCategory = "cors_misconfiguration"
 )
 
 // ClassifyOutcome maps an HTTP status code to an ObservedOutcome.
@@ -212,6 +213,13 @@ type Resource struct {
 	RequiredRole string `json:"required_role,omitempty"`
 }
 
+// CORSCheck enables cross-origin policy probing. When set, the engine sends an
+// Origin header with ProbeOrigin on the request and inspects the CORS response
+// headers for a policy that reflects arbitrary origins.
+type CORSCheck struct {
+	ProbeOrigin string `json:"probe_origin"`
+}
+
 // AuthorizationTestCase is the top-level input to the engine.
 type AuthorizationTestCase struct {
 	ID          string          `json:"id"`
@@ -225,6 +233,8 @@ type AuthorizationTestCase struct {
 	RoleHierarchy []string `json:"role_hierarchy,omitempty"`
 	// SensitiveFields names the response fields that must not reach an identity
 	// marked ForbidSensitiveData. Empty means use the default sensitive set.
-	SensitiveFields []string         `json:"sensitive_fields,omitempty"`
-	ExpectedAccess  []ExpectedAccess `json:"expected_access"`
+	SensitiveFields []string `json:"sensitive_fields,omitempty"`
+	// CORS, when set, enables cross-origin misconfiguration probing.
+	CORS           *CORSCheck       `json:"cors,omitempty"`
+	ExpectedAccess []ExpectedAccess `json:"expected_access"`
 }

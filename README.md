@@ -26,6 +26,7 @@ response, and returns findings for every mismatch.
 | `privilege_escalation` | high | An identity below the required role reached the resource |
 | `unexpected_access` | high | Denied identity received a 2xx (no ownership context to refine further) |
 | `sensitive_data_exposure` | high | Identity received response fields it must not see (evidence names the fields, never the values) |
+| `cors_misconfiguration` | high/low | Endpoint reflects an arbitrary `Origin` (high when credentials are also allowed); requires `cors.probe_origin` |
 | `authorization_mismatch` | low | Allowed identity received a 401/403 |
 
 The engine only elevates beyond `unexpected_access` when the test case supplies

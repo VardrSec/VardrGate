@@ -218,6 +218,8 @@ func selectedHeaders(h http.Header) map[string]string {
 		"WWW-Authenticate",
 		"X-Request-Id",
 		"X-RateLimit-Remaining",
+		"Access-Control-Allow-Origin",
+		"Access-Control-Allow-Credentials",
 	}
 	out := make(map[string]string, len(keys))
 	for _, k := range keys {

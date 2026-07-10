@@ -8,6 +8,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **CORS misconfiguration detection**: set `cors.probe_origin` on a test case and
+  the engine sends that `Origin` and inspects the response. A reflected arbitrary
+  origin combined with `Access-Control-Allow-Credentials: true` is a high finding
+  (`cors_misconfiguration`); a reflected or wildcard origin without credentials is
+  reported at low severity. Off unless `cors` is set. The client now captures the
+  `Access-Control-Allow-Origin`/`-Credentials` response headers.
 - **Postman collection import** (`internal/postman`): `vardrgate gen --postman
   collection.json` generates starter test cases from a Postman v2.1 collection
   (folders flattened; both string and object URL forms; `--base` retargets the

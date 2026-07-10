@@ -14,6 +14,7 @@ type stubExecutor struct {
 	responses map[string]int
 	err       map[string]string
 	body      map[string][]byte
+	headers   map[string]map[string]string
 }
 
 func (s *stubExecutor) Execute(_ context.Context, identity model.Identity, _ model.RequestTemplate) model.ExecutionResult {
@@ -29,6 +30,9 @@ func (s *stubExecutor) Execute(_ context.Context, identity model.Identity, _ mod
 	}
 	if b, ok := s.body[identity.ID]; ok {
 		r.Body = b
+	}
+	if h, ok := s.headers[identity.ID]; ok {
+		r.Headers = h
 	}
 	return r
 }
@@ -628,5 +632,87 @@ func TestRun_AuthenticatedStaysUnexpectedAccess(t *testing.T) {
 	result, _ := eng.Run(context.Background(), baseTC())
 	if len(result.Findings) != 1 || result.Findings[0].Category != model.CategoryUnexpectedAccess {
 		t.Fatalf("expected unexpected_access for authenticated identity, got %+v", result.Findings)
+	}
+}
+
+func TestRun_CORS_ReflectedWithCredentials(t *testing.T) {
+	tc := baseTC()
+	tc.CORS = &model.CORSCheck{ProbeOrigin: "https://evil.example"}
+	eng := New(&stubExecutor{
+		responses: map[string]int{"admin": 200, "user": 403},
+		headers: map[string]map[string]string{"admin": {
+			"Access-Control-Allow-Origin":      "https://evil.example",
+			"Access-Control-Allow-Credentials": "true",
+		}},
+	})
+	result, err := eng.Run(context.Background(), tc)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	var f *model.Finding
+	for i := range result.Findings {
+		if result.Findings[i].Category == model.CategoryCORSMisconfiguration {
+			f = &result.Findings[i]
+		}
+	}
+	if f == nil {
+		t.Fatalf("expected cors_misconfiguration finding, got %+v", result.Findings)
+	}
+	if f.Severity != model.SeverityHigh {
+		t.Errorf("reflected+credentials should be high, got %q", f.Severity)
+	}
+}
+
+func TestRun_CORS_ReflectedNoCredentialsIsLow(t *testing.T) {
+	tc := baseTC()
+	tc.CORS = &model.CORSCheck{ProbeOrigin: "https://evil.example"}
+	eng := New(&stubExecutor{
+		responses: map[string]int{"admin": 200, "user": 403},
+		headers: map[string]map[string]string{"admin": {
+			"Access-Control-Allow-Origin": "https://evil.example",
+		}},
+	})
+	result, _ := eng.Run(context.Background(), tc)
+	var f *model.Finding
+	for i := range result.Findings {
+		if result.Findings[i].Category == model.CategoryCORSMisconfiguration {
+			f = &result.Findings[i]
+		}
+	}
+	if f == nil || f.Severity != model.SeverityLow {
+		t.Fatalf("expected low-severity cors finding, got %+v", result.Findings)
+	}
+}
+
+func TestRun_CORS_NoReflectionNoFinding(t *testing.T) {
+	tc := baseTC()
+	tc.CORS = &model.CORSCheck{ProbeOrigin: "https://evil.example"}
+	eng := New(&stubExecutor{
+		responses: map[string]int{"admin": 200, "user": 403},
+		headers: map[string]map[string]string{"admin": {
+			"Access-Control-Allow-Origin": "https://trusted.example",
+		}},
+	})
+	result, _ := eng.Run(context.Background(), tc)
+	for _, f := range result.Findings {
+		if f.Category == model.CategoryCORSMisconfiguration {
+			t.Errorf("did not expect cors finding when origin not reflected: %+v", f)
+		}
+	}
+}
+
+func TestRun_CORS_DisabledByDefault(t *testing.T) {
+	// No CORS field → no probing, no finding even if headers present.
+	eng := New(&stubExecutor{
+		responses: map[string]int{"admin": 200, "user": 403},
+		headers: map[string]map[string]string{"admin": {
+			"Access-Control-Allow-Origin": "*",
+		}},
+	})
+	result, _ := eng.Run(context.Background(), baseTC())
+	for _, f := range result.Findings {
+		if f.Category == model.CategoryCORSMisconfiguration {
+			t.Errorf("CORS must not be evaluated when unset: %+v", f)
+		}
 	}
 }

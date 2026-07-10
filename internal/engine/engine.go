@@ -52,14 +52,29 @@ func (e *Engine) Run(ctx context.Context, tc model.AuthorizationTestCase) (Resul
 		expected[ea.IdentityID] = ea.Decision
 	}
 
+	// When CORS probing is enabled, send an Origin header so the server reveals
+	// its cross-origin policy in the response headers.
+	req := tc.Request
+	if tc.CORS != nil && tc.CORS.ProbeOrigin != "" {
+		req = withHeader(req, "Origin", tc.CORS.ProbeOrigin)
+	}
+
 	// First pass: execute every identity and index the results so finding
 	// evaluation can compare an offending response against a legitimate baseline.
 	result := Result{TestCaseID: tc.ID}
 	execByID := make(map[string]model.ExecutionResult, len(tc.Identities))
 	for _, identity := range tc.Identities {
-		exec := e.exec.Execute(ctx, identity, tc.Request)
+		exec := e.exec.Execute(ctx, identity, req)
 		result.Executions = append(result.Executions, exec)
 		execByID[identity.ID] = exec
+	}
+
+	// CORS policy is endpoint-level, so evaluate it once from the first usable
+	// response.
+	if tc.CORS != nil && tc.CORS.ProbeOrigin != "" {
+		if finding, ok := corsFinding(tc, execByID); ok {
+			result.Findings = append(result.Findings, finding)
+		}
 	}
 
 	// Second pass: evaluate findings with access to all executions.
@@ -287,6 +302,94 @@ func baselineExecution(tc model.AuthorizationTestCase, offendingID string, execB
 		}
 	}
 	return model.ExecutionResult{}, false
+}
+
+// withHeader returns a copy of tmpl with an extra header set, without mutating
+// the caller's header map.
+func withHeader(tmpl model.RequestTemplate, key, value string) model.RequestTemplate {
+	headers := make(map[string]string, len(tmpl.Headers)+1)
+	for k, v := range tmpl.Headers {
+		headers[k] = v
+	}
+	headers[key] = value
+	tmpl.Headers = headers
+	return tmpl
+}
+
+// corsFinding inspects the first usable response for a cross-origin policy that
+// reflects the arbitrary probe origin (or is a wildcard). Reflecting an origin
+// while also allowing credentials is the dangerous case (high); a reflected or
+// wildcard origin without credentials is reported at low severity.
+func corsFinding(tc model.AuthorizationTestCase, execByID map[string]model.ExecutionResult) (model.Finding, bool) {
+	var headers map[string]string
+	for _, identity := range tc.Identities {
+		ex := execByID[identity.ID]
+		if ex.Error == "" && len(ex.Headers) > 0 {
+			headers = ex.Headers
+			break
+		}
+	}
+	if headers == nil {
+		return model.Finding{}, false
+	}
+
+	acao := headerValue(headers, "Access-Control-Allow-Origin")
+	if acao == "" {
+		return model.Finding{}, false
+	}
+	credentials := strings.EqualFold(headerValue(headers, "Access-Control-Allow-Credentials"), "true")
+	reflected := acao == tc.CORS.ProbeOrigin
+	wildcard := acao == "*"
+	if !reflected && !wildcard {
+		return model.Finding{}, false
+	}
+
+	severity := model.SeverityLow
+	confidence := model.ConfidenceMedium
+	reason := "permissive_cors: origin " + describeACAO(reflected, wildcard)
+	if reflected && credentials {
+		severity = model.SeverityHigh
+		confidence = model.ConfidenceHigh
+		reason = "credentialed_cors: arbitrary origin reflected with credentials allowed"
+	}
+
+	return model.Finding{
+		Category:   model.CategoryCORSMisconfiguration,
+		Severity:   severity,
+		Confidence: confidence,
+		Message:    fmt.Sprintf("endpoint returned a permissive CORS policy for probe origin %q", tc.CORS.ProbeOrigin),
+		DetectedAt: time.Now().UTC(),
+		Evidence: []string{
+			reason,
+			fmt.Sprintf("access_control_allow_origin=%s", acao),
+			fmt.Sprintf("access_control_allow_credentials=%t", credentials),
+			fmt.Sprintf("probe_origin=%s", tc.CORS.ProbeOrigin),
+			fmt.Sprintf("url=%s %s", tc.Request.Method, sanitizeURL(tc.Request.URL)),
+		},
+	}, true
+}
+
+func describeACAO(reflected, wildcard bool) string {
+	if reflected {
+		return "reflected"
+	}
+	if wildcard {
+		return "wildcard"
+	}
+	return "unknown"
+}
+
+// headerValue does a case-insensitive lookup in a header map.
+func headerValue(headers map[string]string, key string) string {
+	if v, ok := headers[key]; ok {
+		return v
+	}
+	for k, v := range headers {
+		if strings.EqualFold(k, key) {
+			return v
+		}
+	}
+	return ""
 }
 
 func buildEvidence(tc model.AuthorizationTestCase, identity model.Identity, exec model.ExecutionResult, outcome model.ObservedOutcome) []string {
