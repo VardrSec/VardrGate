@@ -1,0 +1,16 @@
+{
+  "openapi": "3.0.0",
+  "info": { "title": "Example Store API", "version": "1.0.0" },
+  "servers": [{ "url": "https://api.example.com/v1" }],
+  "paths": {
+    "/users/{user_id}/profile": {
+      "get": { "operationId": "getUserProfile", "summary": "Read a user profile" }
+    },
+    "/users/{user_id}/orders": {
+      "get": { "operationId": "listUserOrders", "summary": "List a user's orders" }
+    },
+    "/admin/reports": {
+      "get": { "operationId": "adminReports", "summary": "Admin-only reports" }
+    }
+  }
+}

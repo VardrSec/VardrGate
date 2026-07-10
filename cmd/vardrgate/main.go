@@ -19,6 +19,7 @@ import (
 	"github.com/VardrSec/vardrgate/internal/client"
 	"github.com/VardrSec/vardrgate/internal/engine"
 	"github.com/VardrSec/vardrgate/internal/job"
+	"github.com/VardrSec/vardrgate/internal/openapi"
 	"github.com/VardrSec/vardrgate/internal/store"
 )
 
@@ -27,6 +28,13 @@ func main() {
 	// job file offline — the contract VardrRunner and CI use.
 	if len(os.Args) > 1 && os.Args[1] == "run" {
 		if err := runJob(os.Args[2:]); err != nil {
+			fmt.Fprintln(os.Stderr, "error:", err)
+			os.Exit(1)
+		}
+		return
+	}
+	if len(os.Args) > 1 && os.Args[1] == "gen" {
+		if err := genTestCases(os.Args[2:]); err != nil {
 			fmt.Fprintln(os.Stderr, "error:", err)
 			os.Exit(1)
 		}
@@ -77,6 +85,47 @@ func runJob(args []string) error {
 	}
 	if err := os.WriteFile(*outPath, out, 0o644); err != nil {
 		return fmt.Errorf("write result: %w", err)
+	}
+	return nil
+}
+
+// genTestCases reads an OpenAPI spec and writes starter authorization test cases
+// as a JSON array (to --out or stdout). The output is a scaffold: fill in
+// credential values before running.
+func genTestCases(args []string) error {
+	fs := flag.NewFlagSet("gen", flag.ContinueOnError)
+	specPath := fs.String("spec", "", "path to an OpenAPI 3 JSON spec (required)")
+	baseURL := fs.String("base", "", "base URL to use instead of the spec's first server")
+	outPath := fs.String("out", "", "path to write the generated cases (default: stdout)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *specPath == "" {
+		return errors.New("--spec is required")
+	}
+
+	data, err := os.ReadFile(*specPath)
+	if err != nil {
+		return fmt.Errorf("read spec: %w", err)
+	}
+	spec, err := openapi.Parse(data)
+	if err != nil {
+		return err
+	}
+
+	cases := spec.GenerateTestCases(*baseURL)
+	out, err := json.MarshalIndent(cases, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode cases: %w", err)
+	}
+	out = append(out, '\n')
+
+	if *outPath == "" {
+		_, err = os.Stdout.Write(out)
+		return err
+	}
+	if err := os.WriteFile(*outPath, out, 0o644); err != nil {
+		return fmt.Errorf("write cases: %w", err)
 	}
 	return nil
 }

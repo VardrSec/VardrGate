@@ -53,6 +53,16 @@ go build ./cmd/vardrgate
 sanitized result JSON. The binary defaults to `serve`; `run` is the offline path
 VardrRunner and CI use. See [`docs/adr/0001-policy-input-and-run-cli.md`](docs/adr/0001-policy-input-and-run-cli.md).
 
+### Generate starter tests from an OpenAPI spec
+
+```sh
+./vardrgate gen --spec openapi.json --base https://api.example.com --out cases.json
+```
+
+Emits one starter test case per path+method (request pre-filled, plus an
+authenticated and an anonymous template identity). Add real credential values to
+the generated cases before running them.
+
 Environment variables (serve mode):
 
 | Variable | Default | Description |
@@ -203,8 +213,9 @@ internal/
   engine/            — validation, execution, ownership-aware finding evaluation
   job/               — offline job envelope (vardrgate run)
   model/             — domain types and constants
+  openapi/           — OpenAPI 3 parsing + starter test-case generation
   policy/            — declarative YAML policy parsing and compilation
-  store/             — runner job queue + registry (in-memory Store)
+  store/             — runner job queue + registry (in-memory + SQLite Store)
   urlcheck/          — URL and IP validation
 docs/
   mvp.md             — first supported workflow

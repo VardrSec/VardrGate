@@ -8,6 +8,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **OpenAPI import + starter test generation** (`internal/openapi`, `vardrgate gen`):
+  parse an OpenAPI 3 spec and generate one starter authorization test case per
+  path+method — request pre-filled, plus an authenticated (allow) and anonymous
+  (deny) template identity so a generated case exercises the missing-auth check
+  once a real token is added. `vardrgate gen --spec spec.json [--base URL] [--out file]`.
 - **Missing-authentication detection**: when an anonymous identity (a
   `static_header` credential with no header — i.e. no credentials sent) reaches a
   resource it should be denied, the finding is now the more precise

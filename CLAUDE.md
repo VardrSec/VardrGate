@@ -126,6 +126,10 @@ The `Executor` interface is defined in the engine package and satisfied by `*cli
 
 `engine.Result` has JSON tags (`test_case_id`, `executions`, `findings`).
 
+### `internal/openapi`
+
+Parses a subset of an OpenAPI 3 document (`Parse`) and generates one starter `model.AuthorizationTestCase` per path+method (`Spec.GenerateTestCases`), sorted by path then method. Each scaffold has the request pre-filled plus an `authenticated` (allow) and `anonymous` (deny) template identity. Exposed via `vardrgate gen`. Unknown spec fields are ignored so real specs parse.
+
 ### `internal/policy`
 
 Parses a declarative YAML policy (`api`/`expect`/`response`) and `Compile`s it into a `model.AuthorizationTestCase` given `Bindings` (base URL, path params, identities whose `role` matches an `expect` key, optional resource tenant). Unknown YAML fields are rejected. This is what makes a control reusable across environments.
@@ -159,7 +163,7 @@ Exposes the HTTP API. No business logic.
 
 ### `cmd/vardrgate`
 
-Two subcommands. Default (`serve`) reads `PORT` (1–65535, default 8080) and `ALLOW_PRIVATE_TARGETS` (bool, default false), wires `client → engine → handler`, and runs the HTTP server (`ReadHeaderTimeout` 5 s, `ReadTimeout` 30 s, `WriteTimeout` 60 s, `IdleTimeout` 120 s; 10 s graceful shutdown on `SIGINT`/`SIGTERM`). `run --job <file> --out <file>` executes one job envelope offline and writes the result JSON (stdout if `--out` omitted); exits non-zero on error for CI/VardrRunner gating.
+Three subcommands. Default (`serve`) reads `PORT` (1–65535, default 8080), `ALLOW_PRIVATE_TARGETS`, `VARDRGATE_API_KEY(S)`, and `VARDRGATE_DB`, wires `client → engine → handler` with a store, and runs the HTTP server (`ReadHeaderTimeout` 5 s, `ReadTimeout` 30 s, `WriteTimeout` 60 s, `IdleTimeout` 120 s; 10 s graceful shutdown on `SIGINT`/`SIGTERM`). `run --job <file> --out <file>` executes one job envelope offline and writes the result JSON (stdout if `--out` omitted); exits non-zero on error for CI/VardrRunner gating. `gen --spec <file> [--base URL] [--out file]` generates starter test cases from an OpenAPI spec.
 
 ## Development rules
 
