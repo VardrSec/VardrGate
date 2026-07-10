@@ -111,6 +111,7 @@ Finding rules for a deny→allow result, most to least specific (see ADR 0002):
 - `unexpected_access` (high): no ownership context — conservative fallback.
 
 Other rules:
+- `sensitive_data_exposure` (high): an identity whose expected access has `ForbidSensitiveData` receives a response body containing sensitive fields. Independent of the allow/deny decision. Detection (in `compare.SensitiveFieldsPresent`) is recursive and case-insensitive; evidence records field *names* only, never values. Field set defaults to `compare.DefaultSensitiveFields`, overridable via `tc.SensitiveFields`. Policy `response.sensitive_fields.forbidden_for` roles compile to `ForbidSensitiveData`.
 - `authorization_mismatch` (low): expected `allow`, observed `deny` (401/403).
 - Every elevated category requires explicit context in the test case; `TenantID` alone still yields `unexpected_access`. The engine never guesses from a weak signal.
 - Findings include response-comparison evidence: the offending response is compared against a baseline (the owner, or any allowed identity); a matching body is flagged.

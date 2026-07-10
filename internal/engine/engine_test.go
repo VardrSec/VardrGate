@@ -518,3 +518,82 @@ func TestValidate_ResourceOwnerMustExist(t *testing.T) {
 		t.Fatalf("expected owner_identity error, got %v", err)
 	}
 }
+
+func TestRun_SensitiveDataExposure(t *testing.T) {
+	tc := baseTC()
+	// "user" is allowed to call the endpoint but must not receive sensitive fields.
+	tc.ExpectedAccess[1].Decision = model.AccessDecisionAllow
+	tc.ExpectedAccess[1].ForbidSensitiveData = true
+
+	body := []byte(`{"id":42,"ssn":"123-45-6789"}`)
+	eng := New(&stubExecutor{
+		responses: map[string]int{"admin": 200, "user": 200},
+		body:      map[string][]byte{"user": body},
+	})
+	result, err := eng.Run(context.Background(), tc)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var f *model.Finding
+	for i := range result.Findings {
+		if result.Findings[i].Category == model.CategorySensitiveDataExposure {
+			f = &result.Findings[i]
+		}
+	}
+	if f == nil {
+		t.Fatalf("expected sensitive_data_exposure finding, got %+v", result.Findings)
+	}
+	if f.IdentityID != "user" {
+		t.Errorf("expected finding for user, got %q", f.IdentityID)
+	}
+	// Evidence lists the field name, never the value.
+	for _, e := range f.Evidence {
+		if strings.Contains(e, "123-45-6789") {
+			t.Errorf("evidence leaked sensitive value: %q", e)
+		}
+	}
+	joined := strings.Join(f.Evidence, " ")
+	if !strings.Contains(joined, "ssn") {
+		t.Errorf("evidence should name the leaked field, got %v", f.Evidence)
+	}
+}
+
+func TestRun_NoSensitiveFindingWhenBodyClean(t *testing.T) {
+	tc := baseTC()
+	tc.ExpectedAccess[1].Decision = model.AccessDecisionAllow
+	tc.ExpectedAccess[1].ForbidSensitiveData = true
+
+	eng := New(&stubExecutor{
+		responses: map[string]int{"admin": 200, "user": 200},
+		body:      map[string][]byte{"user": []byte(`{"id":42,"name":"ok"}`)},
+	})
+	result, _ := eng.Run(context.Background(), tc)
+	for _, f := range result.Findings {
+		if f.Category == model.CategorySensitiveDataExposure {
+			t.Errorf("unexpected sensitive_data_exposure finding: %+v", f)
+		}
+	}
+}
+
+func TestRun_SensitiveDataCustomFields(t *testing.T) {
+	tc := baseTC()
+	tc.SensitiveFields = []string{"dob"}
+	tc.ExpectedAccess[1].Decision = model.AccessDecisionAllow
+	tc.ExpectedAccess[1].ForbidSensitiveData = true
+
+	eng := New(&stubExecutor{
+		responses: map[string]int{"admin": 200, "user": 200},
+		body:      map[string][]byte{"user": []byte(`{"dob":"2000-01-01"}`)},
+	})
+	result, _ := eng.Run(context.Background(), tc)
+	var found bool
+	for _, f := range result.Findings {
+		if f.Category == model.CategorySensitiveDataExposure {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected sensitive_data_exposure for custom field, got %+v", result.Findings)
+	}
+}

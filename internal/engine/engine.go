@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/VardrSec/vardrgate/internal/client"
@@ -62,18 +63,60 @@ func (e *Engine) Run(ctx context.Context, tc model.AuthorizationTestCase) (Resul
 	}
 
 	// Second pass: evaluate findings with access to all executions.
+	expectedByID := make(map[string]model.ExpectedAccess, len(tc.ExpectedAccess))
+	for _, ea := range tc.ExpectedAccess {
+		expectedByID[ea.IdentityID] = ea
+	}
 	for _, identity := range tc.Identities {
-		decision, hasExpected := expected[identity.ID]
-		if !hasExpected || decision == model.AccessDecisionSkip {
+		ea, hasExpected := expectedByID[identity.ID]
+		if !hasExpected || ea.Decision == model.AccessDecisionSkip {
 			continue
 		}
-		finding, ok := e.evaluate(tc, identity, execByID, decision)
-		if ok {
+		if finding, ok := e.evaluate(tc, identity, execByID, ea.Decision); ok {
 			result.Findings = append(result.Findings, finding)
+		}
+		// Sensitive-data exposure is independent of the allow/deny decision: an
+		// identity may be permitted to call the endpoint yet still must not
+		// receive certain fields.
+		if ea.ForbidSensitiveData {
+			if finding, ok := sensitiveDataFinding(tc, identity, execByID[identity.ID]); ok {
+				result.Findings = append(result.Findings, finding)
+			}
 		}
 	}
 
 	return result, nil
+}
+
+// sensitiveDataFinding reports fields that must not have reached this identity
+// but appear in its response body. Only field names are recorded as evidence —
+// never the sensitive values themselves.
+func sensitiveDataFinding(tc model.AuthorizationTestCase, identity model.Identity, exec model.ExecutionResult) (model.Finding, bool) {
+	if exec.Error != "" || len(exec.Body) == 0 {
+		return model.Finding{}, false
+	}
+	fields := tc.SensitiveFields
+	if len(fields) == 0 {
+		fields = compare.DefaultSensitiveFields
+	}
+	present := compare.SensitiveFieldsPresent(exec.Body, fields)
+	if len(present) == 0 {
+		return model.Finding{}, false
+	}
+	return model.Finding{
+		Category:   model.CategorySensitiveDataExposure,
+		Severity:   model.SeverityHigh,
+		Confidence: model.ConfidenceHigh,
+		IdentityID: identity.ID,
+		Message:    fmt.Sprintf("identity %q received sensitive fields it must not see", identity.ID),
+		DetectedAt: time.Now().UTC(),
+		Evidence: []string{
+			fmt.Sprintf("leaked_fields=%s", strings.Join(present, ",")),
+			fmt.Sprintf("status_code=%d", exec.StatusCode),
+			fmt.Sprintf("identity_id=%s", identity.ID),
+			fmt.Sprintf("url=%s %s", tc.Request.Method, sanitizeURL(tc.Request.URL)),
+		},
+	}, true
 }
 
 // evaluate compares the observed outcome against the expected decision.

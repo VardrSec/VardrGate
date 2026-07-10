@@ -4,15 +4,66 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"sort"
+	"strings"
 
 	"github.com/VardrSec/vardrgate/internal/model"
 )
 
-// sensitiveFields is the default set of field names whose presence in a
-// response body is noted as evidence regardless of the access decision.
-var sensitiveFields = []string{
+// DefaultSensitiveFields is the default set of field names whose presence in a
+// response body is treated as sensitive.
+var DefaultSensitiveFields = []string{
 	"password", "secret", "token", "api_key", "access_token",
 	"refresh_token", "private_key", "ssn", "credit_card",
+}
+
+// sensitiveFields aliases DefaultSensitiveFields for internal comparison use.
+var sensitiveFields = DefaultSensitiveFields
+
+// SensitiveFieldsPresent returns the sorted, de-duplicated set of field names
+// from fields that appear anywhere in the JSON body (case-insensitive, at any
+// nesting depth). It returns only field *names*, never values, so callers can
+// record which sensitive fields leaked without echoing the sensitive data.
+func SensitiveFieldsPresent(body []byte, fields []string) []string {
+	if len(body) == 0 || len(fields) == 0 {
+		return nil
+	}
+	var v interface{}
+	if err := json.Unmarshal(body, &v); err != nil {
+		return nil
+	}
+	want := make(map[string]string, len(fields)) // lower(name) → original
+	for _, f := range fields {
+		want[strings.ToLower(f)] = f
+	}
+	found := map[string]struct{}{}
+	walkJSONKeys(v, want, found)
+	if len(found) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(found))
+	for f := range found {
+		out = append(out, f)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// walkJSONKeys recursively records which wanted field names appear as object keys.
+func walkJSONKeys(v interface{}, want map[string]string, found map[string]struct{}) {
+	switch t := v.(type) {
+	case map[string]interface{}:
+		for k, child := range t {
+			if orig, ok := want[strings.ToLower(k)]; ok {
+				found[orig] = struct{}{}
+			}
+			walkJSONKeys(child, want, found)
+		}
+	case []interface{}:
+		for _, child := range t {
+			walkJSONKeys(child, want, found)
+		}
+	}
 }
 
 // Results compares two ExecutionResults and returns a ComparisonResult

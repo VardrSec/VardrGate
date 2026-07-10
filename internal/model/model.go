@@ -65,6 +65,7 @@ const (
 	CategoryPrivilegeEscalation   FindingCategory = "privilege_escalation"
 	CategoryUnexpectedAccess      FindingCategory = "unexpected_access"
 	CategoryAuthorizationMismatch FindingCategory = "authorization_mismatch"
+	CategorySensitiveDataExposure FindingCategory = "sensitive_data_exposure"
 )
 
 // ClassifyOutcome maps an HTTP status code to an ObservedOutcome.
@@ -142,6 +143,9 @@ type ExpectedAccess struct {
 	IdentityID string         `json:"identity_id"`
 	Decision   AccessDecision `json:"decision"`
 	Note       string         `json:"note,omitempty"`
+	// ForbidSensitiveData marks an identity that must never receive sensitive
+	// fields in the response body, even when it is allowed to call the endpoint.
+	ForbidSensitiveData bool `json:"forbid_sensitive_data,omitempty"`
 }
 
 // ExecutionResult captures the HTTP response for one identity.
@@ -209,6 +213,9 @@ type AuthorizationTestCase struct {
 	Resource *Resource `json:"resource,omitempty"`
 	// RoleHierarchy lists roles from least to most privileged. It is only used
 	// to evaluate Resource.RequiredRole for privilege_escalation findings.
-	RoleHierarchy  []string         `json:"role_hierarchy,omitempty"`
-	ExpectedAccess []ExpectedAccess `json:"expected_access"`
+	RoleHierarchy []string `json:"role_hierarchy,omitempty"`
+	// SensitiveFields names the response fields that must not reach an identity
+	// marked ForbidSensitiveData. Empty means use the default sensitive set.
+	SensitiveFields []string         `json:"sensitive_fields,omitempty"`
+	ExpectedAccess  []ExpectedAccess `json:"expected_access"`
 }

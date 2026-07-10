@@ -174,9 +174,55 @@ func TestCompile_CrossTenantWhenBound(t *testing.T) {
 	}
 }
 
-type fakeExec struct{ code map[string]int }
+type fakeExec struct {
+	code map[string]int
+	body map[string][]byte
+}
 
 func (f *fakeExec) Execute(_ context.Context, id model.Identity, _ model.RequestTemplate) model.ExecutionResult {
 	c := f.code[id.ID]
-	return model.ExecutionResult{IdentityID: id.ID, StatusCode: c, ObservedOutcome: model.ClassifyOutcome(c, false)}
+	r := model.ExecutionResult{IdentityID: id.ID, StatusCode: c, ObservedOutcome: model.ClassifyOutcome(c, false)}
+	if f.body != nil {
+		r.Body = f.body[id.ID]
+	}
+	return r
+}
+
+func TestCompile_SetsForbidSensitiveData(t *testing.T) {
+	p, _ := Parse([]byte(samplePolicy))
+	tc, err := p.Compile(bindings())
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	// samplePolicy forbids sensitive fields for other_user and anonymous, not owner.
+	want := map[string]bool{"u-owner": false, "u-other": true, "u-anon": true}
+	got := map[string]bool{}
+	for _, ea := range tc.ExpectedAccess {
+		got[ea.IdentityID] = ea.ForbidSensitiveData
+	}
+	for id, w := range want {
+		if got[id] != w {
+			t.Errorf("%s: ForbidSensitiveData=%v, want %v", id, got[id], w)
+		}
+	}
+}
+
+func TestCompile_SensitiveExposureThroughEngine(t *testing.T) {
+	p, _ := Parse([]byte(samplePolicy))
+	tc, _ := p.Compile(bindings())
+	// other_user is allowed here but the response leaks a password field.
+	eng := engine.New(&fakeExec{
+		code: map[string]int{"u-owner": 200, "u-other": 200, "u-anon": 401},
+		body: map[string][]byte{"u-other": []byte(`{"id":1,"password":"x"}`)},
+	})
+	res, _ := eng.Run(t.Context(), tc)
+	var found bool
+	for _, f := range res.Findings {
+		if f.Category == model.CategorySensitiveDataExposure && f.IdentityID == "u-other" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected sensitive_data_exposure for u-other, got %+v", res.Findings)
+	}
 }

@@ -154,3 +154,53 @@ func containsNote(cr model.ComparisonResult, substr string) bool {
 	}
 	return false
 }
+
+func TestSensitiveFieldsPresent(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+		want []string // sorted
+	}{
+		{"top level", `{"id":1,"ssn":"x","name":"a"}`, []string{"ssn"}},
+		{"nested", `{"user":{"profile":{"password":"x"}},"ok":true}`, []string{"password"}},
+		{"in array", `{"items":[{"api_key":"x"},{"id":2}]}`, []string{"api_key"}},
+		{"case insensitive", `{"SSN":"x","Token":"y"}`, []string{"ssn", "token"}},
+		{"none", `{"id":1,"name":"a"}`, nil},
+		{"multiple", `{"ssn":"1","password":"2"}`, []string{"password", "ssn"}},
+		{"not json", `not json`, nil},
+		{"empty", ``, nil},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := SensitiveFieldsPresent([]byte(c.body), DefaultSensitiveFields)
+			if len(got) != len(c.want) {
+				t.Fatalf("got %v, want %v", got, c.want)
+			}
+			for i := range got {
+				if got[i] != c.want[i] {
+					t.Errorf("got %v, want %v", got, c.want)
+				}
+			}
+		})
+	}
+}
+
+func TestSensitiveFieldsPresent_NamesNotValues(t *testing.T) {
+	// The returned evidence must never contain the sensitive value itself.
+	got := SensitiveFieldsPresent([]byte(`{"ssn":"123-45-6789"}`), DefaultSensitiveFields)
+	if len(got) != 1 || got[0] != "ssn" {
+		t.Fatalf("expected [ssn], got %v", got)
+	}
+	for _, f := range got {
+		if f == "123-45-6789" {
+			t.Error("value leaked into result")
+		}
+	}
+}
+
+func TestSensitiveFieldsPresent_CustomFields(t *testing.T) {
+	got := SensitiveFieldsPresent([]byte(`{"dob":"2000-01-01","id":1}`), []string{"dob"})
+	if len(got) != 1 || got[0] != "dob" {
+		t.Fatalf("expected [dob], got %v", got)
+	}
+}

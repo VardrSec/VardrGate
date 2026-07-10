@@ -140,6 +140,11 @@ func (p Policy) Compile(b Bindings) (model.AuthorizationTestCase, error) {
 	}
 	url := strings.TrimRight(b.BaseURL, "/") + path
 
+	forbidden := make(map[string]struct{}, len(p.Response.SensitiveFields.ForbiddenFor))
+	for _, role := range p.Response.SensitiveFields.ForbiddenFor {
+		forbidden[role] = struct{}{}
+	}
+
 	expected := make([]model.ExpectedAccess, 0, len(b.Identities))
 	ownerRole := p.ownerRole()
 	var ownerIdentity string
@@ -152,7 +157,12 @@ func (p Policy) Compile(b Bindings) (model.AuthorizationTestCase, error) {
 		if err != nil {
 			return model.AuthorizationTestCase{}, err
 		}
-		expected = append(expected, model.ExpectedAccess{IdentityID: id.ID, Decision: decision})
+		_, forbidSensitive := forbidden[id.Role]
+		expected = append(expected, model.ExpectedAccess{
+			IdentityID:          id.ID,
+			Decision:            decision,
+			ForbidSensitiveData: forbidSensitive,
+		})
 		if ownerRole != "" && id.Role == ownerRole {
 			ownerIdentity = id.ID
 		}

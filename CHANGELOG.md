@@ -8,6 +8,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Sensitive-data-exposure detection**: an identity marked `forbid_sensitive_data`
+  (or a policy `response.sensitive_fields.forbidden_for` role) that receives a
+  response containing sensitive fields now yields a `sensitive_data_exposure`
+  finding. Detection is recursive and case-insensitive; evidence lists only the
+  leaked field *names*, never their values. Uses a default sensitive-field set,
+  overridable per test case via `sensitive_fields`. Wires the previously-inert
+  policy `sensitive_fields` block into the engine.
 - **Tenant isolation**: per-tenant API keys
   (`VARDRGATE_API_KEYS="tenant-a:key1,tenant-b:key2"`) scope every queue
   operation to the caller's tenant. Jobs and audit entries are tagged with the
