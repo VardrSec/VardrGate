@@ -8,6 +8,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Postman collection import** (`internal/postman`): `vardrgate gen --postman
+  collection.json` generates starter test cases from a Postman v2.1 collection
+  (folders flattened; both string and object URL forms; `--base` retargets the
+  origin). The shared scaffold builder now lives in `internal/scaffold` and is
+  used by both the OpenAPI and Postman importers.
 - **Coverage reporting** (`internal/coverage`, `vardrgate coverage`): match a set
   of test cases against an OpenAPI spec and report which operations are tested vs
   untested, with a percentage. Path templates match on the request path suffix so

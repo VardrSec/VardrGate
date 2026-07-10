@@ -61,7 +61,11 @@ VardrRunner and CI use. See [`docs/adr/0001-policy-input-and-run-cli.md`](docs/a
 
 Emits one starter test case per path+method (request pre-filled, plus an
 authenticated and an anonymous template identity). Add real credential values to
-the generated cases before running them.
+the generated cases before running them. A Postman v2.1 collection works too:
+
+```sh
+./vardrgate gen --postman collection.json --base https://api.example.com
+```
 
 ### Report coverage of a spec
 
@@ -224,7 +228,9 @@ internal/
   job/               — offline job envelope (vardrgate run)
   model/             — domain types and constants
   openapi/           — OpenAPI 3 parsing + starter test-case generation
+  postman/           — Postman v2.1 collection import
   policy/            — declarative YAML policy parsing and compilation
+  scaffold/          — shared starter test-case builder for importers
   store/             — runner job queue + registry (in-memory + SQLite Store)
   urlcheck/          — URL and IP validation
 docs/

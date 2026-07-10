@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/VardrSec/vardrgate/internal/model"
+	"github.com/VardrSec/vardrgate/internal/scaffold"
 )
 
 // Spec is the parsed subset of an OpenAPI 3 document.
@@ -108,31 +109,11 @@ func (s Spec) GenerateTestCases(baseURL string) []model.AuthorizationTestCase {
 	return cases
 }
 
-// starterCase builds a scaffold test case. It includes an authenticated identity
-// (expected allow) and an anonymous one (expected deny), so once a real token is
-// filled in it exercises the missing_authentication check for the endpoint.
+// starterCase builds a scaffold test case for one operation.
 func starterCase(base, path, method string, op *Operation) model.AuthorizationTestCase {
 	id := op.OperationID
 	if id == "" {
-		id = strings.ToLower(method) + slug(path)
+		id = strings.ToLower(method) + scaffold.Slug(path)
 	}
-	return model.AuthorizationTestCase{
-		ID:          id,
-		Description: op.Summary,
-		Identities: []model.Identity{
-			{ID: "authenticated", Role: "user", Credential: model.Credential{Type: model.CredentialTypeBearer}},
-			{ID: "anonymous", Credential: model.Credential{Type: model.CredentialTypeStaticHeader}},
-		},
-		Request: model.RequestTemplate{Method: method, URL: base + path},
-		ExpectedAccess: []model.ExpectedAccess{
-			{IdentityID: "authenticated", Decision: model.AccessDecisionAllow},
-			{IdentityID: "anonymous", Decision: model.AccessDecisionDeny},
-		},
-	}
-}
-
-// slug turns a path template into an id fragment: /users/{id}/profile → -users-id-profile.
-func slug(path string) string {
-	r := strings.NewReplacer("/", "-", "{", "", "}", "")
-	return r.Replace(path)
+	return scaffold.StarterCase(id, op.Summary, method, base+path)
 }

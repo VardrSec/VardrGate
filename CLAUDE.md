@@ -130,9 +130,13 @@ The `Executor` interface is defined in the engine package and satisfied by `*cli
 
 `Analyze(spec, cases)` reports which spec operations are exercised by a set of test cases (tested/untested + percent). Matches a case to an operation on HTTP method and a path-template suffix match (`{param}` wildcards; server base path ignored). Exposed via `vardrgate coverage`.
 
-### `internal/openapi`
+### `internal/scaffold`
 
-Parses a subset of an OpenAPI 3 document (`Parse`) and generates one starter `model.AuthorizationTestCase` per path+method (`Spec.GenerateTestCases`), sorted by path then method. Each scaffold has the request pre-filled plus an `authenticated` (allow) and `anonymous` (deny) template identity. Exposed via `vardrgate gen`. Unknown spec fields are ignored so real specs parse.
+Shared starter-test-case builder used by the importers. `StarterCase(id, description, method, url)` returns a scaffold with the request pre-filled plus an `authenticated` (allow) and `anonymous` (deny) template identity; `Slug` normalises a path into an id fragment.
+
+### `internal/openapi` / `internal/postman`
+
+Spec importers. `openapi.Parse` + `Spec.GenerateTestCases` handle OpenAPI 3 (one case per path+method, sorted). `postman.Parse` + `Collection.GenerateTestCases` handle Postman v2.1 (folders flattened; string or object URL forms). Both build cases through `scaffold` and are exposed via `vardrgate gen` (`--spec` / `--postman`, with optional `--base`). Unknown fields are ignored so real documents parse.
 
 ### `internal/policy`
 

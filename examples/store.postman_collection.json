@@ -1,0 +1,25 @@
+{
+  "info": {
+    "name": "Example Store API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Get user profile",
+      "request": { "method": "GET", "url": { "raw": "https://api.example.com/v1/users/42/profile" } }
+    },
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "List orders",
+          "request": { "method": "GET", "url": "https://api.example.com/v1/users/42/orders" }
+        }
+      ]
+    },
+    {
+      "name": "Admin reports",
+      "request": { "method": "GET", "url": { "raw": "https://api.example.com/v1/admin/reports" } }
+    }
+  ]
+}
