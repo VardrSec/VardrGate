@@ -63,6 +63,15 @@ Emits one starter test case per path+method (request pre-filled, plus an
 authenticated and an anonymous template identity). Add real credential values to
 the generated cases before running them.
 
+### Report coverage of a spec
+
+```sh
+./vardrgate coverage --spec openapi.json --cases cases.json
+```
+
+Reports which spec operations are tested vs untested (with a percentage), so you
+can see the gaps in your authorization test suite.
+
 Environment variables (serve mode):
 
 | Variable | Default | Description |
@@ -209,7 +218,8 @@ cmd/vardrgate/       — serve + run subcommands, dependency wiring
 internal/
   api/               — HTTP handlers (GET /health, POST /tests/execute)
   client/            — HTTP execution, credential application, SSRF protection
-  compare/           — response body / status-code comparison utilities
+  compare/           — response body / status-code + sensitive-field utilities
+  coverage/          — OpenAPI-vs-test-case coverage reporting
   engine/            — validation, execution, ownership-aware finding evaluation
   job/               — offline job envelope (vardrgate run)
   model/             — domain types and constants

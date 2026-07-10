@@ -17,8 +17,10 @@ import (
 
 	"github.com/VardrSec/vardrgate/internal/api"
 	"github.com/VardrSec/vardrgate/internal/client"
+	"github.com/VardrSec/vardrgate/internal/coverage"
 	"github.com/VardrSec/vardrgate/internal/engine"
 	"github.com/VardrSec/vardrgate/internal/job"
+	"github.com/VardrSec/vardrgate/internal/model"
 	"github.com/VardrSec/vardrgate/internal/openapi"
 	"github.com/VardrSec/vardrgate/internal/store"
 )
@@ -35,6 +37,13 @@ func main() {
 	}
 	if len(os.Args) > 1 && os.Args[1] == "gen" {
 		if err := genTestCases(os.Args[2:]); err != nil {
+			fmt.Fprintln(os.Stderr, "error:", err)
+			os.Exit(1)
+		}
+		return
+	}
+	if len(os.Args) > 1 && os.Args[1] == "coverage" {
+		if err := reportCoverage(os.Args[2:]); err != nil {
 			fmt.Fprintln(os.Stderr, "error:", err)
 			os.Exit(1)
 		}
@@ -126,6 +135,55 @@ func genTestCases(args []string) error {
 	}
 	if err := os.WriteFile(*outPath, out, 0o644); err != nil {
 		return fmt.Errorf("write cases: %w", err)
+	}
+	return nil
+}
+
+// reportCoverage matches a set of test cases against an OpenAPI spec and writes
+// a tested/untested coverage report as JSON (to --out or stdout).
+func reportCoverage(args []string) error {
+	fs := flag.NewFlagSet("coverage", flag.ContinueOnError)
+	specPath := fs.String("spec", "", "path to an OpenAPI 3 JSON spec (required)")
+	casesPath := fs.String("cases", "", "path to a JSON array of test cases (required)")
+	outPath := fs.String("out", "", "path to write the report (default: stdout)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *specPath == "" || *casesPath == "" {
+		return errors.New("--spec and --cases are required")
+	}
+
+	specData, err := os.ReadFile(*specPath)
+	if err != nil {
+		return fmt.Errorf("read spec: %w", err)
+	}
+	spec, err := openapi.Parse(specData)
+	if err != nil {
+		return err
+	}
+
+	casesData, err := os.ReadFile(*casesPath)
+	if err != nil {
+		return fmt.Errorf("read cases: %w", err)
+	}
+	var cases []model.AuthorizationTestCase
+	if err := json.Unmarshal(casesData, &cases); err != nil {
+		return fmt.Errorf("parse cases: %w", err)
+	}
+
+	report := coverage.Analyze(spec, cases)
+	out, err := json.MarshalIndent(report, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode report: %w", err)
+	}
+	out = append(out, '\n')
+
+	if *outPath == "" {
+		_, err = os.Stdout.Write(out)
+		return err
+	}
+	if err := os.WriteFile(*outPath, out, 0o644); err != nil {
+		return fmt.Errorf("write report: %w", err)
 	}
 	return nil
 }

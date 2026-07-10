@@ -8,6 +8,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Coverage reporting** (`internal/coverage`, `vardrgate coverage`): match a set
+  of test cases against an OpenAPI spec and report which operations are tested vs
+  untested, with a percentage. Path templates match on the request path suffix so
+  server base paths are ignored and `{param}` segments are wildcards.
+  `vardrgate coverage --spec spec.json --cases cases.json [--out file]`.
 - **OpenAPI import + starter test generation** (`internal/openapi`, `vardrgate gen`):
   parse an OpenAPI 3 spec and generate one starter authorization test case per
   path+method — request pre-filled, plus an authenticated (allow) and anonymous
