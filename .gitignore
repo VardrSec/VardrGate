@@ -11,9 +11,12 @@
 # Test binary, built with `go test -c`
 *.test
 
-# Code coverage profiles and other test artifacts
+# Code coverage profiles and other test artifacts.
+# coverage.* is anchored to the repository root on purpose: unanchored, it also
+# matched internal/coverage/coverage.go and kept that package's only source file
+# out of every commit, leaving the published repository unable to build.
 *.out
-coverage.*
+/coverage.*
 *.coverprofile
 profile.cov
 
