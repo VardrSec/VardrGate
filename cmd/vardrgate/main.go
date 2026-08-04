@@ -59,6 +59,8 @@ func main() {
 		err = runPolicy(args[1:])
 	case "demo":
 		err = runDemo(args[1:])
+	case "discover":
+		err = runDiscover(args[1:])
 	case "gen":
 		err = genTestCases(args[1:])
 	case "coverage":
@@ -115,6 +117,7 @@ Commands:
   demo       Run a bundled policy against a local vulnerable fixture (no setup)
   policy     Compile a declarative policy and execute it
   run        Execute a job envelope or a file of test cases
+  discover   Draft policies from an OpenAPI spec for you to complete
   gen        Generate starter test cases from an OpenAPI spec or Postman collection
   coverage   Report which OpenAPI operations have authorization tests
   serve      Run the HTTP API (the default when no command is given)
@@ -131,6 +134,7 @@ Exit codes for commands that execute a test:
 
 Examples:
   vardrgate demo
+  vardrgate discover --spec openapi.json --out policies/
   vardrgate policy run --policy profile.yaml --base https://api.example.com \
       --param user_id=42 --identities identities.json --fail-on high
   vardrgate run --cases cases.json --fail-on critical

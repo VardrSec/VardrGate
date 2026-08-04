@@ -6,7 +6,55 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **False `missing_authentication` at critical severity against APIs that refuse
+  with a success status.** An API answering `200 OK` with `{"error":"forbidden"}`
+  was classified as an allow, so an anonymous caller the server had *correctly
+  refused* produced a critical finding. Declare the convention with
+  `response.deny_when` and the refusal is recognised; the condition outranks the
+  status line. This is a correctness fix — the tool was manufacturing criticals
+  against correctly-behaving software. See ADR 0008.
+
 ### Added
+
+- **`response.deny_when`**: recognise a denial expressed in the response body
+  rather than the status line, via `body_contains` or a dotted-path
+  `json_field` match. Authored, never inferred. Findings carry
+  `deny_when_matched:` evidence so a reader can see why a 2xx was read as a
+  refusal. Completes ADR 0007's deny model; see ADR 0008.
+- **Mutation safety**: `POST`, `PUT`, `PATCH`, and `DELETE` are refused unless
+  the policy sets `api.mutating: true` or the caller passes `--allow-mutating`.
+  A test case replays one request as every identity, so an unsafe method was
+  performing its mutation once per caller — deleting the same object three
+  times — with no warning. Setup steps are held to the same rule. See ADR 0008.
+- **`object_property_exposure`** (OWASP API3:2023, broken object property level
+  authorization): a caller that must not see them receiving properties which
+  govern authorization or value — `role`, `is_admin`, `permissions`, `balance`,
+  `salary` — is now its own finding category rather than generic data exposure.
+- **Tiered sensitive fields**: the flat field list is now four tiers —
+  `critical` (secrets), `elevated` (authorization-bearing), `pii`, `internal` —
+  which drive severity and category. Evidence reports the *path* to each leak
+  (`user.profile.ssn`, `orders[].card_number`) instead of a bare field name, and
+  a leak repeated across every element of an array collapses to one finding.
+  Matching is case- and separator-insensitive on whole field names; substring
+  matching is deliberately not used, so `username` is never mistaken for `user`.
+- **`setup` steps**: run requests before the one under test and capture values
+  from their responses with `capture: { var: json.path }`, referenced as
+  `{{var}}` in the request URL, headers, query parameters, body, resource object
+  id, and identity credentials. This covers both authentication handshakes and
+  create-as-A-then-read-as-B, which is a class of object-level authorization
+  test a single stateless request cannot reach. A failed step aborts the run
+  with exit 3 — nothing was tested. See ADR 0010.
+- **`vardrgate discover`**: propose a draft policy per operation from an OpenAPI
+  spec, inferring the object identifier, resource type and — with `--sample` —
+  the tenant field and sensitive properties, explaining every inference. **Every
+  expectation is emitted as `TODO`, which the policy parser rejects**, so a draft
+  physically cannot execute until a human has decided who should be allowed to
+  call the endpoint. Inference may inform authoring, never assertion. See
+  ADR 0009.
+- `openapi.Spec.Operations()` for walking a document without duplicating the
+  traversal, and `compare.ValueAtPath` for exact dotted-path lookups.
 
 - **`vardrgate policy run`**: compile a declarative policy against one
   environment and execute it — `--policy p.yaml --base https://api.example.com
@@ -68,6 +116,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Breaking
 
+- **A test case using `POST`, `PUT`, `PATCH`, or `DELETE` now fails validation**
+  until `mutating: true` (or `--allow-mutating`) is set. Any case that previously
+  ran was performing its mutation once per identity, which was almost certainly
+  not intended.
+- `compare.SensitiveFieldsPresent` reports the field name as the API spells it
+  (`SSN`) rather than as it appears in the search list (`ssn`). The engine now
+  uses `compare.ScanSensitive`, which returns paths and tiers.
 - `vardrgate run` against an unreachable target now exits **3** where it
   previously exited **0**. A pipeline relying on the old behaviour was reporting
   success without testing anything.

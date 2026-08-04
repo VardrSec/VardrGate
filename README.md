@@ -24,7 +24,8 @@ response, and returns findings for every mismatch.
 | `potential_bola` | high | A non-owner identity reached an identified object |
 | `privilege_escalation` | high | An identity below the required role reached the resource |
 | `unexpected_access` | high | Denied identity received a 2xx (no ownership context to refine further) |
-| `sensitive_data_exposure` | high | Identity received response fields it must not see (evidence names the fields, never the values) |
+| `sensitive_data_exposure` | critical/high/medium | Identity received response fields it must not see. Severity follows the field's tier — a leaked API key is not a leaked `created_by`. Evidence gives the *path* to each field, never the value |
+| `object_property_exposure` | high | OWASP API3:2023 (BOPLA) — identity received properties that govern authorization or value: `role`, `is_admin`, `permissions`, `balance` |
 | `cors_misconfiguration` | high/low | Endpoint reflects an arbitrary `Origin` (high when credentials are also allowed); requires `cors.probe_origin` |
 | `authorization_mismatch` | low | Allowed identity received a 401/403 |
 
@@ -55,10 +56,14 @@ Executions:
 
 4 findings:
   [CRITICAL] cross_tenant_access — identity "other_user" received access that should have been denied
+  [CRITICAL] sensitive_data_exposure — identity "other_user" received sensitive fields it must not see
   [CRITICAL] missing_authentication — identity "anonymous" received access that should have been denied
-  [HIGH]     sensitive_data_exposure — identity "other_user" received sensitive fields it must not see
-  [HIGH]     sensitive_data_exposure — identity "anonymous" received sensitive fields it must not see
+  [CRITICAL] sensitive_data_exposure — identity "anonymous" received sensitive fields it must not see
 ```
+
+The data-exposure findings are critical rather than high because the leaked
+field is an API key. Severity follows the field's tier, so a leaked `created_by`
+does not read the same as a leaked credential.
 
 ### Run a policy against a real environment
 
@@ -182,6 +187,92 @@ the engine read the object's tenant out of the response body, so
 `cross_tenant_access` does not require knowing the target's tenant in advance.
 See [`docs/adr/0007-policy-driven-deny-classification.md`](docs/adr/0007-policy-driven-deny-classification.md).
 
+### When the API refuses with a success status
+
+Plenty of APIs answer `200 OK` with an error body instead of a 4xx. Left
+undeclared, VardrGate reads that as a successful access and reports a critical
+finding against an endpoint that behaved correctly. Say so:
+
+```yaml
+response:
+  deny_when:
+    body_contains: ["forbidden"]
+    json_field: { path: error.code, equals: FORBIDDEN }
+```
+
+A body matching any populated field is a denial, and the condition outranks the
+status line. Findings carry `deny_when_matched:` evidence so it is clear why a
+200 was read as a refusal. See [`docs/adr/0008-body-aware-deny-and-mutation-safety.md`](docs/adr/0008-body-aware-deny-and-mutation-safety.md).
+
+### Endpoints that change state
+
+A test case replays one request as *every* identity, so a policy on
+`DELETE /users/{id}` would delete the same object once per caller. VardrGate
+refuses unsafe methods until you say you meant it:
+
+```yaml
+api:
+  endpoint: DELETE /users/{user_id}
+  mutating: true
+```
+
+or pass `--allow-mutating`. Setup steps are held to the same rule.
+
+### Logging in, and creating the object under test
+
+Some authorization tests need a request to run first — to exchange credentials
+for a token, or to create the object another identity will try to reach. A
+`setup` block does both:
+
+```yaml
+setup:
+  - name: login
+    request:
+      method: POST
+      path: /auth/login
+      body: '{"user":"owner","pass":"${OWNER_PASSWORD}"}'
+    capture:
+      token: data.access_token
+
+  - name: create
+    as: owner            # a logical role from the expect map
+    request: { method: POST, path: /objects }
+    capture:
+      object_id: id
+```
+
+Captured values are referenced as `{{token}}` and `{{object_id}}` in the request
+URL, headers, query parameters, body, and in an identity's credential value —
+which is how a login step supplies the token an identity presents. `${VAR}`
+still means an environment variable; the two syntaxes are distinct so they
+cannot be confused.
+
+Create-as-one-identity-then-read-as-another is the sharpest object-level
+authorization test there is, and it needs this. A failed setup step aborts the
+run with exit 3: the precondition was not met, so nothing was tested. See
+[`docs/adr/0010-setup-steps.md`](docs/adr/0010-setup-steps.md).
+
+## Drafting policies for an API you have not covered yet
+
+The honest limitation of a declarative tool is that it says nothing about
+endpoints nobody wrote a policy for. `discover` removes the blank page:
+
+```sh
+./vardrgate discover --spec openapi.json --sample response.json --out policies/
+```
+
+It proposes one policy per operation that addresses an object, inferring the
+object identifier, the resource type, and — from a captured response body — the
+tenant field and any sensitive properties, printing its reasoning for each.
+
+**Every expectation is written as `TODO`, and the policy parser rejects `TODO`.**
+A draft cannot run until you replace them. That is deliberate and enforced
+rather than advised: discovery can infer the *shape* of a control, but who
+should be allowed to call an endpoint is a decision recorded nowhere a machine
+can read, and a plausible-looking guess is exactly what VardrGate must never put
+behind a finding. Inference informs authoring; it never becomes an assertion.
+See [`docs/adr/0009-policy-discovery.md`](docs/adr/0009-policy-discovery.md).
+
 ## HTTP API
 
 ### `GET /health`
@@ -296,15 +387,18 @@ interface.
 cmd/vardrgate/       — subcommand dispatch, exit codes
   main.go            — dispatch, usage, version
   execute.go         — run, policy run, demo; --fail-on gating
+  discover.go        — discover
   importers.go       — gen, coverage
   serve.go           — HTTP API and its environment config
 internal/
   api/               — HTTP handlers (GET /health, POST /tests/execute, job queue)
   client/            — HTTP execution, credential application, SSRF protection
-  compare/           — response body / status-code + sensitive-field utilities
+  compare/           — body/status comparison, sensitivity tiers, deny predicates
   coverage/          — OpenAPI-vs-test-case coverage reporting
   demo/              — vulnerable loopback fixture for `vardrgate demo`
+  discover/          — draft policies proposed from a spec (never executable)
   engine/            — validation, execution, ownership-aware finding evaluation
+                       + setup.go: pre-request steps and variable capture
   job/               — offline job envelope (vardrgate run --job)
   model/             — domain types and constants
   openapi/           — OpenAPI 3 parsing + starter test-case generation

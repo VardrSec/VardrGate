@@ -72,6 +72,31 @@ type methodOp struct {
 	op     *Operation
 }
 
+// SpecOperation is one path+method pair from the document.
+type SpecOperation struct {
+	Path   string
+	Method string
+	Op     *Operation
+}
+
+// Operations returns every operation in the document, sorted by path then by
+// method, so callers that walk the spec get deterministic output.
+func (s Spec) Operations() []SpecOperation {
+	paths := make([]string, 0, len(s.Paths))
+	for p := range s.Paths {
+		paths = append(paths, p)
+	}
+	sort.Strings(paths)
+
+	var out []SpecOperation
+	for _, path := range paths {
+		for _, mo := range s.Paths[path].operations() {
+			out = append(out, SpecOperation{Path: path, Method: mo.method, Op: mo.op})
+		}
+	}
+	return out
+}
+
 // Parse decodes an OpenAPI 3 document, rejecting unknown top-level structure only
 // loosely (unknown fields are ignored so real-world specs parse).
 func Parse(data []byte) (Spec, error) {

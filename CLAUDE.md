@@ -24,6 +24,7 @@ Do not add PostgreSQL, Redis, Docker, Kubernetes, message queues, background wor
 cmd/vardrgate/
 ├── main.go                  subcommand dispatch, usage, version, exit codes
 ├── execute.go               run / policy run / demo, --fail-on gating, suite loading
+├── discover.go              discover
 ├── importers.go             gen, coverage
 └── serve.go                 HTTP server, env config, wiring, shutdown
 
@@ -33,7 +34,9 @@ internal/
 ├── compare/                 status-code, body, JSON, sensitive-field, FieldValue
 ├── coverage/                OpenAPI-vs-test-case coverage reporting
 ├── demo/                    vulnerable loopback fixture + bundled policy
-├── engine/                  validation, execution loop, ownership-aware findings
+├── discover/                draft policies proposed from a spec (never executable)
+├── engine/                  engine.go: validation, execution, findings
+│                         setup.go: pre-request steps, capture, substitution
 ├── job/                     offline job envelope for `vardrgate run --job`
 ├── model/                   domain types, constants, Resource, ClassifyOutcomeWith
 ├── openapi/                 OpenAPI 3 parse + starter case generation
@@ -50,7 +53,8 @@ docs/
 ├── mvp.md                   first supported workflow
 └── adr/                     0001 policy+CLI · 0002 classification · 0003 queue
                              0004 persistence · 0005 tenancy · 0006 policy CLI
-                             0007 policy-driven deny classification
+                             0007 policy-driven deny · 0008 body-aware deny +
+                             mutation safety · 0009 discovery · 0010 setup steps
 
 examples/
 ├── bola_check.json              three-identity unauthorized-access scenario
@@ -116,6 +120,9 @@ Other rules:
 - `sensitive_data_exposure` (high): an identity whose expected access has `ForbidSensitiveData` receives a response body containing sensitive fields. Independent of the allow/deny decision. Detection (in `compare.SensitiveFieldsPresent`) is recursive and case-insensitive; evidence records field *names* only, never values. Field set defaults to `compare.DefaultSensitiveFields`, overridable via `tc.SensitiveFields`. Policy `response.sensitive_fields.forbidden_for` roles compile to `ForbidSensitiveData`.
 - `authorization_mismatch` (low): expected `allow`, observed `deny` (401/403).
 - `cors_misconfiguration`: opt-in via `tc.CORS.ProbeOrigin`. The engine injects that `Origin` header (once, endpoint-level) and inspects `Access-Control-Allow-Origin`/`-Credentials` (captured by the client). Reflected arbitrary origin + credentials → high; reflected/wildcard without credentials → low; otherwise none.
+- `deny_when`: `tc.DenyWhen` (from `response.deny_when`) recognises a refusal in the response *body* — `body_contains` or a dotted-path `json_field` match — and **outranks the status line**. This is a correctness fix, not a convenience: an API answering `200 {"error":"forbidden"}` previously produced a false `missing_authentication` at critical severity against correctly-behaving software. Classification is centralised in `engine.classify`, which every path uses, so the execution record and the findings drawn from it cannot disagree. See ADR 0008.
+- `mutating`: unsafe methods (POST/PUT/PATCH/DELETE) fail validation unless `tc.Mutating` is set via `api.mutating` or `--allow-mutating`. A test case replays one request per identity, so an unsafe method mutates once per caller. Setup steps obey the same rule. Refusing rather than warning is deliberate — the failure mode is destroyed data. See ADR 0008.
+- `object_property_exposure` (OWASP API3, BOPLA): an `elevated`-tier field (`role`, `is_admin`, `permissions`, `balance`) reaching a caller marked `ForbidSensitiveData`. Split from `sensitive_data_exposure` by tier in `sensitiveDataFindings`; severity is the highest tier in each group.
 - `deny_status`: `tc.DenyStatuses` (from a policy's `response.deny_status`) makes the listed status codes explicit denials, so an API that hides existence behind 404 can be evaluated. The engine reclassifies the *execution record* as well as the finding, so a result document cannot contradict itself, and adds `deny_status_declared=` evidence. A 2xx in the list is rejected by validation. See ADR 0007.
 - `tenant_field`: when `Resource.TenantID` is empty and `Resource.TenantField` is set, the resource's tenant is read from the offending identity's own response body via `compare.FieldValue` — the caller's own response proves the isolation break. A bound `TenantID` wins. See ADR 0007.
 - Every elevated category requires explicit context in the test case; `TenantID` alone still yields `unexpected_access`. The engine never guesses from a weak signal.
@@ -148,7 +155,17 @@ Parses a declarative YAML policy (`api`/`expect`/`response`) and `Compile`s it i
 
 `Compile` carries `response.deny_status` to `tc.DenyStatuses` and `api.resource.tenant_field` to `Resource.TenantField`; both were parsed and dropped before ADR 0007.
 
+`Compile` also carries `response.deny_when` to `tc.DenyWhen`, `api.mutating` (or `Bindings.AllowMutating`) to `tc.Mutating`, and the `setup` block to `tc.Setup`, resolving each step's logical role to a concrete identity id and joining its path to the base URL. `substitutePath` steps over `{{var}}` runtime references so they survive compilation.
+
+`DraftMarker` (`TODO`) is rejected by `toDecision` — this is what makes a `discover` draft inert. See ADR 0009.
+
 `LoadIdentities`/`ParseIdentities` (in `identities.go`) read the JSON identity array that binds a policy, requiring an id and a role on each and resolving `${VAR}` credential references through `secretref`. Exposed via `vardrgate policy run --identities`.
+
+### `internal/discover`
+
+Proposes draft policies from an OpenAPI spec (`FromSpec`), inferring the object identifier, resource type, and — given a captured response body via `--sample` — the tenant field and sensitive properties. Every inference is explained in `Draft.Notes`.
+
+**The invariant:** every expectation is emitted as `policy.DraftMarker` (`TODO`), which `policy.toDecision` rejects. A draft therefore *cannot execute* until a human has typed a decision — enforced by the compiler, not promised in docs, and asserted by `discover_test.go`. Identifier matching is on whole normalised names, never substrings. Inference may inform **authoring**; it must never produce an **assertion**. Any future heuristic obeys the same rule. See ADR 0009.
 
 ### `internal/secretref`
 
@@ -172,7 +189,9 @@ Comparisons: status-code equality, raw body equality, normalised JSON equality (
 
 `Evidence(a, b, cr)` extracts comparison output into evidence strings ready to attach to a `Finding`.
 
-`FieldValue(body, field)` is a recursive, case-insensitive scalar lookup used to read a resource's tenant out of a response body (see ADR 0007).
+`FieldValue(body, field)` is a recursive, case-insensitive scalar lookup used to read a resource's tenant out of a response body (see ADR 0007). `ValueAtPath(body, "error.code")` navigates a dotted path exactly rather than searching, for callers that know the response shape.
+
+`SensitiveTiers` groups field names into `critical`/`elevated`/`pii`/`internal`; `ScanSensitive(body, declared)` returns `SensitiveHit{Path, Field, Tier}` so evidence locates a leak (`user.profile.ssn`) instead of merely naming it, and arrays collapse to one representative path. Matching is on whole normalised names — **never substrings**, which would classify `username` as `user`. A non-empty `declared` list replaces the tiers entirely and reports at `TierDeclared`. `MatchesDeny(body, cond)` evaluates a declared deny condition and describes what matched.
 
 ### `internal/store`
 
@@ -201,6 +220,7 @@ Exit codes are shared by every command that executes a test case: `0` ran clean,
 | `policy run` | Compile a policy against one environment and run it: `--policy --base --param name=value (repeatable) --identities [--tenant --id --out --fail-on --allow-private-targets --timeout]` |
 | `run` | `--job <file>` (one envelope) or `--cases <file>` (a JSON array). A suite is fully validated via `engine.Validate` before any of it runs, so every authoring error is reported together |
 | `demo` | Bundled policy against the `internal/demo` loopback fixture; prints a human summary rather than JSON |
+| `discover` | `--spec` [`--sample`] [`--out` dir] [`--roles`] — draft policies whose expectations are `TODO` and therefore unrunnable |
 | `gen` | `--spec` / `--postman` [`--base`] [`--out`] — starter cases through `scaffold.MarshalCases` |
 | `coverage` | `--spec --cases` [`--out`] — tested/untested operations |
 | `help`, `version` | Usage; version from `-ldflags -X main.version` or the build info |
@@ -250,7 +270,9 @@ Phases 1–3 and the Phase 2 importers are complete: resource ownership, ownersh
 - PostgreSQL `Store` — the interface is ready for it; SQLite covers current needs
 - Multi-tenant control plane beyond per-key tenancy: orgs/projects/environments, secret providers (Phase 3)
 - Frontend or dashboard (Phase 4)
-- Further vulnerability packs: rate-limit, JWT, GraphQL (Phase 5). CORS is done
+- Further vulnerability packs: rate-limit, JWT, GraphQL (Phase 5). CORS and BOPLA are done
+- Live crawling in `discover` — it is spec-driven and offline by design
+- Teardown, retries, or conditional `setup` steps: that turns setup into a workflow language (ADR 0010)
 - SARIF or JUnit output — findings are JSON only, deliberately (ADR 0006)
 - User accounts, organizations, SSO, billing
 - Concurrency in the execution loop — sequential is a stated decision (`docs/mvp.md`)

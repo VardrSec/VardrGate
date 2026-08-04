@@ -45,6 +45,7 @@ Flags:
 	outPath := fs.String("out", "", "path to write the result JSON (default: stdout)")
 	failOn := fs.String("fail-on", failOnNone, "exit 2 when a finding at or above this severity is reported (none, info, low, medium, high, critical)")
 	allowPrivate := fs.Bool("allow-private-targets", false, "permit loopback and private-network targets (--cases only; a job envelope carries its own setting)")
+	allowMutating := fs.Bool("allow-mutating", false, "confirm that replaying an unsafe method (POST/PUT/PATCH/DELETE) once per identity is intended")
 	timeout := fs.Duration("timeout", 0, "per-request timeout (--cases only; 0 uses the client default)")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -68,10 +69,14 @@ Flags:
 		if err != nil {
 			return err
 		}
+		tc := env.TestCase()
+		if *allowMutating {
+			tc.Mutating = true
+		}
 		eng := engine.New(client.NewWithConfig(nil, env.ClientConfig()))
-		res, err := eng.Run(context.Background(), env.TestCase())
+		res, err := eng.Run(context.Background(), tc)
 		if err != nil {
-			return fmt.Errorf("run job: %w", err)
+			return runError(err)
 		}
 		results = []engine.Result{res}
 		// A single job keeps emitting a single object, which is the shape
@@ -82,6 +87,11 @@ Flags:
 		if err != nil {
 			return err
 		}
+		if *allowMutating {
+			for i := range cases {
+				cases[i].Mutating = true
+			}
+		}
 		if err := validateSuite(cases); err != nil {
 			return err
 		}
@@ -90,7 +100,7 @@ Flags:
 		for _, tc := range cases {
 			res, err := eng.Run(context.Background(), tc)
 			if err != nil {
-				return fmt.Errorf("case %q: %w", tc.ID, err)
+				return runError(fmt.Errorf("case %q: %w", tc.ID, err))
 			}
 			results = append(results, res)
 		}
@@ -145,6 +155,7 @@ Flags:
 	params := paramFlag{}
 	fs.Var(&params, "param", "path parameter as name=value; repeat for each parameter")
 	tenant := fs.String("tenant", "", "tenant the target object belongs to; enables cross_tenant_access without reading it from the response")
+	allowMutating := fs.Bool("allow-mutating", false, "confirm that replaying an unsafe method (POST/PUT/PATCH/DELETE) once per identity is intended")
 	caseID := fs.String("id", "", "test case id (default: derived from the endpoint)")
 	outPath := fs.String("out", "", "path to write the result JSON (default: stdout)")
 	failOn := fs.String("fail-on", failOnNone, "exit 2 when a finding at or above this severity is reported (none, info, low, medium, high, critical)")
@@ -179,6 +190,7 @@ Flags:
 		PathParams:       params,
 		Identities:       identities,
 		ResourceTenantID: *tenant,
+		AllowMutating:    *allowMutating,
 	})
 	if err != nil {
 		return err
@@ -188,7 +200,7 @@ Flags:
 	eng := engine.New(client.NewWithConfig(nil, cfg))
 	res, err := eng.Run(context.Background(), tc)
 	if err != nil {
-		return fmt.Errorf("run policy: %w", err)
+		return runError(err)
 	}
 
 	if err := writeJSON(*outPath, res); err != nil {
@@ -322,6 +334,16 @@ func gate(results []engine.Result, threshold model.Severity) error {
 		code: exitFindings,
 		err:  fmt.Errorf("%s at or above %s: %s", plural(len(breaching), "finding", "findings"), threshold, summarize(breaching)),
 	}
+}
+
+// runError maps an engine failure to the right exit code. A failed setup step
+// means the preconditions were never met, so nothing was tested — the same
+// situation as a target that could not be reached, and the same exit code.
+func runError(err error) error {
+	if errors.Is(err, engine.ErrSetupFailed) {
+		return exitError{code: exitNotExecuted, err: err}
+	}
+	return err
 }
 
 // parseFailOn resolves the --fail-on value. An empty Severity means no gating.
