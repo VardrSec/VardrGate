@@ -6,6 +6,8 @@
 package scaffold
 
 import (
+	"encoding/json"
+	"fmt"
 	"strings"
 
 	"github.com/VardrSec/vardrgate/internal/model"
@@ -26,6 +28,120 @@ func StarterCase(id, description, method, url string) model.AuthorizationTestCas
 			{IdentityID: "anonymous", Decision: model.AccessDecisionDeny},
 		},
 	}
+}
+
+// MarshalCases renders generated cases as the JSON a user is meant to edit.
+//
+// model.Credential deliberately never marshals its value, which is correct for
+// every API response — but a scaffold written to disk with no "value" key at
+// all gives the reader nowhere to put the token. This writes an explicit
+// ${VAR} placeholder for each credential that needs one, so the file shows
+// what is missing and steers the answer towards an environment variable
+// instead of a secret committed next to the tests.
+func MarshalCases(cases []model.AuthorizationTestCase) ([]byte, error) {
+	wire := make([]wireCase, 0, len(cases))
+	for _, tc := range cases {
+		wire = append(wire, toWire(tc))
+	}
+	out, err := json.MarshalIndent(wire, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("encode cases: %w", err)
+	}
+	return append(out, '\n'), nil
+}
+
+// wireCase mirrors model.AuthorizationTestCase field for field, differing only
+// in the credential, which carries its placeholder. Declaring it explicitly
+// keeps the field order a reader sees in the generated file; the round-trip
+// test asserts the two structs have identical JSON field sets, so a field added
+// to the model cannot be silently dropped here.
+type wireCase struct {
+	ID              string                 `json:"id"`
+	Description     string                 `json:"description,omitempty"`
+	Identities      []wireIdentity         `json:"identities"`
+	Request         model.RequestTemplate  `json:"request"`
+	Resource        *model.Resource        `json:"resource,omitempty"`
+	RoleHierarchy   []string               `json:"role_hierarchy,omitempty"`
+	SensitiveFields []string               `json:"sensitive_fields,omitempty"`
+	DenyStatuses    []int                  `json:"deny_status,omitempty"`
+	CORS            *model.CORSCheck       `json:"cors,omitempty"`
+	ExpectedAccess  []model.ExpectedAccess `json:"expected_access"`
+}
+
+type wireIdentity struct {
+	ID          string         `json:"id"`
+	Name        string         `json:"name,omitempty"`
+	Role        string         `json:"role,omitempty"`
+	TenantID    string         `json:"tenant_id,omitempty"`
+	Description string         `json:"description,omitempty"`
+	Credential  wireCredential `json:"credential"`
+}
+
+type wireCredential struct {
+	Type   model.CredentialType `json:"type"`
+	Header string               `json:"header,omitempty"`
+	Value  string               `json:"value,omitempty"`
+}
+
+func toWire(tc model.AuthorizationTestCase) wireCase {
+	ids := make([]wireIdentity, 0, len(tc.Identities))
+	for _, id := range tc.Identities {
+		ids = append(ids, wireIdentity{
+			ID:          id.ID,
+			Name:        id.Name,
+			Role:        id.Role,
+			TenantID:    id.TenantID,
+			Description: id.Description,
+			Credential: wireCredential{
+				Type:   id.Credential.Type,
+				Header: id.Credential.Header,
+				Value:  placeholder(id),
+			},
+		})
+	}
+	return wireCase{
+		ID:              tc.ID,
+		Description:     tc.Description,
+		Identities:      ids,
+		Request:         tc.Request,
+		Resource:        tc.Resource,
+		RoleHierarchy:   tc.RoleHierarchy,
+		SensitiveFields: tc.SensitiveFields,
+		DenyStatuses:    tc.DenyStatuses,
+		CORS:            tc.CORS,
+		ExpectedAccess:  tc.ExpectedAccess,
+	}
+}
+
+// placeholder names the environment variable a credential should read from.
+// An anonymous identity sends nothing, so it gets no placeholder — filling one
+// in would turn it into an authenticated caller and silently remove the
+// missing_authentication check the scaffold exists to set up.
+func placeholder(id model.Identity) string {
+	if id.Credential.Value != "" {
+		return id.Credential.Value
+	}
+	if id.Credential.SendsNoAuth() {
+		return ""
+	}
+	return "${VARDRGATE_" + envSlug(id.ID) + "_TOKEN}"
+}
+
+// envSlug upper-cases an identity id into an environment-variable fragment.
+func envSlug(id string) string {
+	var b strings.Builder
+	for _, r := range strings.ToUpper(id) {
+		if (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+			continue
+		}
+		b.WriteRune('_')
+	}
+	slug := strings.Trim(b.String(), "_")
+	if slug == "" {
+		return "IDENTITY"
+	}
+	return slug
 }
 
 // Slug turns a path template into an id fragment:

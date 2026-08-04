@@ -14,6 +14,7 @@ import (
 
 	"github.com/VardrSec/vardrgate/internal/client"
 	"github.com/VardrSec/vardrgate/internal/model"
+	"github.com/VardrSec/vardrgate/internal/secretref"
 )
 
 // Envelope is the top-level job document.
@@ -67,6 +68,13 @@ func Parse(data []byte) (Envelope, error) {
 			return Envelope{}, fmt.Errorf("parse job: %w", err)
 		}
 		e.Config.TestCase = tc
+	}
+	// Credential values may reference environment variables, the same as a
+	// policy binding or a generated suite. Without this, a job envelope written
+	// with ${TOKEN} would send those characters as the bearer token and the
+	// resulting 401s would read as authorization findings.
+	if err := secretref.ExpandIdentities(e.Config.TestCase.Identities); err != nil {
+		return Envelope{}, err
 	}
 	return e, nil
 }

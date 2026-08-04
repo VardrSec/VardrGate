@@ -1,351 +1,138 @@
+// Command vardrgate executes API authorization controls and reports findings.
+//
+// Subcommand dispatch lives here; the commands themselves are grouped by
+// concern: execute.go runs test cases, importers.go reads specs, serve.go runs
+// the HTTP API.
 package main
 
 import (
-	"context"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
-	"log/slog"
-	"net/http"
+	"io"
 	"os"
-	"os/signal"
-	"strconv"
-	"strings"
-	"syscall"
-	"time"
-
-	"github.com/VardrSec/vardrgate/internal/api"
-	"github.com/VardrSec/vardrgate/internal/client"
-	"github.com/VardrSec/vardrgate/internal/coverage"
-	"github.com/VardrSec/vardrgate/internal/engine"
-	"github.com/VardrSec/vardrgate/internal/job"
-	"github.com/VardrSec/vardrgate/internal/model"
-	"github.com/VardrSec/vardrgate/internal/openapi"
-	"github.com/VardrSec/vardrgate/internal/postman"
-	"github.com/VardrSec/vardrgate/internal/store"
+	"runtime/debug"
 )
 
+// version is overridden at build time with -ldflags "-X main.version=v1.2.3".
+// Unset, it falls back to the module version stamped into the binary.
+var version = ""
+
+// Exit codes. Anything that executes a test case distinguishes "clean run",
+// "found something", and "did not run" — a CI job needs to tell a real failure
+// apart from a target it never reached.
+const (
+	exitOK          = 0 // ran; nothing at or above the --fail-on threshold
+	exitUsage       = 1 // bad arguments, unreadable input, malformed document
+	exitFindings    = 2 // findings at or above the --fail-on threshold
+	exitNotExecuted = 3 // every identity errored; nothing was actually tested
+)
+
+// exitError carries a specific exit code out of a subcommand.
+type exitError struct {
+	code int
+	err  error
+}
+
+func (e exitError) Error() string { return e.err.Error() }
+func (e exitError) Unwrap() error { return e.err }
+
 func main() {
-	// Subcommands: "serve" (default) runs the HTTP API; "run" executes a single
-	// job file offline — the contract VardrRunner and CI use.
-	if len(os.Args) > 1 && os.Args[1] == "run" {
-		if err := runJob(os.Args[2:]); err != nil {
-			fmt.Fprintln(os.Stderr, "error:", err)
-			os.Exit(1)
-		}
+	args := os.Args[1:]
+
+	// A bare invocation serves, which is the documented default. Anything else
+	// must name a known subcommand: falling through to serve on an unrecognised
+	// argument is why `vardrgate --help` used to start a web server.
+	if len(args) == 0 {
+		serve()
 		return
 	}
-	if len(os.Args) > 1 && os.Args[1] == "gen" {
-		if err := genTestCases(os.Args[2:]); err != nil {
-			fmt.Fprintln(os.Stderr, "error:", err)
-			os.Exit(1)
-		}
+
+	var err error
+	switch args[0] {
+	case "serve":
+		serve()
+		return
+	case "run":
+		err = runCases(args[1:])
+	case "policy":
+		err = runPolicy(args[1:])
+	case "demo":
+		err = runDemo(args[1:])
+	case "gen":
+		err = genTestCases(args[1:])
+	case "coverage":
+		err = reportCoverage(args[1:])
+	case "help", "-h", "--help":
+		usage(os.Stdout)
+		return
+	case "version", "-v", "--version":
+		fmt.Println(versionString())
+		return
+	default:
+		fmt.Fprintf(os.Stderr, "vardrgate: unknown command %q\n\n", args[0])
+		usage(os.Stderr)
+		os.Exit(exitUsage)
+	}
+
+	if err == nil {
 		return
 	}
-	if len(os.Args) > 1 && os.Args[1] == "coverage" {
-		if err := reportCoverage(os.Args[2:]); err != nil {
-			fmt.Fprintln(os.Stderr, "error:", err)
-			os.Exit(1)
+
+	var ee exitError
+	if errors.As(err, &ee) {
+		if ee.err != nil {
+			fmt.Fprintln(os.Stderr, "error:", ee.err)
 		}
-		return
+		os.Exit(ee.code)
 	}
-	if len(os.Args) > 1 && os.Args[1] == "serve" {
-		os.Args = append(os.Args[:1], os.Args[2:]...)
+	// flag.ContinueOnError has already printed usage for -h.
+	if !errors.Is(err, flag.ErrHelp) {
+		fmt.Fprintln(os.Stderr, "error:", err)
 	}
-	serve()
+	os.Exit(exitUsage)
 }
 
-// runJob executes one job envelope and writes the sanitized result as JSON.
-// It never blocks on the network longer than the job's execution budget and
-// exits non-zero on any error so callers (VardrRunner, CI) can gate on it.
-func runJob(args []string) error {
-	fs := flag.NewFlagSet("run", flag.ContinueOnError)
-	jobPath := fs.String("job", "", "path to the job JSON file (required)")
-	outPath := fs.String("out", "", "path to write the result JSON (default: stdout)")
-	if err := fs.Parse(args); err != nil {
-		return err
+// versionString reports the build version, preferring an ldflags override and
+// falling back to the version the Go toolchain stamps into the binary.
+func versionString() string {
+	if version != "" {
+		return version
 	}
-	if *jobPath == "" {
-		return errors.New("--job is required")
+	if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" {
+		return info.Main.Version
 	}
-
-	env, err := job.Load(*jobPath)
-	if err != nil {
-		return err
-	}
-
-	c := client.NewWithConfig(nil, env.ClientConfig())
-	eng := engine.New(c)
-
-	result, err := eng.Run(context.Background(), env.TestCase())
-	if err != nil {
-		return fmt.Errorf("run job: %w", err)
-	}
-
-	out, err := json.MarshalIndent(result, "", "  ")
-	if err != nil {
-		return fmt.Errorf("encode result: %w", err)
-	}
-	out = append(out, '\n')
-
-	if *outPath == "" {
-		_, err = os.Stdout.Write(out)
-		return err
-	}
-	if err := os.WriteFile(*outPath, out, 0o644); err != nil {
-		return fmt.Errorf("write result: %w", err)
-	}
-	return nil
+	return "dev"
 }
 
-// genTestCases reads an OpenAPI spec or Postman collection and writes starter
-// authorization test cases as a JSON array (to --out or stdout). The output is a
-// scaffold: fill in credential values before running.
-func genTestCases(args []string) error {
-	fs := flag.NewFlagSet("gen", flag.ContinueOnError)
-	specPath := fs.String("spec", "", "path to an OpenAPI 3 JSON spec")
-	postmanPath := fs.String("postman", "", "path to a Postman v2.1 collection JSON")
-	baseURL := fs.String("base", "", "base URL to target instead of the spec/collection's own")
-	outPath := fs.String("out", "", "path to write the generated cases (default: stdout)")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	if (*specPath == "") == (*postmanPath == "") {
-		return errors.New("exactly one of --spec or --postman is required")
-	}
+func usage(w io.Writer) {
+	fmt.Fprint(w, `vardrgate — continuous API authorization assurance
 
-	var cases []model.AuthorizationTestCase
-	if *specPath != "" {
-		data, err := os.ReadFile(*specPath)
-		if err != nil {
-			return fmt.Errorf("read spec: %w", err)
-		}
-		spec, err := openapi.Parse(data)
-		if err != nil {
-			return err
-		}
-		cases = spec.GenerateTestCases(*baseURL)
-	} else {
-		data, err := os.ReadFile(*postmanPath)
-		if err != nil {
-			return fmt.Errorf("read collection: %w", err)
-		}
-		coll, err := postman.Parse(data)
-		if err != nil {
-			return err
-		}
-		cases = coll.GenerateTestCases(*baseURL)
-	}
+Usage:
+  vardrgate <command> [flags]
 
-	out, err := json.MarshalIndent(cases, "", "  ")
-	if err != nil {
-		return fmt.Errorf("encode cases: %w", err)
-	}
-	out = append(out, '\n')
+Commands:
+  demo       Run a bundled policy against a local vulnerable fixture (no setup)
+  policy     Compile a declarative policy and execute it
+  run        Execute a job envelope or a file of test cases
+  gen        Generate starter test cases from an OpenAPI spec or Postman collection
+  coverage   Report which OpenAPI operations have authorization tests
+  serve      Run the HTTP API (the default when no command is given)
+  version    Print the version
+  help       Print this message
 
-	if *outPath == "" {
-		_, err = os.Stdout.Write(out)
-		return err
-	}
-	if err := os.WriteFile(*outPath, out, 0o644); err != nil {
-		return fmt.Errorf("write cases: %w", err)
-	}
-	return nil
-}
+Run "vardrgate <command> -h" for the flags of one command.
 
-// reportCoverage matches a set of test cases against an OpenAPI spec and writes
-// a tested/untested coverage report as JSON (to --out or stdout).
-func reportCoverage(args []string) error {
-	fs := flag.NewFlagSet("coverage", flag.ContinueOnError)
-	specPath := fs.String("spec", "", "path to an OpenAPI 3 JSON spec (required)")
-	casesPath := fs.String("cases", "", "path to a JSON array of test cases (required)")
-	outPath := fs.String("out", "", "path to write the report (default: stdout)")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	if *specPath == "" || *casesPath == "" {
-		return errors.New("--spec and --cases are required")
-	}
+Exit codes for commands that execute a test:
+  0  ran; nothing at or above --fail-on
+  1  usage or input error
+  2  findings at or above --fail-on
+  3  every identity errored; nothing was tested
 
-	specData, err := os.ReadFile(*specPath)
-	if err != nil {
-		return fmt.Errorf("read spec: %w", err)
-	}
-	spec, err := openapi.Parse(specData)
-	if err != nil {
-		return err
-	}
-
-	casesData, err := os.ReadFile(*casesPath)
-	if err != nil {
-		return fmt.Errorf("read cases: %w", err)
-	}
-	var cases []model.AuthorizationTestCase
-	if err := json.Unmarshal(casesData, &cases); err != nil {
-		return fmt.Errorf("parse cases: %w", err)
-	}
-
-	report := coverage.Analyze(spec, cases)
-	out, err := json.MarshalIndent(report, "", "  ")
-	if err != nil {
-		return fmt.Errorf("encode report: %w", err)
-	}
-	out = append(out, '\n')
-
-	if *outPath == "" {
-		_, err = os.Stdout.Write(out)
-		return err
-	}
-	if err := os.WriteFile(*outPath, out, 0o644); err != nil {
-		return fmt.Errorf("write report: %w", err)
-	}
-	return nil
-}
-
-func serve() {
-	log := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-
-	port, err := resolvePort()
-	if err != nil {
-		log.Error("invalid PORT", "error", err)
-		os.Exit(1)
-	}
-
-	allowPrivate, err := resolveAllowPrivateTargets()
-	if err != nil {
-		log.Error("invalid ALLOW_PRIVATE_TARGETS", "error", err)
-		os.Exit(1)
-	}
-	if allowPrivate {
-		log.Warn("ALLOW_PRIVATE_TARGETS is enabled; loopback and private-network targets are permitted")
-	}
-
-	c := client.NewWithConfig(nil, client.Config{AllowPrivateTargets: allowPrivate})
-	eng := engine.New(c)
-
-	keys := resolveAPIKeys()
-	if len(keys) == 0 {
-		log.Warn("no API keys configured; the /jobs, /runner, and /audit endpoints are unauthenticated (development only)")
-	} else {
-		log.Info("API key authentication enabled", "tenants", len(distinctTenants(keys)))
-	}
-
-	st, closeStore, err := resolveStore(log)
-	if err != nil {
-		log.Error("failed to open job store", "error", err)
-		os.Exit(1)
-	}
-	defer closeStore()
-
-	handler := api.New(log, eng, st, keys)
-
-	srv := &http.Server{
-		Addr:              fmt.Sprintf(":%d", port),
-		Handler:           handler,
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       30 * time.Second,
-		WriteTimeout:      60 * time.Second,
-		IdleTimeout:       120 * time.Second,
-	}
-
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
-
-	go func() {
-		log.Info("server starting", "addr", srv.Addr)
-		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Error("server error", "error", err)
-			os.Exit(1)
-		}
-	}()
-
-	<-ctx.Done()
-	stop()
-	log.Info("shutting down")
-
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	if err := srv.Shutdown(shutdownCtx); err != nil {
-		log.Error("shutdown error", "error", err)
-		os.Exit(1)
-	}
-
-	log.Info("server stopped")
-}
-
-func resolvePort() (int, error) {
-	raw := os.Getenv("PORT")
-	if raw == "" {
-		return 8080, nil
-	}
-	n, err := strconv.Atoi(raw)
-	if err != nil || n < 1 || n > 65535 {
-		return 0, fmt.Errorf("PORT must be an integer between 1 and 65535, got %q", raw)
-	}
-	return n, nil
-}
-
-// resolveStore selects the job store from the environment. VARDRGATE_DB, when
-// set, opens a durable SQLite store at that path (jobs survive restart);
-// otherwise an ephemeral in-memory store is used. The returned func closes the
-// store on shutdown.
-func resolveStore(log *slog.Logger) (store.Store, func(), error) {
-	path := os.Getenv("VARDRGATE_DB")
-	if path == "" {
-		log.Warn("VARDRGATE_DB is not set; using an in-memory job store (jobs do not survive restart)")
-		return store.NewMemory(), func() {}, nil
-	}
-	sq, err := store.NewSQLite(path)
-	if err != nil {
-		return nil, nil, err
-	}
-	log.Info("using durable job store", "path", path)
-	return sq, func() { sq.Close() }, nil
-}
-
-// resolveAPIKeys builds the bearer-token → tenant map from the environment.
-//
-//	VARDRGATE_API_KEYS="tenant-a:key1,tenant-b:key2"  → per-tenant isolation
-//	VARDRGATE_API_KEY="key"                           → single "default" tenant
-//
-// VARDRGATE_API_KEYS takes precedence. An empty result disables auth (dev only).
-func resolveAPIKeys() map[string]string {
-	keys := map[string]string{}
-	if multi := os.Getenv("VARDRGATE_API_KEYS"); multi != "" {
-		for _, pair := range strings.Split(multi, ",") {
-			pair = strings.TrimSpace(pair)
-			tenant, key, ok := strings.Cut(pair, ":")
-			tenant, key = strings.TrimSpace(tenant), strings.TrimSpace(key)
-			if ok && tenant != "" && key != "" {
-				keys[key] = tenant
-			}
-		}
-		return keys
-	}
-	if single := os.Getenv("VARDRGATE_API_KEY"); single != "" {
-		keys[single] = "default"
-	}
-	return keys
-}
-
-func distinctTenants(keys map[string]string) map[string]struct{} {
-	out := map[string]struct{}{}
-	for _, t := range keys {
-		out[t] = struct{}{}
-	}
-	return out
-}
-
-func resolveAllowPrivateTargets() (bool, error) {
-	raw := os.Getenv("ALLOW_PRIVATE_TARGETS")
-	if raw == "" {
-		return false, nil
-	}
-	v, err := strconv.ParseBool(raw)
-	if err != nil {
-		return false, fmt.Errorf("ALLOW_PRIVATE_TARGETS must be true or false, got %q", raw)
-	}
-	return v, nil
+Examples:
+  vardrgate demo
+  vardrgate policy run --policy profile.yaml --base https://api.example.com \
+      --param user_id=42 --identities identities.json --fail-on high
+  vardrgate run --cases cases.json --fail-on critical
+`)
 }

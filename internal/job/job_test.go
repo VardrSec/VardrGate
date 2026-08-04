@@ -1,6 +1,7 @@
 package job
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -78,5 +79,60 @@ func TestClientConfig_Defaults(t *testing.T) {
 func TestParse_InvalidJSON(t *testing.T) {
 	if _, err := Parse([]byte("nope")); err == nil {
 		t.Fatal("expected error for invalid JSON")
+	}
+}
+
+func TestParse_ExpandsCredentialEnvReferences(t *testing.T) {
+	// All three input paths (job envelope, policy binding, generated suite)
+	// resolve ${VAR} the same way. Without this a job envelope would send the
+	// literal characters as a bearer token and the 401s would read as findings.
+	t.Setenv("VARDRGATE_TEST_JOB_TOKEN", "resolved-token")
+	env, err := Parse([]byte(`{
+	  "config": {
+	    "test_case": {
+	      "id": "tc",
+	      "identities": [
+	        {"id":"owner","credential":{"type":"bearer","value":"${VARDRGATE_TEST_JOB_TOKEN}"}}
+	      ],
+	      "request": {"method":"GET","url":"https://api.example.com/x"}
+	    }
+	  }
+	}`))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := env.TestCase().Identities[0].Credential.Value; got != "resolved-token" {
+		t.Errorf("credential value = %q, want %q", got, "resolved-token")
+	}
+}
+
+func TestParse_UnsetEnvReferenceIsAnError(t *testing.T) {
+	_, err := Parse([]byte(`{
+	  "config": {
+	    "test_case": {
+	      "id": "tc",
+	      "identities": [
+	        {"id":"owner","credential":{"type":"bearer","value":"${VARDRGATE_DEFINITELY_UNSET}"}}
+	      ],
+	      "request": {"method":"GET","url":"https://api.example.com/x"}
+	    }
+	  }
+	}`))
+	if err == nil || !strings.Contains(err.Error(), "unset or empty") {
+		t.Fatalf("expected an unset-variable error, got %v", err)
+	}
+}
+
+func TestParse_LiteralCredentialsAreUntouched(t *testing.T) {
+	env, err := Parse([]byte(`{
+	  "id": "tc",
+	  "identities": [{"id":"owner","credential":{"type":"bearer","value":"plain-token"}}],
+	  "request": {"method":"GET","url":"https://api.example.com/x"}
+	}`))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := env.TestCase().Identities[0].Credential.Value; got != "plain-token" {
+		t.Errorf("credential value = %q, want %q", got, "plain-token")
 	}
 }

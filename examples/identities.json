@@ -1,0 +1,33 @@
+[
+  {
+    "id": "owner",
+    "name": "Resource Owner",
+    "role": "owner",
+    "tenant_id": "tenant-a",
+    "description": "The user the object under test belongs to.",
+    "credential": {
+      "type": "bearer",
+      "value": "${VARDRGATE_OWNER_TOKEN}"
+    }
+  },
+  {
+    "id": "other_user",
+    "name": "Authenticated User In Another Tenant",
+    "role": "other_user",
+    "tenant_id": "tenant-b",
+    "description": "A real account that must not reach another tenant's object.",
+    "credential": {
+      "type": "bearer",
+      "value": "${VARDRGATE_OTHER_USER_TOKEN}"
+    }
+  },
+  {
+    "id": "anonymous",
+    "name": "Unauthenticated Caller",
+    "role": "anonymous",
+    "description": "Sends no credentials at all. A static_header with no header name is how an anonymous identity is modelled.",
+    "credential": {
+      "type": "static_header"
+    }
+  }
+]
