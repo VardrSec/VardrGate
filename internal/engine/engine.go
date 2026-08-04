@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -65,6 +66,13 @@ func (e *Engine) Run(ctx context.Context, tc model.AuthorizationTestCase) (Resul
 	execByID := make(map[string]model.ExecutionResult, len(tc.Identities))
 	for _, identity := range tc.Identities {
 		exec := e.exec.Execute(ctx, identity, req)
+		// The executor classifies against the default status mapping; it knows
+		// nothing about a policy-declared deny convention. Reclassify here so
+		// the execution record and the findings drawn from it cannot disagree
+		// inside a single result document.
+		if exec.Error == "" {
+			exec.ObservedOutcome = model.ClassifyOutcomeWith(exec.StatusCode, false, tc.DenyStatuses)
+		}
 		result.Executions = append(result.Executions, exec)
 		execByID[identity.ID] = exec
 	}
@@ -143,12 +151,7 @@ func (e *Engine) evaluate(tc model.AuthorizationTestCase, identity model.Identit
 		return model.Finding{}, false
 	}
 
-	// Use the classified outcome set by the executor; fall back to classification
-	// when the executor did not set it (e.g. test stubs that only set StatusCode).
-	outcome := exec.ObservedOutcome
-	if outcome == "" {
-		outcome = model.ClassifyOutcome(exec.StatusCode, false)
-	}
+	outcome := model.ClassifyOutcomeWith(exec.StatusCode, false, tc.DenyStatuses)
 
 	switch {
 	case expected == model.AccessDecisionDeny && outcome == model.OutcomeAllow:
@@ -167,7 +170,7 @@ func (e *Engine) evaluate(tc model.AuthorizationTestCase, identity model.Identit
 // ownership and tenant context; without that context it stays unexpected_access.
 // The engine never guesses a higher-severity category from a weak signal.
 func unexpectedAccessFinding(tc model.AuthorizationTestCase, identity model.Identity, exec model.ExecutionResult, outcome model.ObservedOutcome, execByID map[string]model.ExecutionResult) model.Finding {
-	category, severity, confidence, reason := classifyUnexpectedAccess(tc, identity)
+	category, severity, confidence, reason := classifyUnexpectedAccess(tc, identity, exec)
 
 	f := model.Finding{
 		Category:   category,
@@ -194,7 +197,7 @@ func unexpectedAccessFinding(tc model.AuthorizationTestCase, identity model.Iden
 //  3. potential_bola      — a non-owner identity reached an identified object.
 //  4. privilege_escalation — identity's role ranks below the required role.
 //  5. unexpected_access   — no ownership context; conservative fallback.
-func classifyUnexpectedAccess(tc model.AuthorizationTestCase, identity model.Identity) (model.FindingCategory, model.Severity, model.Confidence, string) {
+func classifyUnexpectedAccess(tc model.AuthorizationTestCase, identity model.Identity, exec model.ExecutionResult) (model.FindingCategory, model.Severity, model.Confidence, string) {
 	res := tc.Resource
 
 	// An unauthenticated caller reaching a resource it should be denied is the
@@ -204,9 +207,9 @@ func classifyUnexpectedAccess(tc model.AuthorizationTestCase, identity model.Ide
 			"unauthenticated_access: request carried no credentials"
 	}
 
-	if res != nil && res.TenantID != "" && identity.TenantID != "" && identity.TenantID != res.TenantID {
+	if resTenant, ok := resourceTenant(res, exec); ok && identity.TenantID != "" && identity.TenantID != resTenant {
 		return model.CategoryCrossTenantAccess, model.SeverityCritical, model.ConfidenceHigh,
-			fmt.Sprintf("tenant_isolation_broken: identity_tenant=%s resource_tenant=%s", identity.TenantID, res.TenantID)
+			fmt.Sprintf("tenant_isolation_broken: identity_tenant=%s resource_tenant=%s", identity.TenantID, resTenant)
 	}
 
 	if res != nil && res.OwnerIdentity != "" && identity.ID != res.OwnerIdentity && (res.ObjectID != "" || res.Type != "") {
@@ -224,6 +227,24 @@ func classifyUnexpectedAccess(tc model.AuthorizationTestCase, identity model.Ide
 	}
 
 	return model.CategoryUnexpectedAccess, model.SeverityHigh, model.ConfidenceMedium, ""
+}
+
+// resourceTenant determines which tenant the object belongs to. A tenant bound
+// on the resource wins; otherwise, when the policy names the response field
+// carrying the tenant, it is read out of this identity's own response body.
+// Reading it from the offending response is what makes the finding
+// self-evidencing: the caller received an object stamped with another tenant.
+func resourceTenant(res *model.Resource, exec model.ExecutionResult) (string, bool) {
+	if res == nil {
+		return "", false
+	}
+	if res.TenantID != "" {
+		return res.TenantID, true
+	}
+	if res.TenantField == "" || len(exec.Body) == 0 {
+		return "", false
+	}
+	return compare.FieldValue(exec.Body, res.TenantField)
 }
 
 // roleRank returns the index of role within hierarchy (least→most privileged)
@@ -265,7 +286,7 @@ func comparisonEvidence(tc model.AuthorizationTestCase, offending model.Executio
 	if !ok {
 		return nil
 	}
-	cr := compare.Results(baseline, offending)
+	cr := compare.Results(baseline, offending, tc.SensitiveFields)
 	ev := compare.Evidence(baseline, offending, cr)
 	if cr.BodyMatch && len(offending.Body) > 0 {
 		ev = append(ev, fmt.Sprintf("response_body_matches_baseline: identity %q received the same body as %q", offending.IdentityID, baseline.IdentityID))
@@ -322,10 +343,12 @@ func withHeader(tmpl model.RequestTemplate, key, value string) model.RequestTemp
 // wildcard origin without credentials is reported at low severity.
 func corsFinding(tc model.AuthorizationTestCase, execByID map[string]model.ExecutionResult) (model.Finding, bool) {
 	var headers map[string]string
+	var observedBy string
 	for _, identity := range tc.Identities {
 		ex := execByID[identity.ID]
 		if ex.Error == "" && len(ex.Headers) > 0 {
 			headers = ex.Headers
+			observedBy = identity.ID
 			break
 		}
 	}
@@ -353,10 +376,13 @@ func corsFinding(tc model.AuthorizationTestCase, execByID map[string]model.Execu
 		reason = "credentialed_cors: arbitrary origin reflected with credentials allowed"
 	}
 
+	// The policy is endpoint-level, not per-caller, but the finding still records
+	// which identity's response it was read from so the observation is traceable.
 	return model.Finding{
 		Category:   model.CategoryCORSMisconfiguration,
 		Severity:   severity,
 		Confidence: confidence,
+		IdentityID: observedBy,
 		Message:    fmt.Sprintf("endpoint returned a permissive CORS policy for probe origin %q", tc.CORS.ProbeOrigin),
 		DetectedAt: time.Now().UTC(),
 		Evidence: []string{
@@ -364,6 +390,7 @@ func corsFinding(tc model.AuthorizationTestCase, execByID map[string]model.Execu
 			fmt.Sprintf("access_control_allow_origin=%s", acao),
 			fmt.Sprintf("access_control_allow_credentials=%t", credentials),
 			fmt.Sprintf("probe_origin=%s", tc.CORS.ProbeOrigin),
+			fmt.Sprintf("observed_on_identity=%s", observedBy),
 			fmt.Sprintf("url=%s %s", tc.Request.Method, sanitizeURL(tc.Request.URL)),
 		},
 	}, true
@@ -399,6 +426,11 @@ func buildEvidence(tc model.AuthorizationTestCase, identity model.Identity, exec
 		fmt.Sprintf("identity_id=%s", identity.ID),
 		fmt.Sprintf("url=%s %s", tc.Request.Method, sanitizeURL(tc.Request.URL)),
 	}
+	// A declared deny convention changes what a status code means, so the
+	// reader of a finding can see why (say) a 404 was read as a denial.
+	if len(tc.DenyStatuses) > 0 {
+		ev = append(ev, fmt.Sprintf("deny_status_declared=%s", joinInts(tc.DenyStatuses)))
+	}
 	if identity.Role != "" {
 		ev = append(ev, fmt.Sprintf("identity_role=%s", identity.Role))
 	}
@@ -406,6 +438,14 @@ func buildEvidence(tc model.AuthorizationTestCase, identity model.Identity, exec
 		ev = append(ev, fmt.Sprintf("identity_tenant=%s", identity.TenantID))
 	}
 	return ev
+}
+
+func joinInts(ns []int) string {
+	parts := make([]string, len(ns))
+	for i, n := range ns {
+		parts[i] = strconv.Itoa(n)
+	}
+	return strings.Join(parts, ",")
 }
 
 // sensitiveQueryParams are redacted from URLs appearing in evidence strings.
@@ -438,6 +478,12 @@ func sanitizeURL(rawURL string) string {
 	}
 	return u.String()
 }
+
+// Validate reports whether a test case is internally consistent, without
+// executing it. Run applies the same check; this is exported so a caller
+// holding a suite can report every authoring error at once instead of
+// discovering them one execution at a time.
+func Validate(tc model.AuthorizationTestCase) error { return validate(tc) }
 
 // validate ensures the test case is internally consistent before execution.
 func validate(tc model.AuthorizationTestCase) error {
@@ -480,6 +526,15 @@ func validate(tc model.AuthorizationTestCase) error {
 		case model.AccessDecisionAllow, model.AccessDecisionDeny, model.AccessDecisionSkip:
 		default:
 			return fmt.Errorf("expected_access[%d] has invalid decision %q", i, ea.Decision)
+		}
+	}
+
+	for i, code := range tc.DenyStatuses {
+		if code < 100 || code > 599 {
+			return fmt.Errorf("deny_status[%d] is not a valid HTTP status code: %d", i, code)
+		}
+		if code >= 200 && code < 300 {
+			return fmt.Errorf("deny_status[%d] is a success code (%d); a 2xx cannot mean denied", i, code)
 		}
 	}
 

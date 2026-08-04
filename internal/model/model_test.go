@@ -119,3 +119,60 @@ func TestCredential_SendsNoAuth(t *testing.T) {
 		}
 	}
 }
+
+func TestClassifyOutcomeWith_DenyStatusesOverride(t *testing.T) {
+	deny := []int{401, 403, 404}
+	tests := []struct {
+		name   string
+		status int
+		want   ObservedOutcome
+	}{
+		{"declared 404 becomes deny", 404, OutcomeDeny},
+		{"declared 401 stays deny", 401, OutcomeDeny},
+		{"success is never overridden", 200, OutcomeAllow},
+		{"undeclared code keeps default mapping", 500, OutcomeServerError},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := ClassifyOutcomeWith(tt.status, false, deny); got != tt.want {
+				t.Errorf("ClassifyOutcomeWith(%d) = %q, want %q", tt.status, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestClassifyOutcomeWith_NilDenyStatusesMatchesDefault(t *testing.T) {
+	for _, code := range []int{200, 302, 401, 403, 404, 418, 500} {
+		if got, want := ClassifyOutcomeWith(code, false, nil), ClassifyOutcome(code, false); got != want {
+			t.Errorf("status %d: with-nil = %q, default = %q", code, got, want)
+		}
+	}
+}
+
+func TestClassifyOutcomeWith_ErrorWinsOverDenyStatuses(t *testing.T) {
+	if got := ClassifyOutcomeWith(404, true, []int{404}); got != OutcomeError {
+		t.Errorf("got %q, want %q", got, OutcomeError)
+	}
+}
+
+func TestSeverityRank_Ordering(t *testing.T) {
+	ordered := []Severity{SeverityInfo, SeverityLow, SeverityMedium, SeverityHigh, SeverityCritical}
+	for i := 1; i < len(ordered); i++ {
+		if ordered[i-1].Rank() >= ordered[i].Rank() {
+			t.Errorf("%q does not rank below %q", ordered[i-1], ordered[i])
+		}
+	}
+	// An unrecognised severity must never trip a threshold.
+	if Severity("bogus").Rank() != 0 {
+		t.Errorf("unknown severity ranked %d, want 0", Severity("bogus").Rank())
+	}
+}
+
+func TestParseSeverity(t *testing.T) {
+	if got, ok := ParseSeverity("  HIGH "); !ok || got != SeverityHigh {
+		t.Errorf("ParseSeverity(\"  HIGH \") = %q, %v", got, ok)
+	}
+	if _, ok := ParseSeverity("catastrophic"); ok {
+		t.Error("ParseSeverity accepted an unknown severity")
+	}
+}

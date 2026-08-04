@@ -2,6 +2,7 @@ package model
 
 import (
 	"encoding/json"
+	"strings"
 	"time"
 )
 
@@ -70,11 +71,51 @@ const (
 	CategoryCORSMisconfiguration  FindingCategory = "cors_misconfiguration"
 )
 
+// severityRank orders severities from least to most impactful. Unknown values
+// rank below info so an unrecognised severity never trips a threshold.
+var severityRank = map[Severity]int{
+	SeverityInfo:     1,
+	SeverityLow:      2,
+	SeverityMedium:   3,
+	SeverityHigh:     4,
+	SeverityCritical: 5,
+}
+
+// Rank returns the ordinal of a severity for threshold comparison.
+// An unrecognised severity ranks 0, below every named level.
+func (s Severity) Rank() int { return severityRank[s] }
+
+// ParseSeverity converts a case-insensitive severity name into a Severity.
+func ParseSeverity(s string) (Severity, bool) {
+	sev := Severity(strings.ToLower(strings.TrimSpace(s)))
+	if _, ok := severityRank[sev]; ok {
+		return sev, true
+	}
+	return "", false
+}
+
 // ClassifyOutcome maps an HTTP status code to an ObservedOutcome.
 // Pass hasError=true when execution failed before a response was received.
 func ClassifyOutcome(statusCode int, hasError bool) ObservedOutcome {
+	return ClassifyOutcomeWith(statusCode, hasError, nil)
+}
+
+// ClassifyOutcomeWith maps an HTTP status code to an ObservedOutcome, treating
+// any code in denyStatuses as an explicit deny.
+//
+// APIs commonly return 404 rather than 403 to avoid revealing that an object
+// exists. Under the default mapping that is an ambiguous not_found and no
+// finding is emitted, which is correct when the deny convention is unknown. A
+// policy that declares `response.deny_status` states the convention, so those
+// codes become deny decisions the engine can evaluate against.
+func ClassifyOutcomeWith(statusCode int, hasError bool, denyStatuses []int) ObservedOutcome {
 	if hasError {
 		return OutcomeError
+	}
+	for _, code := range denyStatuses {
+		if code == statusCode {
+			return OutcomeDeny
+		}
 	}
 	switch {
 	case statusCode >= 200 && statusCode < 300:
@@ -211,6 +252,11 @@ type Resource struct {
 	// RequiredRole is the least-privileged role permitted to access the object.
 	// Combined with RoleHierarchy it establishes privilege_escalation.
 	RequiredRole string `json:"required_role,omitempty"`
+	// TenantField names the response-body field carrying the object's tenant.
+	// When TenantID is not known ahead of time, the engine reads this field from
+	// the offending identity's own response: a caller in tenant A that received
+	// an object whose tenant field says B proves the isolation break directly.
+	TenantField string `json:"tenant_field,omitempty"`
 }
 
 // CORSCheck enables cross-origin policy probing. When set, the engine sends an
@@ -234,6 +280,10 @@ type AuthorizationTestCase struct {
 	// SensitiveFields names the response fields that must not reach an identity
 	// marked ForbidSensitiveData. Empty means use the default sensitive set.
 	SensitiveFields []string `json:"sensitive_fields,omitempty"`
+	// DenyStatuses lists the status codes this API uses to refuse a caller, for
+	// APIs whose deny convention is not the default 401/403 (a 404 that hides
+	// existence is the common case). Empty uses the default mapping.
+	DenyStatuses []int `json:"deny_status,omitempty"`
 	// CORS, when set, enables cross-origin misconfiguration probing.
 	CORS           *CORSCheck       `json:"cors,omitempty"`
 	ExpectedAccess []ExpectedAccess `json:"expected_access"`

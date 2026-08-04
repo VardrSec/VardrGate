@@ -226,3 +226,85 @@ func TestCompile_SensitiveExposureThroughEngine(t *testing.T) {
 		t.Fatalf("expected sensitive_data_exposure for u-other, got %+v", res.Findings)
 	}
 }
+
+func TestCompile_CarriesDenyStatusesAndTenantField(t *testing.T) {
+	// Both fields were parsed but dropped on the floor before ADR 0007: a policy
+	// could declare them and the engine would never see them.
+	p, err := Parse([]byte(samplePolicy))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	tc, err := p.Compile(Bindings{
+		BaseURL:    "https://api.example.com",
+		PathParams: map[string]string{"user_id": "42"},
+		Identities: []model.Identity{
+			{ID: "o", Role: "owner", Credential: model.Credential{Type: model.CredentialTypeBearer, Value: "t"}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	if len(tc.DenyStatuses) != 3 || tc.DenyStatuses[2] != 404 {
+		t.Errorf("deny_status not compiled: %v", tc.DenyStatuses)
+	}
+	if tc.Resource == nil || tc.Resource.TenantField != "tenant_id" {
+		t.Errorf("tenant_field not compiled: %+v", tc.Resource)
+	}
+}
+
+func TestParseIdentities_ExpandsEnvReferences(t *testing.T) {
+	t.Setenv("VARDRGATE_TEST_TOKEN", "s3cret")
+	ids, err := ParseIdentities([]byte(`[
+	  {"id":"owner","role":"owner","credential":{"type":"bearer","value":"${VARDRGATE_TEST_TOKEN}"}}
+	]`))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if ids[0].Credential.Value != "s3cret" {
+		t.Errorf("value = %q, want %q", ids[0].Credential.Value, "s3cret")
+	}
+}
+
+func TestParseIdentities_ExpandsWithSurroundingText(t *testing.T) {
+	t.Setenv("VARDRGATE_TEST_TOKEN", "abc")
+	ids, err := ParseIdentities([]byte(`[
+	  {"id":"o","role":"owner","credential":{"type":"bearer","value":"prefix-${VARDRGATE_TEST_TOKEN}-suffix"}}
+	]`))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if ids[0].Credential.Value != "prefix-abc-suffix" {
+		t.Errorf("value = %q", ids[0].Credential.Value)
+	}
+}
+
+func TestParseIdentities_UnsetEnvIsAnError(t *testing.T) {
+	// A blank token silently turns an authenticated identity into an anonymous
+	// one, which inverts the meaning of the test. Fail loudly instead.
+	_, err := ParseIdentities([]byte(`[
+	  {"id":"o","role":"owner","credential":{"type":"bearer","value":"${VARDRGATE_DEFINITELY_UNSET}"}}
+	]`))
+	if err == nil || !strings.Contains(err.Error(), "unset or empty") {
+		t.Fatalf("expected unset-variable error, got %v", err)
+	}
+}
+
+func TestParseIdentities_RejectsMissingRole(t *testing.T) {
+	_, err := ParseIdentities([]byte(`[{"id":"o","credential":{"type":"bearer","value":"t"}}]`))
+	if err == nil || !strings.Contains(err.Error(), "role") {
+		t.Fatalf("expected role error, got %v", err)
+	}
+}
+
+func TestParseIdentities_RejectsEmptyDocument(t *testing.T) {
+	if _, err := ParseIdentities([]byte(`[]`)); err == nil {
+		t.Fatal("expected an error for an empty identities file")
+	}
+}
+
+func TestParseIdentities_RejectsUnterminatedReference(t *testing.T) {
+	_, err := ParseIdentities([]byte(`[{"id":"o","role":"owner","credential":{"type":"bearer","value":"${OPEN"}}]`))
+	if err == nil || !strings.Contains(err.Error(), "unterminated") {
+		t.Fatalf("expected unterminated error, got %v", err)
+	}
+}

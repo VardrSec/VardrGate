@@ -716,3 +716,241 @@ func TestRun_CORS_DisabledByDefault(t *testing.T) {
 		}
 	}
 }
+
+func TestRun_DenyStatus_404TreatedAsDenyWhenDeclared(t *testing.T) {
+	// Without a declared convention a 404 is ambiguous and yields no finding
+	// (covered by TestRun_NoFinding_WhenExpectedDenyObservedNotFound). Declaring
+	// it makes the same response an evaluated deny decision.
+	tc := baseTC()
+	tc.DenyStatuses = []int{401, 403, 404}
+	eng := New(&stubExecutor{responses: map[string]int{
+		"admin": http.StatusOK,
+		"user":  http.StatusNotFound,
+	}})
+	res, err := eng.Run(context.Background(), tc)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(res.Findings) != 0 {
+		t.Fatalf("expected no findings for a declared deny, got %+v", res.Findings)
+	}
+}
+
+func TestRun_DenyStatus_AllowedIdentityGetting404IsAMismatch(t *testing.T) {
+	tc := baseTC()
+	tc.DenyStatuses = []int{404}
+	eng := New(&stubExecutor{responses: map[string]int{
+		"admin": http.StatusNotFound,
+		"user":  http.StatusForbidden,
+	}})
+	res, err := eng.Run(context.Background(), tc)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(res.Findings) != 1 {
+		t.Fatalf("expected 1 finding, got %d: %+v", len(res.Findings), res.Findings)
+	}
+	if res.Findings[0].Category != model.CategoryAuthorizationMismatch {
+		t.Errorf("category = %q, want %q", res.Findings[0].Category, model.CategoryAuthorizationMismatch)
+	}
+}
+
+func TestValidate_RejectsInvalidDenyStatus(t *testing.T) {
+	for _, code := range []int{99, 600, 200} {
+		tc := baseTC()
+		tc.DenyStatuses = []int{code}
+		if _, err := New(&stubExecutor{}).Run(context.Background(), tc); err == nil {
+			t.Errorf("deny_status %d was accepted", code)
+		}
+	}
+}
+
+func TestRun_TenantFieldReadFromOffendingResponse(t *testing.T) {
+	// The resource tenant is not known ahead of time; the policy names the
+	// response field carrying it, and the offending caller's own body supplies
+	// the value that proves the isolation break.
+	tc := baseTC()
+	tc.Identities[0].TenantID = "tenant-a"
+	tc.Identities[1].TenantID = "tenant-b"
+	tc.Resource = &model.Resource{Type: "user_profile", ObjectID: "1", TenantField: "tenant_id"}
+
+	body := []byte(`{"user_id":"1","tenant_id":"tenant-a"}`)
+	eng := New(&stubExecutor{
+		responses: map[string]int{"admin": http.StatusOK, "user": http.StatusOK},
+		body:      map[string][]byte{"admin": body, "user": body},
+	})
+	res, err := eng.Run(context.Background(), tc)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(res.Findings) != 1 {
+		t.Fatalf("expected 1 finding, got %d: %+v", len(res.Findings), res.Findings)
+	}
+	f := res.Findings[0]
+	if f.Category != model.CategoryCrossTenantAccess {
+		t.Errorf("category = %q, want %q", f.Category, model.CategoryCrossTenantAccess)
+	}
+	if !hasEvidence(f, "resource_tenant=tenant-a") {
+		t.Errorf("evidence did not name the tenant read from the body: %v", f.Evidence)
+	}
+}
+
+func TestRun_TenantFieldAbsentFromBodyDoesNotElevate(t *testing.T) {
+	tc := baseTC()
+	tc.Identities[1].TenantID = "tenant-b"
+	tc.Resource = &model.Resource{
+		Type:          "user_profile",
+		ObjectID:      "1",
+		OwnerIdentity: "admin",
+		TenantField:   "tenant_id",
+	}
+
+	eng := New(&stubExecutor{
+		responses: map[string]int{"admin": http.StatusOK, "user": http.StatusOK},
+		body:      map[string][]byte{"user": []byte(`{"user_id":"1"}`)},
+	})
+	res, err := eng.Run(context.Background(), tc)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(res.Findings) != 1 {
+		t.Fatalf("expected 1 finding, got %d", len(res.Findings))
+	}
+	// No tenant in the body means no tenant evidence: fall back, never guess.
+	if got := res.Findings[0].Category; got != model.CategoryPotentialBOLA {
+		t.Errorf("category = %q, want %q", got, model.CategoryPotentialBOLA)
+	}
+}
+
+func TestRun_BoundTenantWinsOverResponseField(t *testing.T) {
+	tc := baseTC()
+	tc.Identities[1].TenantID = "tenant-b"
+	tc.Resource = &model.Resource{
+		Type:        "user_profile",
+		ObjectID:    "1",
+		TenantID:    "tenant-a",
+		TenantField: "tenant_id",
+	}
+	eng := New(&stubExecutor{
+		responses: map[string]int{"admin": http.StatusOK, "user": http.StatusOK},
+		body:      map[string][]byte{"user": []byte(`{"tenant_id":"tenant-b"}`)},
+	})
+	res, err := eng.Run(context.Background(), tc)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(res.Findings) != 1 || res.Findings[0].Category != model.CategoryCrossTenantAccess {
+		t.Fatalf("expected cross_tenant_access, got %+v", res.Findings)
+	}
+	if !hasEvidence(res.Findings[0], "resource_tenant=tenant-a") {
+		t.Errorf("bound tenant did not win: %v", res.Findings[0].Evidence)
+	}
+}
+
+func hasEvidence(f model.Finding, want string) bool {
+	for _, ev := range f.Evidence {
+		if strings.Contains(ev, want) {
+			return true
+		}
+	}
+	return false
+}
+
+func TestRun_CORS_FindingIsAttributedToAnIdentity(t *testing.T) {
+	// The policy is endpoint-level, but the finding must still say whose
+	// response it was read from — every other category populates IdentityID.
+	tc := baseTC()
+	tc.CORS = &model.CORSCheck{ProbeOrigin: "https://evil.example"}
+	eng := New(&stubExecutor{
+		responses: map[string]int{"admin": http.StatusOK, "user": http.StatusForbidden},
+		headers: map[string]map[string]string{
+			"admin": {
+				"Access-Control-Allow-Origin":      "https://evil.example",
+				"Access-Control-Allow-Credentials": "true",
+			},
+		},
+	})
+	res, err := eng.Run(context.Background(), tc)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	var found bool
+	for _, f := range res.Findings {
+		if f.Category != model.CategoryCORSMisconfiguration {
+			continue
+		}
+		found = true
+		if f.IdentityID != "admin" {
+			t.Errorf("IdentityID = %q, want %q", f.IdentityID, "admin")
+		}
+		if !hasEvidence(f, "observed_on_identity=admin") {
+			t.Errorf("evidence did not record the observing identity: %v", f.Evidence)
+		}
+	}
+	if !found {
+		t.Fatalf("expected a cors_misconfiguration finding, got %+v", res.Findings)
+	}
+}
+
+// A result document must not contradict itself: the execution record and the
+// evidence drawn from it have to report the same observed outcome.
+func TestRun_DenyStatus_ExecutionRecordAgreesWithEvidence(t *testing.T) {
+	tc := baseTC()
+	tc.DenyStatuses = []int{404}
+	eng := New(&stubExecutor{responses: map[string]int{
+		"admin": http.StatusNotFound,
+		"user":  http.StatusForbidden,
+	}})
+	res, err := eng.Run(context.Background(), tc)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var adminOutcome model.ObservedOutcome
+	for _, ex := range res.Executions {
+		if ex.IdentityID == "admin" {
+			adminOutcome = ex.ObservedOutcome
+		}
+	}
+	if adminOutcome != model.OutcomeDeny {
+		t.Errorf("execution outcome = %q, want %q (404 is a declared deny)", adminOutcome, model.OutcomeDeny)
+	}
+	if len(res.Findings) != 1 {
+		t.Fatalf("expected 1 finding, got %d", len(res.Findings))
+	}
+	if !hasEvidence(res.Findings[0], "observed_outcome=deny") {
+		t.Errorf("evidence disagrees with the execution record: %v", res.Findings[0].Evidence)
+	}
+	if !hasEvidence(res.Findings[0], "deny_status_declared=404") {
+		t.Errorf("evidence does not disclose the declared convention: %v", res.Findings[0].Evidence)
+	}
+}
+
+func TestRun_NoDenyStatus_EvidenceOmitsTheConvention(t *testing.T) {
+	eng := New(&stubExecutor{responses: map[string]int{"admin": http.StatusOK, "user": http.StatusOK}})
+	res, err := eng.Run(context.Background(), baseTC())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if hasEvidence(res.Findings[0], "deny_status_declared") {
+		t.Errorf("evidence claimed a convention that was never declared: %v", res.Findings[0].Evidence)
+	}
+}
+
+func TestRun_ExecutionErrorKeepsItsOutcome(t *testing.T) {
+	tc := baseTC()
+	tc.DenyStatuses = []int{404}
+	eng := New(&stubExecutor{
+		responses: map[string]int{"admin": http.StatusOK},
+		err:       map[string]string{"user": "connection refused"},
+	})
+	res, err := eng.Run(context.Background(), tc)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, ex := range res.Executions {
+		if ex.IdentityID == "user" && ex.ObservedOutcome != model.OutcomeError {
+			t.Errorf("errored execution outcome = %q, want %q", ex.ObservedOutcome, model.OutcomeError)
+		}
+	}
+}

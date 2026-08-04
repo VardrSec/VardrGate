@@ -173,6 +173,7 @@ func (p Policy) Compile(b Bindings) (model.AuthorizationTestCase, error) {
 		Identities:     b.Identities,
 		Request:        model.RequestTemplate{Method: method, URL: url},
 		ExpectedAccess: expected,
+		DenyStatuses:   p.Response.DenyStatus,
 	}
 
 	if res := p.resource(b, ownerIdentity); res != nil {
@@ -187,6 +188,7 @@ func (p Policy) resource(b Bindings, ownerIdentity string) *model.Resource {
 		Type:          rs.Type,
 		OwnerIdentity: ownerIdentity,
 		TenantID:      b.ResourceTenantID,
+		TenantField:   rs.TenantField,
 	}
 	if rs.IDParam != "" {
 		res.ObjectID = b.PathParams[rs.IDParam]

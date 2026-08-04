@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/VardrSec/vardrgate/internal/model"
@@ -17,8 +18,64 @@ var DefaultSensitiveFields = []string{
 	"refresh_token", "private_key", "ssn", "credit_card",
 }
 
-// sensitiveFields aliases DefaultSensitiveFields for internal comparison use.
-var sensitiveFields = DefaultSensitiveFields
+// FieldValue returns the first value found for the named field anywhere in a
+// JSON body (case-insensitive, at any nesting depth), rendered as a string.
+// Only scalar values are returned; objects and arrays report false.
+//
+// Field order within a JSON object is not preserved by decoding, so a body with
+// the same key at several depths has no defined winner. Callers use this for
+// identifiers that appear once, such as a tenant field.
+func FieldValue(body []byte, field string) (string, bool) {
+	if len(body) == 0 || field == "" {
+		return "", false
+	}
+	var v interface{}
+	if err := json.Unmarshal(body, &v); err != nil {
+		return "", false
+	}
+	return findScalar(v, strings.ToLower(field))
+}
+
+func findScalar(v interface{}, want string) (string, bool) {
+	switch t := v.(type) {
+	case map[string]interface{}:
+		for k, child := range t {
+			if strings.ToLower(k) == want {
+				if s, ok := scalarString(child); ok {
+					return s, true
+				}
+			}
+		}
+		for _, child := range t {
+			if s, ok := findScalar(child, want); ok {
+				return s, true
+			}
+		}
+	case []interface{}:
+		for _, child := range t {
+			if s, ok := findScalar(child, want); ok {
+				return s, true
+			}
+		}
+	}
+	return "", false
+}
+
+// scalarString renders a JSON scalar as a string. Numbers decode as float64;
+// integral values are rendered without a decimal point so an id like 42 does
+// not become "42".
+func scalarString(v interface{}) (string, bool) {
+	switch t := v.(type) {
+	case string:
+		return t, true
+	case bool:
+		return strconv.FormatBool(t), true
+	case float64:
+		return strconv.FormatFloat(t, 'f', -1, 64), true
+	default:
+		return "", false
+	}
+}
 
 // SensitiveFieldsPresent returns the sorted, de-duplicated set of field names
 // from fields that appear anywhere in the JSON body (case-insensitive, at any
@@ -67,10 +124,16 @@ func walkJSONKeys(v interface{}, want map[string]string, found map[string]struct
 }
 
 // Results compares two ExecutionResults and returns a ComparisonResult
-// with structured notes and evidence strings.
-func Results(a, b model.ExecutionResult) model.ComparisonResult {
+// with structured notes and evidence strings. fields names the sensitive field
+// set to look for; nil uses DefaultSensitiveFields, so a caller that overrode
+// the set on its test case gets the same answer here as from the engine's
+// sensitive-data check.
+func Results(a, b model.ExecutionResult, fields []string) model.ComparisonResult {
 	cr := model.ComparisonResult{}
 	var notes []string
+	if len(fields) == 0 {
+		fields = DefaultSensitiveFields
+	}
 
 	// Status code comparison.
 	cr.StatusCodeMatch = a.StatusCode == b.StatusCode
@@ -104,7 +167,7 @@ func Results(a, b model.ExecutionResult) model.ComparisonResult {
 	}
 
 	// Sensitive field presence in each body.
-	for _, field := range sensitiveFields {
+	for _, field := range fields {
 		inA := containsField(a.Body, field)
 		inB := containsField(b.Body, field)
 		if inA != inB {
