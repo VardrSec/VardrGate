@@ -954,3 +954,193 @@ func TestRun_ExecutionErrorKeepsItsOutcome(t *testing.T) {
 		}
 	}
 }
+
+// The bug deny_when exists for: an API that refuses by returning 200 with an
+// error body used to produce a false missing_authentication at critical
+// severity, which is the exact failure the conservative classification is
+// supposed to prevent.
+func TestRun_DenyWhen_PreventsFalseCriticalOn200ErrorBody(t *testing.T) {
+	body := []byte(`{"error":"forbidden"}`)
+	tc := baseTC()
+	tc.Identities[1].Credential = model.Credential{Type: model.CredentialTypeStaticHeader}
+	tc.DenyWhen = &model.DenyCondition{
+		JSONField: &model.JSONFieldMatch{Path: "error", Equals: "forbidden"},
+	}
+	eng := New(&stubExecutor{
+		responses: map[string]int{"admin": http.StatusOK, "user": http.StatusOK},
+		body:      map[string][]byte{"admin": []byte(`{"id":1}`), "user": body},
+	})
+	res, err := eng.Run(context.Background(), tc)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(res.Findings) != 0 {
+		t.Fatalf("a correctly-refused caller must produce no finding, got %+v", res.Findings)
+	}
+	for _, ex := range res.Executions {
+		if ex.IdentityID == "user" && ex.ObservedOutcome != model.OutcomeDeny {
+			t.Errorf("execution outcome = %q, want %q", ex.ObservedOutcome, model.OutcomeDeny)
+		}
+	}
+}
+
+func TestRun_WithoutDenyWhen_The200ErrorBodyStillMisreads(t *testing.T) {
+	// Documents why the declaration is required: without it the engine has no
+	// way to know a 200 was a refusal.
+	tc := baseTC()
+	tc.Identities[1].Credential = model.Credential{Type: model.CredentialTypeStaticHeader}
+	eng := New(&stubExecutor{
+		responses: map[string]int{"admin": http.StatusOK, "user": http.StatusOK},
+		body:      map[string][]byte{"user": []byte(`{"error":"forbidden"}`)},
+	})
+	res, err := eng.Run(context.Background(), tc)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(res.Findings) != 1 || res.Findings[0].Category != model.CategoryMissingAuthentication {
+		t.Fatalf("expected the undeclared case to still report, got %+v", res.Findings)
+	}
+}
+
+func TestRun_DenyWhen_AllowedIdentityRefusedIsAMismatch(t *testing.T) {
+	tc := baseTC()
+	tc.DenyWhen = &model.DenyCondition{BodyContains: []string{"forbidden"}}
+	eng := New(&stubExecutor{
+		responses: map[string]int{"admin": http.StatusOK, "user": http.StatusForbidden},
+		body:      map[string][]byte{"admin": []byte(`{"error":"forbidden"}`)},
+	})
+	res, err := eng.Run(context.Background(), tc)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(res.Findings) != 1 {
+		t.Fatalf("expected 1 finding, got %+v", res.Findings)
+	}
+	f := res.Findings[0]
+	if f.Category != model.CategoryAuthorizationMismatch {
+		t.Errorf("category = %q, want %q", f.Category, model.CategoryAuthorizationMismatch)
+	}
+	if !hasEvidence(f, "deny_when_matched") {
+		t.Errorf("evidence must disclose why a 200 was read as a refusal: %v", f.Evidence)
+	}
+}
+
+func TestRun_DenyWhen_OutranksASuccessStatus(t *testing.T) {
+	// A declared body condition beats the status line; that is the whole point.
+	tc := baseTC()
+	tc.DenyWhen = &model.DenyCondition{BodyContains: []string{"denied"}}
+	eng := New(&stubExecutor{
+		responses: map[string]int{"admin": http.StatusOK, "user": http.StatusOK},
+		body:      map[string][]byte{"user": []byte(`{"msg":"access denied"}`)},
+	})
+	res, _ := eng.Run(context.Background(), tc)
+	for _, ex := range res.Executions {
+		if ex.IdentityID == "user" && ex.ObservedOutcome != model.OutcomeDeny {
+			t.Errorf("outcome = %q, want deny despite HTTP 200", ex.ObservedOutcome)
+		}
+	}
+}
+
+func TestValidate_RefusesUnsafeMethodWithoutOptIn(t *testing.T) {
+	for _, method := range []string{"POST", "PUT", "PATCH", "DELETE", "delete"} {
+		tc := baseTC()
+		tc.Request.Method = method
+		_, err := New(&stubExecutor{}).Run(context.Background(), tc)
+		if err == nil {
+			t.Errorf("%s was accepted without mutating:true", method)
+			continue
+		}
+		if !strings.Contains(err.Error(), "changes server state") {
+			t.Errorf("%s: unhelpful error: %v", method, err)
+		}
+	}
+}
+
+func TestValidate_AllowsUnsafeMethodWhenAcknowledged(t *testing.T) {
+	tc := baseTC()
+	tc.Request.Method = "DELETE"
+	tc.Mutating = true
+	if _, err := New(&stubExecutor{responses: map[string]int{"admin": 200, "user": 403}}).Run(context.Background(), tc); err != nil {
+		t.Fatalf("mutating:true must permit an unsafe method: %v", err)
+	}
+}
+
+func TestValidate_SafeMethodsNeedNoOptIn(t *testing.T) {
+	for _, method := range []string{"GET", "HEAD", "OPTIONS"} {
+		tc := baseTC()
+		tc.Request.Method = method
+		if _, err := New(&stubExecutor{responses: map[string]int{"admin": 200, "user": 403}}).Run(context.Background(), tc); err != nil {
+			t.Errorf("%s should need no opt-in: %v", method, err)
+		}
+	}
+}
+
+func TestRun_ElevatedPropertyIsReportedAsObjectPropertyExposure(t *testing.T) {
+	tc := baseTC()
+	tc.ExpectedAccess[1].ForbidSensitiveData = true
+	eng := New(&stubExecutor{
+		responses: map[string]int{"admin": http.StatusOK, "user": http.StatusOK},
+		body:      map[string][]byte{"user": []byte(`{"id":2,"is_admin":false,"balance":100}`)},
+	})
+	res, err := eng.Run(context.Background(), tc)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	var found bool
+	for _, f := range res.Findings {
+		if f.Category == model.CategoryObjectPropertyExposure {
+			found = true
+			if f.Severity != model.SeverityHigh {
+				t.Errorf("severity = %q, want high", f.Severity)
+			}
+			if !hasEvidence(f, "is_admin") || !hasEvidence(f, "balance") {
+				t.Errorf("evidence missing the properties: %v", f.Evidence)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("expected object_property_exposure, got %+v", res.Findings)
+	}
+}
+
+func TestRun_SensitiveTiersSplitIntoTwoCategories(t *testing.T) {
+	tc := baseTC()
+	tc.ExpectedAccess[1].ForbidSensitiveData = true
+	eng := New(&stubExecutor{
+		responses: map[string]int{"admin": http.StatusOK, "user": http.StatusOK},
+		body:      map[string][]byte{"user": []byte(`{"api_key":"x","is_admin":true}`)},
+	})
+	res, _ := eng.Run(context.Background(), tc)
+
+	cats := map[model.FindingCategory]model.Severity{}
+	for _, f := range res.Findings {
+		cats[f.Category] = f.Severity
+	}
+	if cats[model.CategoryObjectPropertyExposure] != model.SeverityHigh {
+		t.Errorf("expected a high object_property_exposure, got %v", cats)
+	}
+	// api_key is critical, so the data-exposure finding takes that severity.
+	if cats[model.CategorySensitiveDataExposure] != model.SeverityCritical {
+		t.Errorf("expected a critical sensitive_data_exposure, got %v", cats)
+	}
+}
+
+func TestRun_SensitiveEvidenceUsesPaths(t *testing.T) {
+	tc := baseTC()
+	tc.ExpectedAccess[1].ForbidSensitiveData = true
+	eng := New(&stubExecutor{
+		responses: map[string]int{"admin": http.StatusOK, "user": http.StatusOK},
+		body:      map[string][]byte{"user": []byte(`{"user":{"profile":{"ssn":"x"}}}`)},
+	})
+	res, _ := eng.Run(context.Background(), tc)
+	for _, f := range res.Findings {
+		if f.Category != model.CategorySensitiveDataExposure {
+			continue
+		}
+		if !hasEvidence(f, "user.profile.ssn") {
+			t.Errorf("evidence should locate the leak by path: %v", f.Evidence)
+		}
+		return
+	}
+	t.Fatalf("expected a sensitive_data_exposure finding, got %+v", res.Findings)
+}

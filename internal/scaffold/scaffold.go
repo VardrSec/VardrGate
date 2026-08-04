@@ -64,6 +64,9 @@ type wireCase struct {
 	RoleHierarchy   []string               `json:"role_hierarchy,omitempty"`
 	SensitiveFields []string               `json:"sensitive_fields,omitempty"`
 	DenyStatuses    []int                  `json:"deny_status,omitempty"`
+	DenyWhen        *model.DenyCondition   `json:"deny_when,omitempty"`
+	Mutating        bool                   `json:"mutating,omitempty"`
+	Setup           []model.SetupStep      `json:"setup,omitempty"`
 	CORS            *model.CORSCheck       `json:"cors,omitempty"`
 	ExpectedAccess  []model.ExpectedAccess `json:"expected_access"`
 }
@@ -108,6 +111,9 @@ func toWire(tc model.AuthorizationTestCase) wireCase {
 		RoleHierarchy:   tc.RoleHierarchy,
 		SensitiveFields: tc.SensitiveFields,
 		DenyStatuses:    tc.DenyStatuses,
+		DenyWhen:        tc.DenyWhen,
+		Mutating:        tc.Mutating,
+		Setup:           tc.Setup,
 		CORS:            tc.CORS,
 		ExpectedAccess:  tc.ExpectedAccess,
 	}

@@ -11,11 +11,145 @@ import (
 	"github.com/VardrSec/vardrgate/internal/model"
 )
 
-// DefaultSensitiveFields is the default set of field names whose presence in a
-// response body is treated as sensitive.
-var DefaultSensitiveFields = []string{
-	"password", "secret", "token", "api_key", "access_token",
-	"refresh_token", "private_key", "ssn", "credit_card",
+// SensitiveTiers groups field names by what their exposure means. A leaked
+// password and a leaked "created_by" are both worth knowing about and are not
+// the same finding, so severity and category come from the tier rather than
+// from a single flat list.
+//
+// TierElevated is the one that earns its own category: a property that governs
+// authorization or value (role, is_admin, balance) reaching a caller who must
+// not see it is broken object property level authorization, OWASP API3:2023.
+//
+// Matching is on the whole field name, case-insensitively, after normalising
+// separators — "isAdmin", "is_admin", and "IS-ADMIN" are the same field.
+// Substring matching is deliberately not used: it classifies "username" as an
+// identifier because it contains "user", which is acceptable noise in a prober
+// generating probes and unacceptable in something that emits findings.
+var SensitiveTiers = map[model.SensitivityTier][]string{
+	model.TierCritical: {
+		"password", "passwd", "pwd", "secret", "token", "access_token",
+		"refresh_token", "api_key", "apikey", "private_key", "client_secret",
+		"session_token", "salt", "password_hash", "cvv", "pin", "credit_card",
+		"card_number", "security_answer",
+	},
+	model.TierElevated: {
+		"role", "roles", "permission", "permissions", "privilege", "privileges",
+		"scope", "scopes", "is_admin", "is_superuser", "is_staff", "admin",
+		"access_level", "tier", "plan", "subscription", "balance",
+		"account_balance", "credit_limit", "salary", "compensation",
+	},
+	model.TierPII: {
+		"email", "email_address", "phone", "phone_number", "mobile", "address",
+		"street_address", "postal_code", "ssn", "social_security_number",
+		"date_of_birth", "dob", "birth_date", "passport", "passport_number",
+		"drivers_license", "national_id", "tax_id",
+	},
+	model.TierInternal: {
+		"created_by", "updated_by", "deleted_by", "created_by_id",
+		"updated_by_id", "internal_id", "internal_notes", "debug", "trace",
+		"stack_trace", "raw_query", "sql",
+	},
+}
+
+// DefaultSensitiveFields is the flat union of every tier, retained for callers
+// that only need the names.
+var DefaultSensitiveFields = flattenTiers()
+
+func flattenTiers() []string {
+	var out []string
+	for _, names := range SensitiveTiers {
+		out = append(out, names...)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// SensitiveHit records one sensitive field found in a response body.
+type SensitiveHit struct {
+	// Path is where the field was found, e.g. "user.profile.ssn" or
+	// "orders[].payment.card_number". A path locates the leak; a bare name only
+	// says one exists.
+	Path string `json:"path"`
+	// Field is the field name itself.
+	Field string `json:"field"`
+	// Tier drives the finding's severity and category.
+	Tier model.SensitivityTier `json:"tier"`
+}
+
+// ScanSensitive walks a JSON body and reports every sensitive field it holds,
+// with the path to each. Field *names* and paths are recorded; values never
+// are, so a findings report cannot itself become the breach.
+//
+// When declared is non-empty it replaces the built-in tiers entirely: the
+// author has said which fields matter for this endpoint, and every hit is
+// reported at TierDeclared rather than being sorted into a tier the engine
+// guessed at.
+func ScanSensitive(body []byte, declared []string) []SensitiveHit {
+	if len(body) == 0 {
+		return nil
+	}
+	var v interface{}
+	if err := json.Unmarshal(body, &v); err != nil {
+		return nil
+	}
+
+	want := map[string]model.SensitivityTier{}
+	if len(declared) > 0 {
+		for _, f := range declared {
+			want[normalizeField(f)] = model.TierDeclared
+		}
+	} else {
+		for tier, names := range SensitiveTiers {
+			for _, f := range names {
+				want[normalizeField(f)] = tier
+			}
+		}
+	}
+
+	var hits []SensitiveHit
+	seen := map[string]struct{}{}
+	walkSensitive(v, "", want, seen, &hits)
+	sort.Slice(hits, func(i, j int) bool { return hits[i].Path < hits[j].Path })
+	return hits
+}
+
+func walkSensitive(v interface{}, path string, want map[string]model.SensitivityTier, seen map[string]struct{}, hits *[]SensitiveHit) {
+	switch t := v.(type) {
+	case map[string]interface{}:
+		for k, child := range t {
+			childPath := k
+			if path != "" {
+				childPath = path + "." + k
+			}
+			if tier, ok := want[normalizeField(k)]; ok {
+				if _, dup := seen[childPath]; !dup {
+					seen[childPath] = struct{}{}
+					*hits = append(*hits, SensitiveHit{Path: childPath, Field: k, Tier: tier})
+				}
+			}
+			walkSensitive(child, childPath, want, seen, hits)
+		}
+	case []interface{}:
+		// Collapse arrays to one representative path: a leak in every element of
+		// a 500-item list is one finding, not five hundred.
+		arrayPath := path + "[]"
+		for _, child := range t {
+			walkSensitive(child, arrayPath, want, seen, hits)
+		}
+	}
+}
+
+// normalizeField lowercases a field name and strips separators so camelCase,
+// snake_case, and kebab-case spellings of the same field compare equal.
+func normalizeField(name string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(name) {
+		if r == '_' || r == '-' || r == ' ' {
+			continue
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
 }
 
 // FieldValue returns the first value found for the named field anywhere in a
@@ -34,6 +168,85 @@ func FieldValue(body []byte, field string) (string, bool) {
 		return "", false
 	}
 	return findScalar(v, strings.ToLower(field))
+}
+
+// ValueAtPath resolves a dotted path against a JSON body and returns the scalar
+// there, e.g. "error.code" or "data.status". Unlike FieldValue it navigates
+// exactly rather than searching, so a caller that knows the shape gets a
+// deterministic answer instead of the first match at any depth.
+//
+// A single-element array is transparent, since APIs commonly wrap a lone object.
+func ValueAtPath(body []byte, path string) (string, bool) {
+	if len(body) == 0 || path == "" {
+		return "", false
+	}
+	var v interface{}
+	if err := json.Unmarshal(body, &v); err != nil {
+		return "", false
+	}
+	for _, segment := range strings.Split(path, ".") {
+		if arr, ok := v.([]interface{}); ok && len(arr) == 1 {
+			v = arr[0]
+		}
+		obj, ok := v.(map[string]interface{})
+		if !ok {
+			return "", false
+		}
+		next, ok := lookupInsensitive(obj, segment)
+		if !ok {
+			return "", false
+		}
+		v = next
+	}
+	if arr, ok := v.([]interface{}); ok && len(arr) == 1 {
+		v = arr[0]
+	}
+	return scalarString(v)
+}
+
+func lookupInsensitive(obj map[string]interface{}, key string) (interface{}, bool) {
+	if v, ok := obj[key]; ok {
+		return v, true
+	}
+	for k, v := range obj {
+		if strings.EqualFold(k, key) {
+			return v, true
+		}
+	}
+	return nil, false
+}
+
+// MatchesDeny reports whether a response body satisfies a declared deny
+// condition, and returns a description of what matched for use as evidence.
+//
+// The condition is authored, never inferred: this only answers a question the
+// policy already asked.
+func MatchesDeny(body []byte, cond *model.DenyCondition) (string, bool) {
+	if cond.IsZero() || len(body) == 0 {
+		return "", false
+	}
+	lower := strings.ToLower(string(body))
+	for _, needle := range cond.BodyContains {
+		if needle == "" {
+			continue
+		}
+		if strings.Contains(lower, strings.ToLower(needle)) {
+			return fmt.Sprintf("body_contains=%q", needle), true
+		}
+	}
+	if m := cond.JSONField; m != nil && m.Path != "" {
+		val, ok := ValueAtPath(body, m.Path)
+		if !ok {
+			return "", false
+		}
+		if m.Equals == "" {
+			return fmt.Sprintf("json_field=%s present", m.Path), true
+		}
+		if strings.EqualFold(val, m.Equals) {
+			return fmt.Sprintf("json_field=%s equals %q", m.Path, m.Equals), true
+		}
+	}
+	return "", false
 }
 
 func findScalar(v interface{}, want string) (string, bool) {
@@ -77,50 +290,25 @@ func scalarString(v interface{}) (string, bool) {
 	}
 }
 
-// SensitiveFieldsPresent returns the sorted, de-duplicated set of field names
-// from fields that appear anywhere in the JSON body (case-insensitive, at any
-// nesting depth). It returns only field *names*, never values, so callers can
-// record which sensitive fields leaked without echoing the sensitive data.
+// SensitiveFieldsPresent returns the sorted field names from fields that appear
+// anywhere in the JSON body. Retained for callers that only need names;
+// ScanSensitive returns paths and tiers and is what the engine uses.
 func SensitiveFieldsPresent(body []byte, fields []string) []string {
-	if len(body) == 0 || len(fields) == 0 {
+	hits := ScanSensitive(body, fields)
+	if len(hits) == 0 {
 		return nil
 	}
-	var v interface{}
-	if err := json.Unmarshal(body, &v); err != nil {
-		return nil
-	}
-	want := make(map[string]string, len(fields)) // lower(name) → original
-	for _, f := range fields {
-		want[strings.ToLower(f)] = f
-	}
-	found := map[string]struct{}{}
-	walkJSONKeys(v, want, found)
-	if len(found) == 0 {
-		return nil
-	}
-	out := make([]string, 0, len(found))
-	for f := range found {
-		out = append(out, f)
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(hits))
+	for _, h := range hits {
+		if _, dup := seen[h.Field]; dup {
+			continue
+		}
+		seen[h.Field] = struct{}{}
+		out = append(out, h.Field)
 	}
 	sort.Strings(out)
 	return out
-}
-
-// walkJSONKeys recursively records which wanted field names appear as object keys.
-func walkJSONKeys(v interface{}, want map[string]string, found map[string]struct{}) {
-	switch t := v.(type) {
-	case map[string]interface{}:
-		for k, child := range t {
-			if orig, ok := want[strings.ToLower(k)]; ok {
-				found[orig] = struct{}{}
-			}
-			walkJSONKeys(child, want, found)
-		}
-	case []interface{}:
-		for _, child := range t {
-			walkJSONKeys(child, want, found)
-		}
-	}
 }
 
 // Results compares two ExecutionResults and returns a ComparisonResult

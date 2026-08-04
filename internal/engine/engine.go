@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -48,6 +49,17 @@ func (e *Engine) Run(ctx context.Context, tc model.AuthorizationTestCase) (Resul
 		return Result{}, err
 	}
 
+	// Setup runs first: it may supply the credentials the identities present or
+	// create the object the request under test targets.
+	vars, err := e.runSetup(ctx, tc)
+	if err != nil {
+		return Result{}, err
+	}
+	tc, err = applySetupVars(tc, vars)
+	if err != nil {
+		return Result{}, fmt.Errorf("%w: %s", ErrSetupFailed, err)
+	}
+
 	expected := make(map[string]model.AccessDecision, len(tc.ExpectedAccess))
 	for _, ea := range tc.ExpectedAccess {
 		expected[ea.IdentityID] = ea.Decision
@@ -71,7 +83,7 @@ func (e *Engine) Run(ctx context.Context, tc model.AuthorizationTestCase) (Resul
 		// the execution record and the findings drawn from it cannot disagree
 		// inside a single result document.
 		if exec.Error == "" {
-			exec.ObservedOutcome = model.ClassifyOutcomeWith(exec.StatusCode, false, tc.DenyStatuses)
+			exec.ObservedOutcome, _ = classify(tc, exec)
 		}
 		result.Executions = append(result.Executions, exec)
 		execByID[identity.ID] = exec
@@ -102,44 +114,90 @@ func (e *Engine) Run(ctx context.Context, tc model.AuthorizationTestCase) (Resul
 		// identity may be permitted to call the endpoint yet still must not
 		// receive certain fields.
 		if ea.ForbidSensitiveData {
-			if finding, ok := sensitiveDataFinding(tc, identity, execByID[identity.ID]); ok {
-				result.Findings = append(result.Findings, finding)
-			}
+			result.Findings = append(result.Findings, sensitiveDataFindings(tc, identity, execByID[identity.ID])...)
 		}
 	}
 
 	return result, nil
 }
 
-// sensitiveDataFinding reports fields that must not have reached this identity
-// but appear in its response body. Only field names are recorded as evidence —
-// never the sensitive values themselves.
-func sensitiveDataFinding(tc model.AuthorizationTestCase, identity model.Identity, exec model.ExecutionResult) (model.Finding, bool) {
+// sensitiveDataFindings reports fields that must not have reached this identity
+// but appear in its response body. Only field names and paths are recorded —
+// never the values, so a findings report cannot itself become the breach.
+//
+// Hits are grouped by finding category so an authorization-bearing property
+// (role, is_admin, balance) is reported as object_property_exposure rather than
+// being averaged into generic data exposure. Severity comes from the most
+// serious tier in each group.
+func sensitiveDataFindings(tc model.AuthorizationTestCase, identity model.Identity, exec model.ExecutionResult) []model.Finding {
 	if exec.Error != "" || len(exec.Body) == 0 {
-		return model.Finding{}, false
+		return nil
 	}
-	fields := tc.SensitiveFields
-	if len(fields) == 0 {
-		fields = compare.DefaultSensitiveFields
+	hits := compare.ScanSensitive(exec.Body, tc.SensitiveFields)
+	if len(hits) == 0 {
+		return nil
 	}
-	present := compare.SensitiveFieldsPresent(exec.Body, fields)
-	if len(present) == 0 {
-		return model.Finding{}, false
+
+	byCategory := map[model.FindingCategory][]compare.SensitiveHit{}
+	for _, h := range hits {
+		cat := h.Tier.Category()
+		byCategory[cat] = append(byCategory[cat], h)
 	}
-	return model.Finding{
-		Category:   model.CategorySensitiveDataExposure,
-		Severity:   model.SeverityHigh,
-		Confidence: model.ConfidenceHigh,
-		IdentityID: identity.ID,
-		Message:    fmt.Sprintf("identity %q received sensitive fields it must not see", identity.ID),
-		DetectedAt: time.Now().UTC(),
-		Evidence: []string{
-			fmt.Sprintf("leaked_fields=%s", strings.Join(present, ",")),
-			fmt.Sprintf("status_code=%d", exec.StatusCode),
-			fmt.Sprintf("identity_id=%s", identity.ID),
-			fmt.Sprintf("url=%s %s", tc.Request.Method, sanitizeURL(tc.Request.URL)),
-		},
-	}, true
+
+	// Report the more serious category first for a stable, useful ordering.
+	categories := []model.FindingCategory{
+		model.CategoryObjectPropertyExposure,
+		model.CategorySensitiveDataExposure,
+	}
+
+	var findings []model.Finding
+	for _, cat := range categories {
+		group := byCategory[cat]
+		if len(group) == 0 {
+			continue
+		}
+		severity := model.SeverityLow
+		paths := make([]string, 0, len(group))
+		tiers := map[model.SensitivityTier]struct{}{}
+		for _, h := range group {
+			if s := h.Tier.Severity(); s.Rank() > severity.Rank() {
+				severity = s
+			}
+			paths = append(paths, h.Path)
+			tiers[h.Tier] = struct{}{}
+		}
+
+		message := fmt.Sprintf("identity %q received sensitive fields it must not see", identity.ID)
+		if cat == model.CategoryObjectPropertyExposure {
+			message = fmt.Sprintf("identity %q received object properties that govern authorization or value", identity.ID)
+		}
+
+		findings = append(findings, model.Finding{
+			Category:   cat,
+			Severity:   severity,
+			Confidence: model.ConfidenceHigh,
+			IdentityID: identity.ID,
+			Message:    message,
+			DetectedAt: time.Now().UTC(),
+			Evidence: []string{
+				fmt.Sprintf("leaked_fields=%s", strings.Join(paths, ",")),
+				fmt.Sprintf("sensitivity=%s", strings.Join(sortedTiers(tiers), ",")),
+				fmt.Sprintf("status_code=%d", exec.StatusCode),
+				fmt.Sprintf("identity_id=%s", identity.ID),
+				fmt.Sprintf("url=%s %s", tc.Request.Method, sanitizeURL(tc.Request.URL)),
+			},
+		})
+	}
+	return findings
+}
+
+func sortedTiers(tiers map[model.SensitivityTier]struct{}) []string {
+	out := make([]string, 0, len(tiers))
+	for t := range tiers {
+		out = append(out, string(t))
+	}
+	sort.Strings(out)
+	return out
 }
 
 // evaluate compares the observed outcome against the expected decision.
@@ -151,13 +209,13 @@ func (e *Engine) evaluate(tc model.AuthorizationTestCase, identity model.Identit
 		return model.Finding{}, false
 	}
 
-	outcome := model.ClassifyOutcomeWith(exec.StatusCode, false, tc.DenyStatuses)
+	outcome, denyReason := classify(tc, exec)
 
 	switch {
 	case expected == model.AccessDecisionDeny && outcome == model.OutcomeAllow:
 		return unexpectedAccessFinding(tc, identity, exec, outcome, execByID), true
 	case expected == model.AccessDecisionAllow && outcome == model.OutcomeDeny:
-		return accessDeniedFinding(tc, identity, exec, outcome), true
+		return accessDeniedFinding(tc, identity, exec, outcome, denyReason), true
 	default:
 		// Ambiguous outcomes (not_found, server_error, redirect, client_error)
 		// are not sufficient to classify an authorization finding alone.
@@ -265,7 +323,11 @@ func resourceLabel(res *model.Resource) string {
 	return res.Type
 }
 
-func accessDeniedFinding(tc model.AuthorizationTestCase, identity model.Identity, exec model.ExecutionResult, outcome model.ObservedOutcome) model.Finding {
+func accessDeniedFinding(tc model.AuthorizationTestCase, identity model.Identity, exec model.ExecutionResult, outcome model.ObservedOutcome, denyReason string) model.Finding {
+	ev := buildEvidence(tc, identity, exec, outcome)
+	if denyReason != "" {
+		ev = append(ev, "deny_when_matched: "+denyReason)
+	}
 	return model.Finding{
 		Category:   model.CategoryAuthorizationMismatch,
 		Severity:   model.SeverityLow,
@@ -273,8 +335,24 @@ func accessDeniedFinding(tc model.AuthorizationTestCase, identity model.Identity
 		IdentityID: identity.ID,
 		Message:    fmt.Sprintf("identity %q was denied access that should have been allowed", identity.ID),
 		DetectedAt: time.Now().UTC(),
-		Evidence:   buildEvidence(tc, identity, exec, outcome),
+		Evidence:   ev,
 	}
+}
+
+// classify determines the observed outcome for one execution, honouring the
+// deny conventions the policy declared. It returns a description of a matched
+// body condition so a finding can disclose why a 2xx was read as a refusal.
+//
+// Order matters: a declared body condition outranks the status line, because
+// the whole reason it exists is APIs that answer 200 while refusing the caller.
+func classify(tc model.AuthorizationTestCase, exec model.ExecutionResult) (model.ObservedOutcome, string) {
+	if exec.Error != "" {
+		return model.OutcomeError, ""
+	}
+	if reason, ok := compare.MatchesDeny(exec.Body, tc.DenyWhen); ok {
+		return model.OutcomeDeny, reason
+	}
+	return model.ClassifyOutcomeWith(exec.StatusCode, false, tc.DenyStatuses), ""
 }
 
 // comparisonEvidence compares the offending response against a legitimate
@@ -515,6 +593,16 @@ func validate(tc model.AuthorizationTestCase) error {
 		return errors.New("request template must have a url")
 	}
 
+	// A test case replays one request as every identity. For an unsafe method
+	// that means performing the mutation once per caller — deleting the same
+	// object three times, or creating three of something. Refuse until the
+	// author says they meant it.
+	if model.IsUnsafeMethod(tc.Request.Method) && !tc.Mutating {
+		return fmt.Errorf(
+			"request method %s changes server state and would be replayed once per identity (%d times); set mutating: true on the policy, or pass --allow-mutating, to confirm that is intended",
+			strings.ToUpper(tc.Request.Method), len(tc.Identities))
+	}
+
 	for i, ea := range tc.ExpectedAccess {
 		if ea.IdentityID == "" {
 			return fmt.Errorf("expected_access[%d] must reference an identity_id", i)
@@ -527,6 +615,10 @@ func validate(tc model.AuthorizationTestCase) error {
 		default:
 			return fmt.Errorf("expected_access[%d] has invalid decision %q", i, ea.Decision)
 		}
+	}
+
+	if err := validateSetup(tc); err != nil {
+		return err
 	}
 
 	for i, code := range tc.DenyStatuses {

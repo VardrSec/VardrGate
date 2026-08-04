@@ -308,3 +308,167 @@ func TestParseIdentities_RejectsUnterminatedReference(t *testing.T) {
 		t.Fatalf("expected unterminated error, got %v", err)
 	}
 }
+
+func TestCompile_CarriesDenyWhenAndMutating(t *testing.T) {
+	y := `
+api:
+  endpoint: DELETE /users/{user_id}
+  mutating: true
+expect:
+  owner: allow
+response:
+  deny_when:
+    body_contains: ["forbidden"]
+    json_field: { path: error.code, equals: DENIED }
+`
+	p, err := Parse([]byte(y))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	tc, err := p.Compile(Bindings{
+		BaseURL:    "https://api.example.com",
+		PathParams: map[string]string{"user_id": "42"},
+		Identities: []model.Identity{
+			{ID: "o", Role: "owner", Credential: model.Credential{Type: model.CredentialTypeBearer, Value: "t"}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	if !tc.Mutating {
+		t.Error("mutating not compiled")
+	}
+	if tc.DenyWhen == nil {
+		t.Fatal("deny_when not compiled")
+	}
+	if len(tc.DenyWhen.BodyContains) != 1 || tc.DenyWhen.BodyContains[0] != "forbidden" {
+		t.Errorf("body_contains = %v", tc.DenyWhen.BodyContains)
+	}
+	if tc.DenyWhen.JSONField == nil || tc.DenyWhen.JSONField.Path != "error.code" || tc.DenyWhen.JSONField.Equals != "DENIED" {
+		t.Errorf("json_field = %+v", tc.DenyWhen.JSONField)
+	}
+}
+
+func TestCompile_AllowMutatingBindingOverridesThePolicy(t *testing.T) {
+	y := "api:\n  endpoint: DELETE /x/{id}\nexpect:\n  owner: allow\n"
+	p, _ := Parse([]byte(y))
+	tc, err := p.Compile(Bindings{
+		BaseURL:       "https://api.example.com",
+		PathParams:    map[string]string{"id": "1"},
+		Identities:    []model.Identity{{ID: "o", Role: "owner", Credential: model.Credential{Type: model.CredentialTypeBearer, Value: "t"}}},
+		AllowMutating: true,
+	})
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	if !tc.Mutating {
+		t.Error("--allow-mutating should set Mutating on the compiled case")
+	}
+}
+
+func TestParse_RejectsTheDraftMarker(t *testing.T) {
+	// The enforceable half of the discover invariant: a proposed policy is
+	// inert until a human replaces every placeholder.
+	y := "api:\n  endpoint: GET /x/{id}\nexpect:\n  owner: TODO\n"
+	_, err := Parse([]byte(y))
+	if err == nil {
+		t.Fatal("a draft expectation must not parse")
+	}
+	if !strings.Contains(err.Error(), DraftMarker) {
+		t.Errorf("error should name the marker: %v", err)
+	}
+	if !strings.Contains(err.Error(), "allow, deny, or skip") {
+		t.Errorf("error should say what to do about it: %v", err)
+	}
+}
+
+func TestParse_DraftMarkerIsCaseInsensitive(t *testing.T) {
+	for _, marker := range []string{"todo", "ToDo", " TODO "} {
+		y := "api:\n  endpoint: GET /x/{id}\nexpect:\n  owner: " + marker + "\n"
+		if _, err := Parse([]byte(y)); err == nil {
+			t.Errorf("%q was accepted as a decision", marker)
+		}
+	}
+}
+
+func TestCompileSetup_BindsPathsAndResolvesRoles(t *testing.T) {
+	y := `
+api:
+  endpoint: GET /objects/{{new_id}}
+  mutating: true
+setup:
+  - name: create
+    as: owner
+    request:
+      method: POST
+      path: /objects
+      body: '{"title":"t"}'
+    capture:
+      new_id: id
+expect:
+  owner: allow
+`
+	p, err := Parse([]byte(y))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	tc, err := p.Compile(Bindings{
+		BaseURL:    "https://api.example.com",
+		Identities: []model.Identity{{ID: "owner-1", Role: "owner", Credential: model.Credential{Type: model.CredentialTypeBearer, Value: "t"}}},
+	})
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	if len(tc.Setup) != 1 {
+		t.Fatalf("setup not compiled: %+v", tc.Setup)
+	}
+	s := tc.Setup[0]
+	if s.As != "owner-1" {
+		t.Errorf("as = %q, want the concrete identity id", s.As)
+	}
+	if s.Request.URL != "https://api.example.com/objects" {
+		t.Errorf("url = %q", s.Request.URL)
+	}
+	if s.Capture["new_id"] != "id" {
+		t.Errorf("capture = %v", s.Capture)
+	}
+	// A {{var}} in the endpoint is resolved at run time, not at compile time.
+	if !strings.HasSuffix(tc.Request.URL, "/objects/{{new_id}}") {
+		t.Errorf("runtime reference should survive compilation: %q", tc.Request.URL)
+	}
+}
+
+func TestCompileSetup_RejectsUnknownRole(t *testing.T) {
+	y := `
+api:
+  endpoint: GET /x/{id}
+setup:
+  - name: s
+    as: ghost
+    request: { method: GET, path: /login }
+expect:
+  owner: allow
+`
+	p, err := Parse([]byte(y))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	_, err = p.Compile(Bindings{
+		BaseURL:    "https://api.example.com",
+		PathParams: map[string]string{"id": "1"},
+		Identities: []model.Identity{{ID: "o", Role: "owner", Credential: model.Credential{Type: model.CredentialTypeBearer, Value: "t"}}},
+	})
+	if err == nil || !strings.Contains(err.Error(), "no bound identity has") {
+		t.Fatalf("got %v, want an unknown-role error", err)
+	}
+}
+
+func TestSubstitutePath_LeavesRuntimeReferencesAlone(t *testing.T) {
+	got, err := substitutePath("/orgs/{org}/objects/{{captured}}", map[string]string{"org": "acme"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != "/orgs/acme/objects/{{captured}}" {
+		t.Errorf("got %q", got)
+	}
+}

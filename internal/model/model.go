@@ -69,6 +69,10 @@ const (
 	CategoryAuthorizationMismatch FindingCategory = "authorization_mismatch"
 	CategorySensitiveDataExposure FindingCategory = "sensitive_data_exposure"
 	CategoryCORSMisconfiguration  FindingCategory = "cors_misconfiguration"
+	// CategoryObjectPropertyExposure is OWASP API3:2023, broken object property
+	// level authorization: a caller received a property that governs
+	// authorization or value, such as role, is_admin, or balance.
+	CategoryObjectPropertyExposure FindingCategory = "object_property_exposure"
 )
 
 // severityRank orders severities from least to most impactful. Unknown values
@@ -259,11 +263,118 @@ type Resource struct {
 	TenantField string `json:"tenant_field,omitempty"`
 }
 
+// DenyCondition recognises a refusal that the status line does not express.
+//
+// An API that answers "200 OK {"error":"forbidden"}" denies the caller while
+// reporting success. Under status-code classification alone that reads as an
+// allow, so an identity that was correctly refused produces a false finding at
+// critical severity. The condition is declared rather than inferred: the engine
+// still never guesses what a denial looks like.
+//
+// A body that satisfies any populated field is a denial.
+type DenyCondition struct {
+	// BodyContains matches when the raw body contains any of these substrings
+	// (case-insensitive).
+	BodyContains []string `json:"body_contains,omitempty"`
+	// JSONField matches on a specific field in a JSON body.
+	JSONField *JSONFieldMatch `json:"json_field,omitempty"`
+}
+
+// JSONFieldMatch locates a field by dotted path and tests it.
+// Equals takes precedence; with Equals empty, the field merely has to exist.
+type JSONFieldMatch struct {
+	Path   string `json:"path"`
+	Equals string `json:"equals,omitempty"`
+}
+
+// IsZero reports whether the condition would match nothing.
+func (d *DenyCondition) IsZero() bool {
+	return d == nil || (len(d.BodyContains) == 0 && d.JSONField == nil)
+}
+
+// unsafeMethods change server state. A test case replays one request as every
+// identity, so running these without an explicit opt-in would repeat the
+// mutation once per caller.
+var unsafeMethods = map[string]struct{}{
+	"POST": {}, "PUT": {}, "PATCH": {}, "DELETE": {},
+}
+
+// IsUnsafeMethod reports whether a method is expected to change server state.
+func IsUnsafeMethod(method string) bool {
+	_, ok := unsafeMethods[strings.ToUpper(strings.TrimSpace(method))]
+	return ok
+}
+
 // CORSCheck enables cross-origin policy probing. When set, the engine sends an
 // Origin header with ProbeOrigin on the request and inspects the CORS response
 // headers for a policy that reflects arbitrary origins.
 type CORSCheck struct {
 	ProbeOrigin string `json:"probe_origin"`
+}
+
+// SetupStep is a request executed before the one under test, whose response
+// can supply values the main request needs.
+//
+// It covers the two cases a single stateless request cannot reach: obtaining a
+// token when authentication is a handshake rather than a static string, and
+// creating an object as one identity so another can attempt to read it. Both
+// are "run a request first and capture something from the response", so they
+// are one mechanism rather than two.
+type SetupStep struct {
+	// Name labels the step in errors and evidence.
+	Name string `json:"name"`
+	// As is the id of the identity to run this step as. Empty sends no
+	// credentials, which is what a login request needs.
+	As string `json:"as,omitempty"`
+	// Request is the step's HTTP request. It may reference variables captured
+	// by earlier steps.
+	Request RequestTemplate `json:"request"`
+	// Capture maps a variable name to a dotted path in the step's JSON
+	// response, e.g. {"token": "data.access_token"}.
+	Capture map[string]string `json:"capture,omitempty"`
+}
+
+// SensitivityTier groups sensitive fields by what their exposure means, so a
+// leaked password and a leaked "created_by" are not reported identically.
+type SensitivityTier string
+
+const (
+	// TierCritical is a secret: exposure is compromise on its own.
+	TierCritical SensitivityTier = "critical"
+	// TierElevated is an authorization-bearing property — role, is_admin,
+	// balance. A caller that must not see these reaching them is broken object
+	// property level authorization (OWASP API3), not merely data exposure.
+	TierElevated SensitivityTier = "elevated"
+	// TierPII identifies a person.
+	TierPII SensitivityTier = "pii"
+	// TierInternal is implementation detail that aids an attacker without being
+	// harmful alone.
+	TierInternal SensitivityTier = "internal"
+	// TierDeclared is a field the test case named explicitly. The author said
+	// it matters; the engine does not second-guess which tier it belongs to.
+	TierDeclared SensitivityTier = "declared"
+)
+
+// Severity returns the severity a finding takes from this tier.
+func (t SensitivityTier) Severity() Severity {
+	switch t {
+	case TierCritical:
+		return SeverityCritical
+	case TierElevated, TierPII, TierDeclared:
+		return SeverityHigh
+	case TierInternal:
+		return SeverityMedium
+	default:
+		return SeverityLow
+	}
+}
+
+// Category returns the finding category exposure of this tier produces.
+func (t SensitivityTier) Category() FindingCategory {
+	if t == TierElevated {
+		return CategoryObjectPropertyExposure
+	}
+	return CategorySensitiveDataExposure
 }
 
 // AuthorizationTestCase is the top-level input to the engine.
@@ -284,6 +395,15 @@ type AuthorizationTestCase struct {
 	// APIs whose deny convention is not the default 401/403 (a 404 that hides
 	// existence is the common case). Empty uses the default mapping.
 	DenyStatuses []int `json:"deny_status,omitempty"`
+	// DenyWhen recognises a refusal expressed in the response body rather than
+	// the status line. Nil leaves classification to the status code alone.
+	DenyWhen *DenyCondition `json:"deny_when,omitempty"`
+	// Mutating acknowledges that the request changes server state. Required
+	// before the engine will replay an unsafe method once per identity.
+	Mutating bool `json:"mutating,omitempty"`
+	// Setup runs before the request under test, in order, so an authorization
+	// test can log in or create the object it is about to probe.
+	Setup []SetupStep `json:"setup,omitempty"`
 	// CORS, when set, enables cross-origin misconfiguration probing.
 	CORS           *CORSCheck       `json:"cors,omitempty"`
 	ExpectedAccess []ExpectedAccess `json:"expected_access"`

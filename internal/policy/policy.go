@@ -10,6 +10,7 @@
 package policy
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -21,6 +22,7 @@ import (
 // Policy is the on-disk representation of an authorization control.
 type Policy struct {
 	API      APISpec           `yaml:"api"`
+	Setup    []SetupSpec       `yaml:"setup"`
 	Expect   map[string]string `yaml:"expect"`
 	Response ResponseSpec      `yaml:"response"`
 }
@@ -32,6 +34,30 @@ type APISpec struct {
 	// Owner names the logical identity that owns the object, e.g. "identity:owner".
 	Owner    string       `yaml:"owner"`
 	Resource ResourceSpec `yaml:"resource"`
+	// Mutating acknowledges that this endpoint changes state and that replaying
+	// it once per identity is intended.
+	Mutating bool `yaml:"mutating"`
+}
+
+// SetupSpec is a request run before the one under test, whose response can
+// supply values the main request needs — a token, or the id of an object
+// created for the test.
+type SetupSpec struct {
+	Name string `yaml:"name"`
+	// As names the logical role to run the step as. Empty sends no credentials,
+	// which is what a login request needs.
+	As      string            `yaml:"as"`
+	Request SetupRequestSpec  `yaml:"request"`
+	Capture map[string]string `yaml:"capture"`
+}
+
+// SetupRequestSpec is a setup step's request. Path is relative to the bound
+// base URL, matching how api.endpoint is written.
+type SetupRequestSpec struct {
+	Method  string            `yaml:"method"`
+	Path    string            `yaml:"path"`
+	Headers map[string]string `yaml:"headers"`
+	Body    string            `yaml:"body"`
 }
 
 // ResourceSpec describes the object addressed by the endpoint.
@@ -44,7 +70,36 @@ type ResourceSpec struct {
 // ResponseSpec captures expected response constraints.
 type ResponseSpec struct {
 	DenyStatus      []int         `yaml:"deny_status"`
+	DenyWhen        *DenyWhenSpec `yaml:"deny_when"`
 	SensitiveFields SensitiveSpec `yaml:"sensitive_fields"`
+}
+
+// DenyWhenSpec declares a refusal expressed in the response body rather than
+// the status line, for APIs that answer 200 while denying the caller.
+type DenyWhenSpec struct {
+	BodyContains []string       `yaml:"body_contains"`
+	JSONField    *JSONFieldSpec `yaml:"json_field"`
+}
+
+// condition converts the spec into the engine's form.
+func (d *DenyWhenSpec) condition() *model.DenyCondition {
+	if d == nil {
+		return nil
+	}
+	cond := &model.DenyCondition{BodyContains: d.BodyContains}
+	if d.JSONField != nil {
+		cond.JSONField = &model.JSONFieldMatch{Path: d.JSONField.Path, Equals: d.JSONField.Equals}
+	}
+	if cond.IsZero() {
+		return nil
+	}
+	return cond
+}
+
+// JSONFieldSpec tests one field, located by dotted path.
+type JSONFieldSpec struct {
+	Path   string `yaml:"path"`
+	Equals string `yaml:"equals"`
 }
 
 // SensitiveSpec lists logical roles that must not receive sensitive fields.
@@ -61,6 +116,10 @@ type Bindings struct {
 	PathParams       map[string]string
 	Identities       []model.Identity
 	ResourceTenantID string // optional; enables cross_tenant_access classification
+	// AllowMutating confirms at run time that replaying an unsafe method once
+	// per identity is intended, for a caller that did not want to edit the
+	// policy to say so.
+	AllowMutating bool
 }
 
 // Load reads and validates a policy file.
@@ -168,18 +227,81 @@ func (p Policy) Compile(b Bindings) (model.AuthorizationTestCase, error) {
 		}
 	}
 
+	setup, err := p.compileSetup(b)
+	if err != nil {
+		return model.AuthorizationTestCase{}, err
+	}
+
 	tc := model.AuthorizationTestCase{
 		ID:             defaultID(b.TestCaseID, method, path),
 		Identities:     b.Identities,
 		Request:        model.RequestTemplate{Method: method, URL: url},
 		ExpectedAccess: expected,
 		DenyStatuses:   p.Response.DenyStatus,
+		DenyWhen:       p.Response.DenyWhen.condition(),
+		Mutating:       p.API.Mutating || b.AllowMutating,
+		Setup:          setup,
 	}
 
 	if res := p.resource(b, ownerIdentity); res != nil {
 		tc.Resource = res
 	}
 	return tc, nil
+}
+
+// compileSetup binds each setup step to the environment: the path joins the
+// base URL and the logical role resolves to a concrete identity id.
+func (p Policy) compileSetup(b Bindings) ([]model.SetupStep, error) {
+	if len(p.Setup) == 0 {
+		return nil, nil
+	}
+	idByRole := make(map[string]string, len(b.Identities))
+	for _, id := range b.Identities {
+		idByRole[id.Role] = id.ID
+	}
+
+	steps := make([]model.SetupStep, 0, len(p.Setup))
+	for i, s := range p.Setup {
+		label := s.Name
+		if label == "" {
+			label = fmt.Sprintf("setup[%d]", i)
+		}
+		if strings.TrimSpace(s.Request.Method) == "" || strings.TrimSpace(s.Request.Path) == "" {
+			return nil, fmt.Errorf("compile: setup step %q needs a request method and path", label)
+		}
+
+		// Path parameters are substituted, but a {{var}} from an earlier step is
+		// resolved at run time and must survive compilation untouched.
+		path, err := substitutePath(s.Request.Path, b.PathParams)
+		if err != nil {
+			return nil, fmt.Errorf("compile: setup step %q: %w", label, err)
+		}
+
+		var as string
+		if s.As != "" {
+			resolved, ok := idByRole[s.As]
+			if !ok {
+				return nil, fmt.Errorf("compile: setup step %q runs as role %q, which no bound identity has", label, s.As)
+			}
+			as = resolved
+		}
+
+		step := model.SetupStep{
+			Name:    label,
+			As:      as,
+			Capture: s.Capture,
+			Request: model.RequestTemplate{
+				Method:  strings.ToUpper(s.Request.Method),
+				URL:     strings.TrimRight(b.BaseURL, "/") + path,
+				Headers: s.Request.Headers,
+			},
+		}
+		if body := strings.TrimSpace(s.Request.Body); body != "" {
+			step.Request.Body = json.RawMessage(body)
+		}
+		steps = append(steps, step)
+	}
+	return steps, nil
 }
 
 func (p Policy) resource(b Bindings, ownerIdentity string) *model.Resource {
@@ -200,11 +322,27 @@ func (p Policy) resource(b Bindings, ownerIdentity string) *model.Resource {
 }
 
 // substitutePath replaces {param} placeholders with bound values.
+//
+// A {{var}} reference belongs to a setup step and is resolved at run time from
+// a captured value, so it is stepped over rather than treated as an unbound
+// path parameter.
 func substitutePath(path string, params map[string]string) (string, error) {
+	var done strings.Builder
 	for {
 		open := strings.IndexByte(path, '{')
 		if open == -1 {
-			return path, nil
+			done.WriteString(path)
+			return done.String(), nil
+		}
+		if strings.HasPrefix(path[open:], "{{") {
+			close := strings.Index(path[open:], "}}")
+			if close == -1 {
+				return "", fmt.Errorf("compile: unterminated {{ reference in %q", path)
+			}
+			close += open + 2
+			done.WriteString(path[:close])
+			path = path[close:]
+			continue
 		}
 		end := strings.IndexByte(path[open:], '}')
 		if end == -1 {
@@ -216,12 +354,32 @@ func substitutePath(path string, params map[string]string) (string, error) {
 		if !ok {
 			return "", fmt.Errorf("compile: missing value for path parameter %q", name)
 		}
-		path = path[:open] + val + path[end+1:]
+		done.WriteString(path[:open])
+		done.WriteString(val)
+		path = path[end+1:]
 	}
 }
 
+// DraftMarker is the placeholder `vardrgate discover` writes for every
+// expectation it could not know.
+//
+// It is rejected by the parser on purpose. Discovery infers structure — which
+// parameter looks like an object id, which response field carries a tenant —
+// but it cannot know who *should* be allowed to call an endpoint, and a default
+// guess would put a heuristic behind VardrGate's signature. Making the
+// placeholder unparseable means a draft policy physically cannot execute until
+// a human has typed a decision. That is an enforced invariant rather than a
+// documented intention.
+const DraftMarker = "TODO"
+
 func toDecision(s string) (model.AccessDecision, error) {
-	switch model.AccessDecision(strings.ToLower(strings.TrimSpace(s))) {
+	trimmed := strings.TrimSpace(s)
+	if strings.EqualFold(trimmed, DraftMarker) {
+		return "", fmt.Errorf(
+			"expectation is still %s: this is a draft policy from `vardrgate discover`. Replace every %s with allow, deny, or skip — only you know who should be able to call this endpoint",
+			DraftMarker, DraftMarker)
+	}
+	switch model.AccessDecision(strings.ToLower(trimmed)) {
 	case model.AccessDecisionAllow:
 		return model.AccessDecisionAllow, nil
 	case model.AccessDecisionDeny:

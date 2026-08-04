@@ -164,7 +164,11 @@ func TestSensitiveFieldsPresent(t *testing.T) {
 		{"top level", `{"id":1,"ssn":"x","name":"a"}`, []string{"ssn"}},
 		{"nested", `{"user":{"profile":{"password":"x"}},"ok":true}`, []string{"password"}},
 		{"in array", `{"items":[{"api_key":"x"},{"id":2}]}`, []string{"api_key"}},
-		{"case insensitive", `{"SSN":"x","Token":"y"}`, []string{"ssn", "token"}},
+		// Matching is case- and separator-insensitive, but the reported name is
+		// the key as the API actually spells it: "the response contains SSN" is
+		// better evidence than echoing back the spelling we searched for.
+		{"case insensitive", `{"SSN":"x","Token":"y"}`, []string{"SSN", "Token"}},
+		{"separator insensitive", `{"apiKey":"x"}`, []string{"apiKey"}},
 		{"none", `{"id":1,"name":"a"}`, nil},
 		{"multiple", `{"ssn":"1","password":"2"}`, []string{"password", "ssn"}},
 		{"not json", `not json`, nil},
@@ -258,5 +262,142 @@ func TestResults_NilFieldsUsesDefaultSet(t *testing.T) {
 	cr := Results(a, b, nil)
 	if joined := strings.Join(cr.Notes, " "); !strings.Contains(joined, "api_key") {
 		t.Errorf("default set did not report api_key: %v", cr.Notes)
+	}
+}
+
+func TestValueAtPath(t *testing.T) {
+	body := []byte(`{"error":{"code":"FORBIDDEN","detail":"no"},"count":7,"wrapped":[{"inner":"v"}]}`)
+	tests := []struct {
+		path string
+		want string
+		ok   bool
+	}{
+		{"error.code", "FORBIDDEN", true},
+		{"ERROR.CODE", "FORBIDDEN", true},
+		{"count", "7", true},
+		{"wrapped.inner", "v", true},
+		{"error", "", false},
+		{"error.missing", "", false},
+		{"nope.nope", "", false},
+		{"", "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			got, ok := ValueAtPath(body, tt.path)
+			if got != tt.want || ok != tt.ok {
+				t.Errorf("ValueAtPath(%q) = %q,%v want %q,%v", tt.path, got, ok, tt.want, tt.ok)
+			}
+		})
+	}
+}
+
+func TestMatchesDeny(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		cond *model.DenyCondition
+		want bool
+	}{
+		{"nil condition never matches", `{"error":"forbidden"}`, nil, false},
+		{"empty condition never matches", `{"error":"forbidden"}`, &model.DenyCondition{}, false},
+		{"body_contains hit", `{"error":"forbidden"}`, &model.DenyCondition{BodyContains: []string{"forbidden"}}, true},
+		{"body_contains is case-insensitive", `{"error":"FORBIDDEN"}`, &model.DenyCondition{BodyContains: []string{"forbidden"}}, true},
+		{"body_contains miss", `{"data":1}`, &model.DenyCondition{BodyContains: []string{"forbidden"}}, false},
+		{"json_field equals", `{"error":"forbidden"}`, &model.DenyCondition{JSONField: &model.JSONFieldMatch{Path: "error", Equals: "forbidden"}}, true},
+		{"json_field wrong value", `{"error":"teapot"}`, &model.DenyCondition{JSONField: &model.JSONFieldMatch{Path: "error", Equals: "forbidden"}}, false},
+		{"json_field existence only", `{"error":"anything"}`, &model.DenyCondition{JSONField: &model.JSONFieldMatch{Path: "error"}}, true},
+		{"json_field absent", `{"ok":true}`, &model.DenyCondition{JSONField: &model.JSONFieldMatch{Path: "error"}}, false},
+		{"nested path", `{"meta":{"status":"denied"}}`, &model.DenyCondition{JSONField: &model.JSONFieldMatch{Path: "meta.status", Equals: "denied"}}, true},
+		{"empty body never matches", ``, &model.DenyCondition{BodyContains: []string{"forbidden"}}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			reason, got := MatchesDeny([]byte(tt.body), tt.cond)
+			if got != tt.want {
+				t.Errorf("MatchesDeny() = %v, want %v", got, tt.want)
+			}
+			if got && reason == "" {
+				t.Error("a match must describe itself for use as evidence")
+			}
+		})
+	}
+}
+
+func TestScanSensitive_TiersAndPaths(t *testing.T) {
+	body := []byte(`{
+	  "user": {"email":"a@b.c", "profile": {"ssn":"x"}},
+	  "is_admin": true,
+	  "apiKey": "sk_x",
+	  "created_by": "system",
+	  "harmless": 1
+	}`)
+	hits := ScanSensitive(body, nil)
+
+	byPath := map[string]model.SensitivityTier{}
+	for _, h := range hits {
+		byPath[h.Path] = h.Tier
+	}
+
+	want := map[string]model.SensitivityTier{
+		"user.email":       model.TierPII,
+		"user.profile.ssn": model.TierPII,
+		"is_admin":         model.TierElevated,
+		"apiKey":           model.TierCritical,
+		"created_by":       model.TierInternal,
+	}
+	for path, tier := range want {
+		got, ok := byPath[path]
+		if !ok {
+			t.Errorf("missed %q (found: %v)", path, byPath)
+			continue
+		}
+		if got != tier {
+			t.Errorf("%q tier = %q, want %q", path, got, tier)
+		}
+	}
+	if _, ok := byPath["harmless"]; ok {
+		t.Error("harmless field was reported as sensitive")
+	}
+}
+
+func TestScanSensitive_NoSubstringMatching(t *testing.T) {
+	// "username" contains "user" and "token_count" contains "token"; matching on
+	// substrings is the noise that makes a prober's heuristics unusable in an
+	// oracle. Neither may be reported.
+	hits := ScanSensitive([]byte(`{"username":"jo","token_count":3,"role_description":"x"}`), nil)
+	for _, h := range hits {
+		t.Errorf("substring match reported %q as %s", h.Path, h.Tier)
+	}
+}
+
+func TestScanSensitive_ArraysCollapseToOnePath(t *testing.T) {
+	// A leak in every element of a long list is one finding, not N.
+	body := []byte(`{"items":[{"ssn":"1"},{"ssn":"2"},{"ssn":"3"}]}`)
+	hits := ScanSensitive(body, nil)
+	if len(hits) != 1 {
+		t.Fatalf("got %d hits, want 1: %+v", len(hits), hits)
+	}
+	if hits[0].Path != "items[].ssn" {
+		t.Errorf("path = %q, want %q", hits[0].Path, "items[].ssn")
+	}
+}
+
+func TestScanSensitive_DeclaredFieldsReplaceTheTiers(t *testing.T) {
+	body := []byte(`{"ssn":"x","internal_note":"y"}`)
+	hits := ScanSensitive(body, []string{"internal_note"})
+	if len(hits) != 1 {
+		t.Fatalf("got %+v, want only the declared field", hits)
+	}
+	if hits[0].Field != "internal_note" || hits[0].Tier != model.TierDeclared {
+		t.Errorf("hit = %+v, want internal_note at TierDeclared", hits[0])
+	}
+}
+
+func TestScanSensitive_NeverReturnsValues(t *testing.T) {
+	hits := ScanSensitive([]byte(`{"ssn":"123-45-6789","api_key":"sk_live_secret"}`), nil)
+	for _, h := range hits {
+		if strings.Contains(h.Path, "123-45") || strings.Contains(h.Field, "sk_live") {
+			t.Errorf("hit leaked a value: %+v", h)
+		}
 	}
 }
