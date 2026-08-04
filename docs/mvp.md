@@ -42,16 +42,19 @@ The following were originally out of scope and are now implemented. See
 | `potential_bola`, `cross_tenant_access`, `privilege_escalation` | Emitted when the test case supplies resource-ownership / tenant / role context |
 | Response-body comparison in findings | Offending response compared against a legitimate baseline; matching body flagged |
 | Vertical privilege escalation | Via `resource.required_role` + `role_hierarchy` |
-| Declarative policies | `internal/policy` compiles a YAML control into a test case |
-| Offline execution | `vardrgate run --job job.json --out result.json` |
+| Declarative policies | `internal/policy` compiles a YAML control into a test case, run by `vardrgate policy run` (ADR 0006) |
+| Offline execution | `vardrgate run --job job.json --out result.json`, or `--cases` for a suite |
+| CI gating | `--fail-on <severity>`: exit 2 on findings, exit 3 when a case reached nothing (ADR 0006) |
+| API inventory / spec import | `vardrgate gen --spec` / `--postman`, plus `vardrgate coverage` |
+| Persisted results | Runner job queue with a durable SQLite store (ADR 0003, 0004) |
 
 ## Still not covered
 
 | Concern | Reason |
 |---|---|
 | Concurrent execution | Sequential per-identity execution is correct and sufficient at this scale |
-| Persisted results | Out of scope; callers store what they need (Phase 3) |
-| API inventory / spec import | Phase 2 |
+| SARIF / JUnit output | Findings are JSON only; the exit code is the CI contract (ADR 0006) |
+| PostgreSQL store | The `Store` interface is ready for it; SQLite covers current needs |
 
 ## Inputs at MVP
 
@@ -61,8 +64,8 @@ The following were originally out of scope and are now implemented. See
 | `identities[].id` | Yes | Unique within the test case |
 | `identities[].credential` | Yes | `bearer`, `api_key_header`, or `static_header`; `value` is write-only |
 | `identities[].name` | No | Human label for findings and logs |
-| `identities[].role` | No | Descriptive; not used in evaluation logic yet |
-| `identities[].tenant_id` | No | Stored on the identity; not used in evaluation logic yet |
+| `identities[].role` | No | Ranked against `resource.required_role` via `role_hierarchy` for `privilege_escalation` |
+| `identities[].tenant_id` | No | Compared against the resource's tenant for `cross_tenant_access` |
 | `request.method` | Yes | Any valid HTTP method |
 | `request.url` | Yes | `https://` target; `http://` allowed; private IPs blocked by default |
 | `request.headers` | No | Applied to every identity's request |

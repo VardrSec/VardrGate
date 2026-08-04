@@ -2,7 +2,7 @@
 
 ## What this project is
 
-VardrGate is an API authorization assurance engine. It accepts a test case (or a declarative policy compiled into one), executes a single HTTP request as multiple identities, classifies each observed outcome against the expected access decision with optional ownership/tenant/role context, and returns structured, evidence-backed findings. It can be driven three ways: the HTTP API (`POST /tests/execute`), the offline CLI (`vardrgate run --job`), or as a library. It is the first execution primitive of the larger platform in `enterprise-platform.md`. No frontend, no database.
+VardrGate is an API authorization assurance engine. It accepts a test case (or a declarative policy compiled into one), executes a single HTTP request as multiple identities, classifies each observed outcome against the expected access decision with optional ownership/tenant/role context, and returns structured, evidence-backed findings. It can be driven four ways: the HTTP API (`POST /tests/execute`), a declarative policy (`vardrgate policy run`), the offline CLI (`vardrgate run --job` / `--cases`), or as a library. It is the first execution primitive of a larger API security control plane. No frontend; the job queue optionally persists to SQLite.
 
 ## Technology
 
@@ -14,52 +14,53 @@ VardrGate is an API authorization assurance engine. It accepts a test case (or a
 - `log/slog` for structured logging
 - `go test -race`, `go vet`, `gofmt` before every commit
 
-Do not add PostgreSQL, Redis, Docker, Kubernetes, message queues, background workers, OpenAPI importers, or cloud deployment unless explicitly requested.
+- `modernc.org/sqlite` — the durable job store (see ADR 0004). Pure Go, no cgo.
+
+Do not add PostgreSQL, Redis, Docker, Kubernetes, message queues, background workers, or cloud deployment unless explicitly requested.
 
 ## Repository layout
 
 ```
 cmd/vardrgate/
-└── main.go                  serve + run subcommands, env config, wiring, shutdown
+├── main.go                  subcommand dispatch, usage, version, exit codes
+├── execute.go               run / policy run / demo, --fail-on gating, suite loading
+├── importers.go             gen, coverage
+└── serve.go                 HTTP server, env config, wiring, shutdown
 
 internal/
-├── api/
-│   ├── handler.go           GET /health, POST /tests/execute, stable error codes
-│   └── handler_test.go
-├── client/
-│   ├── client.go            HTTP execution, credential application, SSRF protection
-│   └── client_test.go
-├── compare/
-│   ├── compare.go           status-code, body, JSON, and sensitive-field comparison
-│   └── compare_test.go
-├── engine/
-│   ├── engine.go            validation, execution loop, ownership-aware findings
-│   └── engine_test.go
-├── job/
-│   ├── job.go               offline job envelope for `vardrgate run`
-│   └── job_test.go
-├── model/
-│   ├── model.go             domain types, constants, Resource, ClassifyOutcome
-│   └── model_test.go
-├── policy/
-│   ├── policy.go            YAML policy parse + compile to test case
-│   └── policy_test.go
-├── store/
-│   ├── store.go             runner job queue + registry, Store interface (in-memory)
-│   └── store_test.go
-└── urlcheck/
-    ├── urlcheck.go          URL scheme validation, CheckIP, DialContext-ready exports
-    └── urlcheck_test.go
+├── api/                     handler.go (health, tests/execute) + jobs.go (queue)
+├── client/                  HTTP execution, credential application, SSRF protection
+├── compare/                 status-code, body, JSON, sensitive-field, FieldValue
+├── coverage/                OpenAPI-vs-test-case coverage reporting
+├── demo/                    vulnerable loopback fixture + bundled policy
+├── engine/                  validation, execution loop, ownership-aware findings
+├── job/                     offline job envelope for `vardrgate run --job`
+├── model/                   domain types, constants, Resource, ClassifyOutcomeWith
+├── openapi/                 OpenAPI 3 parse + starter case generation
+├── policy/                  policy.go (parse/compile) + identities.go (bindings)
+├── postman/                 Postman v2.1 collection import
+├── scaffold/                starter case builder + MarshalCases on-disk format
+├── secretref/               ${VAR} credential references
+├── store/                   runner job queue + registry (Memory + SQLite)
+└── urlcheck/                URL scheme validation, CheckIP, DialContext-ready exports
+
+Every package above has a _test.go alongside it.
 
 docs/
 ├── mvp.md                   first supported workflow
-└── adr/                     architecture decision records (0001 policy+CLI, 0002 classification)
+└── adr/                     0001 policy+CLI · 0002 classification · 0003 queue
+                             0004 persistence · 0005 tenancy · 0006 policy CLI
+                             0007 policy-driven deny classification
 
 examples/
 ├── bola_check.json              three-identity unauthorized-access scenario
 ├── ownership_check.json         local demo against an httptest-style target
-├── job_profile_check.json       `vardrgate run` job envelope
-└── profile_ownership.policy.yaml declarative policy example
+├── job_profile_check.json       `vardrgate run --job` envelope (a template — its
+│                                tokens and localhost URL are placeholders)
+├── identities.json              policy bindings with ${VAR} credential references
+├── petstore.openapi.json        import fixture
+├── store.postman_collection.json import fixture
+└── profile_ownership.policy.yaml declarative policy example (run by `vardrgate demo`)
 
 .github/workflows/ci.yml     gofmt + vet + race tests + build
 CHANGELOG.md                 Keep a Changelog / SemVer
@@ -115,6 +116,8 @@ Other rules:
 - `sensitive_data_exposure` (high): an identity whose expected access has `ForbidSensitiveData` receives a response body containing sensitive fields. Independent of the allow/deny decision. Detection (in `compare.SensitiveFieldsPresent`) is recursive and case-insensitive; evidence records field *names* only, never values. Field set defaults to `compare.DefaultSensitiveFields`, overridable via `tc.SensitiveFields`. Policy `response.sensitive_fields.forbidden_for` roles compile to `ForbidSensitiveData`.
 - `authorization_mismatch` (low): expected `allow`, observed `deny` (401/403).
 - `cors_misconfiguration`: opt-in via `tc.CORS.ProbeOrigin`. The engine injects that `Origin` header (once, endpoint-level) and inspects `Access-Control-Allow-Origin`/`-Credentials` (captured by the client). Reflected arbitrary origin + credentials → high; reflected/wildcard without credentials → low; otherwise none.
+- `deny_status`: `tc.DenyStatuses` (from a policy's `response.deny_status`) makes the listed status codes explicit denials, so an API that hides existence behind 404 can be evaluated. The engine reclassifies the *execution record* as well as the finding, so a result document cannot contradict itself, and adds `deny_status_declared=` evidence. A 2xx in the list is rejected by validation. See ADR 0007.
+- `tenant_field`: when `Resource.TenantID` is empty and `Resource.TenantField` is set, the resource's tenant is read from the offending identity's own response body via `compare.FieldValue` — the caller's own response proves the isolation break. A bound `TenantID` wins. See ADR 0007.
 - Every elevated category requires explicit context in the test case; `TenantID` alone still yields `unexpected_access`. The engine never guesses from a weak signal.
 - Findings include response-comparison evidence: the offending response is compared against a baseline (the owner, or any allowed identity); a matching body is flagged.
 - Execution errors suppress findings for that identity.
@@ -125,7 +128,7 @@ Validation rejects: duplicate identity ids, expected-access references to unknow
 
 The `Executor` interface is defined in the engine package and satisfied by `*client.Client`. Tests use a `stubExecutor`. `Run` executes all identities first, then evaluates findings so it can compare against a baseline.
 
-`engine.Result` has JSON tags (`test_case_id`, `executions`, `findings`).
+`engine.Result` has JSON tags (`test_case_id`, `executions`, `findings`). `engine.Validate` is exported so a caller holding a suite can check every case before running any of them.
 
 ### `internal/coverage`
 
@@ -143,17 +146,33 @@ Spec importers. `openapi.Parse` + `Spec.GenerateTestCases` handle OpenAPI 3 (one
 
 Parses a declarative YAML policy (`api`/`expect`/`response`) and `Compile`s it into a `model.AuthorizationTestCase` given `Bindings` (base URL, path params, identities whose `role` matches an `expect` key, optional resource tenant). Unknown YAML fields are rejected. This is what makes a control reusable across environments.
 
+`Compile` carries `response.deny_status` to `tc.DenyStatuses` and `api.resource.tenant_field` to `Resource.TenantField`; both were parsed and dropped before ADR 0007.
+
+`LoadIdentities`/`ParseIdentities` (in `identities.go`) read the JSON identity array that binds a policy, requiring an id and a role on each and resolving `${VAR}` credential references through `secretref`. Exposed via `vardrgate policy run --identities`.
+
+### `internal/secretref`
+
+Resolves `${VAR}` references in credential values against the process environment. Used by `policy.ParseIdentities`, `job.Parse`, and the CLI's `loadCases`, so all three input paths behave identically. An unset or empty variable is an **error**, never an empty string: a blank token turns an authenticated identity into an anonymous one, which inverts the meaning of the test while still reporting a clean run. See ADR 0006.
+
+### `internal/demo`
+
+A deliberately broken profile API on loopback plus the policy and identities to run against it, behind `demo.Run(ctx)`. It exists because the README's first command used to point at a service the reader does not have running: every identity failed and the command still exited 0. `Policy` is inlined so the binary is self-contained; a test compares it against `examples/profile_ownership.policy.yaml` (parsed, so the file keeps its comments) and fails on drift.
+
 ### `internal/job`
 
-Parses the offline job envelope (`type`, `program_id`, `config.test_case`, `config.execution`) used by `vardrgate run`. Also accepts a bare test case. `ClientConfig()` derives `client.Config` from the execution block. No coupling to VardrRunner beyond this JSON shape.
+Parses the offline job envelope (`type`, `program_id`, `config.test_case`, `config.execution`) used by `vardrgate run --job`. Also accepts a bare test case. `ClientConfig()` derives `client.Config` from the execution block. Credential values resolve `${VAR}` references through `secretref`, the same as every other input path. No coupling to VardrRunner beyond this JSON shape.
 
 ### `internal/compare`
 
-Compares two `ExecutionResult` values. Standalone utilities — not yet wired into the engine's finding evaluation.
+Compares two `ExecutionResult` values. Wired into the engine: `comparisonEvidence` compares an offending response against a legitimate baseline and attaches the result to the finding.
 
 Comparisons: status-code equality, raw body equality, normalised JSON equality (key-order independent), response-size difference, presence/absence of sensitive fields (`token`, `secret`, `api_key`, etc.).
 
+`Results(a, b, fields)` takes the sensitive-field set as a parameter — `nil` means `DefaultSensitiveFields`. It is passed `tc.SensitiveFields` so a case that overrides the set gets the same answer here as from the engine's sensitive-data check.
+
 `Evidence(a, b, cr)` extracts comparison output into evidence strings ready to attach to a `Finding`.
+
+`FieldValue(body, field)` is a recursive, case-insensitive scalar lookup used to read a resource's tenant out of a response body (see ADR 0007).
 
 ### `internal/store`
 
@@ -172,7 +191,21 @@ Exposes the HTTP API. No business logic.
 
 ### `cmd/vardrgate`
 
-Three subcommands. Default (`serve`) reads `PORT` (1–65535, default 8080), `ALLOW_PRIVATE_TARGETS`, `VARDRGATE_API_KEY(S)`, and `VARDRGATE_DB`, wires `client → engine → handler` with a store, and runs the HTTP server (`ReadHeaderTimeout` 5 s, `ReadTimeout` 30 s, `WriteTimeout` 60 s, `IdleTimeout` 120 s; 10 s graceful shutdown on `SIGINT`/`SIGTERM`). `run --job <file> --out <file>` executes one job envelope offline and writes the result JSON (stdout if `--out` omitted); exits non-zero on error for CI/VardrRunner gating. `gen --spec <file> [--base URL] [--out file]` generates starter test cases from an OpenAPI spec. `coverage --spec <file> --cases <file> [--out file]` reports tested/untested operations.
+Subcommand dispatch (`main.go`). A bare invocation serves, which is the documented default; **any unrecognised argument is an error**, not a fallthrough to `serve` — that fallthrough is why `vardrgate --help` used to start a web server.
+
+Exit codes are shared by every command that executes a test case: `0` ran clean, `1` usage or input error, `2` findings at or above `--fail-on`, `3` a case reached nothing. `exitError` carries the code out of a subcommand; `gate` decides it. Exit 3 is not gated on the threshold and outranks findings — zero findings means nothing when no request succeeded — and it is evaluated **per case**, so a target that dies partway through a suite still fails the run.
+
+| Command | Purpose |
+|---|---|
+| `serve` (default) | HTTP API. Reads `PORT` (1–65535, default 8080), `ALLOW_PRIVATE_TARGETS`, `VARDRGATE_API_KEY(S)`, `VARDRGATE_DB`; wires `client → engine → handler` with a store (`ReadHeaderTimeout` 5 s, `ReadTimeout` 30 s, `WriteTimeout` 60 s, `IdleTimeout` 120 s; 10 s graceful shutdown on `SIGINT`/`SIGTERM`) |
+| `policy run` | Compile a policy against one environment and run it: `--policy --base --param name=value (repeatable) --identities [--tenant --id --out --fail-on --allow-private-targets --timeout]` |
+| `run` | `--job <file>` (one envelope) or `--cases <file>` (a JSON array). A suite is fully validated via `engine.Validate` before any of it runs, so every authoring error is reported together |
+| `demo` | Bundled policy against the `internal/demo` loopback fixture; prints a human summary rather than JSON |
+| `gen` | `--spec` / `--postman` [`--base`] [`--out`] — starter cases through `scaffold.MarshalCases` |
+| `coverage` | `--spec --cases` [`--out`] — tested/untested operations |
+| `help`, `version` | Usage; version from `-ldflags -X main.version` or the build info |
+
+`--fail-on` defaults to `none`, so adding gating to an existing pipeline is deliberate.
 
 ## Development rules
 
@@ -212,13 +245,13 @@ Avoid:
 
 ## What not to build yet
 
-Phase 1 is complete (resource ownership, ownership-aware findings, compare wiring, YAML policies, the `run` CLI). The first Phase 3 slice — the runner job queue endpoints + in-memory store — is also in place. Do **not** yet build later work unless asked:
+Phases 1–3 and the Phase 2 importers are complete: resource ownership, ownership-aware findings, compare wiring, YAML policies, the policy/run/gen/coverage/demo CLI, the runner job queue with a durable SQLite store, tenant isolation, and an audit log. Do **not** build later work unless asked:
 
-- Persistent `Store` (PostgreSQL) — the next Phase 3 step; the interface is ready for it
-- Multi-tenant control plane: orgs/projects/environments, tenant isolation, secret providers, audit logs (Phase 3)
+- PostgreSQL `Store` — the interface is ready for it; SQLite covers current needs
+- Multi-tenant control plane beyond per-key tenancy: orgs/projects/environments, secret providers (Phase 3)
 - Frontend or dashboard (Phase 4)
-- OpenAPI / Postman import and test generation (Phase 2)
-- Additional vulnerability packs (rate-limit, CORS, JWT, GraphQL) (Phase 5)
+- Further vulnerability packs: rate-limit, JWT, GraphQL (Phase 5). CORS is done
+- SARIF or JUnit output — findings are JSON only, deliberately (ADR 0006)
 - User accounts, organizations, SSO, billing
-- Concurrency in the execution loop
+- Concurrency in the execution loop — sequential is a stated decision (`docs/mvp.md`)
 - Additional HTTP API endpoints

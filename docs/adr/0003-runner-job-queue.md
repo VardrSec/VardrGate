@@ -5,7 +5,7 @@
 
 ## Context
 
-Phase 3 of `enterprise-platform.md` connects VardrGate to VardrRunner: runners
+Phase 3 of the platform plan connects VardrGate to VardrRunner: runners
 poll for pending jobs, claim them atomically, stream events, upload results, and
 mark them done or failed. VardrRunner already speaks a fixed HTTP contract to its
 backend (`vardrrunner/api.py`): `GET /jobs/pending`, `POST /jobs/{id}/claim`,

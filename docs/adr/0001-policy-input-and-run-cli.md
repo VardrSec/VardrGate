@@ -6,7 +6,7 @@
 ## Context
 
 VardrGate began as an HTTP service that runs a single authorization test case
-(`POST /tests/execute`). The enterprise direction (see `enterprise-platform.md`)
+(`POST /tests/execute`). The longer-range platform direction
 requires two things the service alone does not provide:
 
 1. **Declarative, reusable controls.** A test case bound to concrete tokens and
@@ -25,7 +25,7 @@ requires two things the service alone does not provide:
 Add an `internal/policy` package that parses a declarative policy and compiles
 it, given bindings (base URL, path params, concrete identities), into a
 `model.AuthorizationTestCase`. The policy format is the one in
-`enterprise-platform.md` (`api`/`expect`/`response`).
+the platform plan (`api`/`expect`/`response`).
 
 We accept a single new dependency, `gopkg.in/yaml.v3`, to parse it. This is a
 deliberate exception to the "standard library only" rule in the charter,

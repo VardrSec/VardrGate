@@ -4,7 +4,7 @@
 //
 // The data model is defined here behind a Store interface with an in-memory
 // implementation. Persistence (PostgreSQL) is a later Phase 3 step; modelling
-// the queue first — as enterprise-platform.md directs ("add storage only after
+// the queue first — as the platform plan directs ("add storage only after
 // the data model is clear enough to survive enterprise use") — lets the runner
 // lifecycle be built and tested end to end before a database is introduced.
 package store

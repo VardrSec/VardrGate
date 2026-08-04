@@ -5,7 +5,7 @@
 
 ## Context
 
-Phase 3 of `enterprise-platform.md` calls for a "control plane API with tenant
+Phase 3 of the platform plan calls for a "control plane API with tenant
 isolation." The job queue (ADR 0003) launched with a single shared bearer token:
 every authenticated caller could see and act on every job. For a multi-customer
 backend that is unacceptable — one tenant must never observe or touch another's

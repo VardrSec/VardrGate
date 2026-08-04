@@ -9,7 +9,7 @@ The runner job queue (ADR 0003) launched with an in-memory `Store`: jobs are los
 on restart. That is fine for CI and local development but not for a backend that
 schedules and tracks real work — a deploy or crash would silently drop the queue.
 
-Phase 3 of `enterprise-platform.md` calls for PostgreSQL-backed persistence. A
+Phase 3 of the platform plan calls for PostgreSQL-backed persistence. A
 real PostgreSQL integration cannot be exercised in this project's build/test
 sandbox (no database to connect to), and committing an unverifiable database
 implementation is not acceptable.

@@ -8,6 +8,76 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`vardrgate policy run`**: compile a declarative policy against one
+  environment and execute it — `--policy p.yaml --base https://api.example.com
+  --param user_id=42 --identities identities.json`. Until now `internal/policy`
+  compiled test cases that no command could run, so the policy format was
+  unreachable from the CLI. Identities come from a JSON array whose `role`
+  matches a key in the policy's `expect` map; see `examples/identities.json`.
+  See ADR 0006.
+- **`--fail-on <severity>`** on `run`, `policy run`, and `demo`, with distinct
+  exit codes: `0` clean, `1` usage or input error, `2` findings at or above the
+  threshold, `3` a case reached nothing. Defaults to `none`, so gating is opt-in.
+  Exit 3 is not gated on the threshold and outranks findings — a finding count of
+  zero means nothing when no request succeeded. It is evaluated per case, so a
+  target that dies partway through a suite cannot leave the run green.
+- **`vardrgate run --cases <file>`**: execute a JSON array of test cases and emit
+  an array of results, closing the loop with `vardrgate gen`. The whole suite is
+  validated before any of it runs, so every authoring error is reported at once.
+- **`vardrgate demo`**: run the bundled policy against a deliberately broken
+  loopback fixture. No setup, no credentials, no network egress — the quickstart
+  now proves the tool works on a first run.
+- **`${VAR}` credential references** (`internal/secretref`): credential values in
+  policy bindings, generated suites, and job envelopes resolve against the
+  process environment, so a file committed next to the code it tests can name a
+  secret without containing one. An unset or empty variable is an error, not an
+  empty string — a blank token turns an authenticated identity into an anonymous
+  one and would invert the meaning of the test while still reporting a clean run.
+- **`vardrgate help` and `vardrgate version`**, and `engine.Validate` for
+  checking a test case without executing it.
+
+### Changed
+
+- **Policy `response.deny_status` is now enforced.** It was parsed and dropped;
+  it now compiles to the test case, and any listed status code is classified as
+  an explicit deny. An API that returns 404 to avoid confirming an object exists
+  can finally be tested. A 2xx in the list is rejected — a success code cannot
+  mean denied. See ADR 0007.
+- **Policy `api.resource.tenant_field` is now enforced.** When no tenant is
+  bound, the engine reads that field from the offending identity's own response
+  body, so `cross_tenant_access` no longer requires knowing the target object's
+  tenant in advance. A bound `resource.tenant_id` still wins. See ADR 0007.
+- Findings from a policy with a declared deny convention carry
+  `deny_status_declared=` evidence, and the execution record is reclassified
+  alongside the finding so a single result document cannot contradict itself.
+- `cors_misconfiguration` findings now populate `identity_id` and record
+  `observed_on_identity=` in evidence. The policy is endpoint-level, but the
+  field was left empty while every other category filled it.
+- `compare.Results` takes the sensitive-field set as a parameter. It previously
+  always used the package default, so a test case that overrode
+  `sensitive_fields` had its override honoured by the sensitive-data check and
+  ignored by the comparison evidence.
+
+### Fixed
+
+- **`vardrgate --help` started a web server.** Subcommand dispatch fell through
+  to `serve` for any unrecognised argument. Unknown commands now exit 1 with
+  usage; a bare `vardrgate` still serves, as documented.
+- Dead link to `enterprise-platform.md` in the README and CLAUDE.md — the file
+  has never existed in this repository.
+
+### Breaking
+
+- `vardrgate run` against an unreachable target now exits **3** where it
+  previously exited **0**. A pipeline relying on the old behaviour was reporting
+  success without testing anything.
+- `vardrgate gen` output now contains a `"value"` key holding a
+  `${VARDRGATE_<IDENTITY>_TOKEN}` placeholder. Previously the key was absent
+  entirely, leaving no indication of where a credential belonged. Files generated
+  before this change still parse; they validate as missing a credential, which is
+  what they always were.
+- `compare.Results` gained a third parameter (internal API).
+
 - **CORS misconfiguration detection**: set `cors.probe_origin` on a test case and
   the engine sends that `Origin` and inspects the response. A reflected arbitrary
   origin combined with `Access-Control-Allow-Credentials: true` is a high finding

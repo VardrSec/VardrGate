@@ -5,8 +5,7 @@ different callers, run the request as each of them, and get structured,
 evidence-backed findings when the real behaviour disagrees.
 
 VardrGate is the first execution primitive of a larger API security control
-plane (see [`enterprise-platform.md`](enterprise-platform.md) for the North
-Star). Today it proves authorization controls; it is designed to be driven
+plane. Today it proves authorization controls; it is designed to be driven
 locally, in CI, from the HTTP API, or by [VardrRunner](../VardrRunner).
 
 ## What it does
@@ -41,18 +40,72 @@ category from a weak signal. See [`docs/adr/0002-ownership-aware-classification.
 git clone https://github.com/VardrSec/VardrGate
 cd VardrGate
 go build ./cmd/vardrgate
-./vardrgate            # serve mode: listens on :8080
+./vardrgate demo
 ```
 
-### Run a single job offline (CI / VardrRunner contract)
+`demo` starts a deliberately broken profile API on loopback, runs the bundled
+policy against it, and prints the findings. No setup, no credentials, nothing
+leaves the machine. It is the fastest way to see what a finding looks like:
+
+```
+Executions:
+  owner        200 allow
+  other_user   200 allow
+  anonymous    200 allow
+
+4 findings:
+  [CRITICAL] cross_tenant_access — identity "other_user" received access that should have been denied
+  [CRITICAL] missing_authentication — identity "anonymous" received access that should have been denied
+  [HIGH]     sensitive_data_exposure — identity "other_user" received sensitive fields it must not see
+  [HIGH]     sensitive_data_exposure — identity "anonymous" received sensitive fields it must not see
+```
+
+### Run a policy against a real environment
 
 ```sh
-./vardrgate run --job examples/job_profile_check.json --out result.json
+export VARDRGATE_OWNER_TOKEN=... VARDRGATE_OTHER_USER_TOKEN=...
+
+./vardrgate policy run \
+  --policy examples/profile_ownership.policy.yaml \
+  --base https://api.example.com \
+  --param user_id=42 \
+  --identities examples/identities.json \
+  --fail-on high
+```
+
+This is the same policy the demo runs, bound to a real environment. Credential
+values in the identities file may reference environment variables as `${VAR}`,
+so the file is committed next to the policy without containing a secret. An
+unset variable is an error, not an empty token.
+
+### Gate a pipeline on the result
+
+`--fail-on` is what makes VardrGate usable as a CI check:
+
+| Exit code | Meaning |
+|---|---|
+| `0` | Ran; nothing at or above the threshold |
+| `1` | Usage or input error |
+| `2` | Findings at or above `--fail-on` |
+| `3` | A case reached nothing — every identity failed to connect |
+
+Exit 3 is deliberate and separate: a run where nothing connected reports zero
+findings, and treating that as a pass is worse than having no check at all. It
+is evaluated per case, so a target that dies partway through a suite still fails
+the build. Without `--fail-on` (the default, `none`), findings never affect the
+exit code — but exit 3 still applies.
+
+### Run a job envelope offline (VardrRunner contract)
+
+```sh
+./vardrgate run --job job.json --out result.json
 ```
 
 `run` reads a job envelope, executes the embedded test case, and writes the
-sanitized result JSON. The binary defaults to `serve`; `run` is the offline path
-VardrRunner and CI use. See [`docs/adr/0001-policy-input-and-run-cli.md`](docs/adr/0001-policy-input-and-run-cli.md).
+sanitized result JSON. `examples/job_profile_check.json` is a **template** — its
+tokens and its `localhost:8081` URL are placeholders to replace, not a target
+that exists. Use `./vardrgate demo` for something that runs as shipped. See
+[`docs/adr/0001-policy-input-and-run-cli.md`](docs/adr/0001-policy-input-and-run-cli.md).
 
 ### Generate starter tests from an OpenAPI spec
 
@@ -61,8 +114,15 @@ VardrRunner and CI use. See [`docs/adr/0001-policy-input-and-run-cli.md`](docs/a
 ```
 
 Emits one starter test case per path+method (request pre-filled, plus an
-authenticated and an anonymous template identity). Add real credential values to
-the generated cases before running them. A Postman v2.1 collection works too:
+authenticated and an anonymous template identity). Each credential carries a
+`${VARDRGATE_<IDENTITY>_TOKEN}` placeholder showing where the token belongs; set
+those variables and run the file directly:
+
+```sh
+VARDRGATE_AUTHENTICATED_TOKEN=... ./vardrgate run --cases cases.json --fail-on high
+```
+
+A Postman v2.1 collection works too:
 
 ```sh
 ./vardrgate gen --postman collection.json --base https://api.example.com
@@ -91,8 +151,9 @@ Environment variables (serve mode):
 
 A policy expresses an authorization control once, independent of environment.
 Bind it to a base URL, path parameters, and concrete identities (each identity's
-`role` matching a key under `expect`) to compile a runnable test case. See
-[`examples/profile_ownership.policy.yaml`](examples/profile_ownership.policy.yaml).
+`role` matching a key under `expect`) and run it with `vardrgate policy run`. See
+[`examples/profile_ownership.policy.yaml`](examples/profile_ownership.policy.yaml)
+and [`examples/identities.json`](examples/identities.json).
 
 ```yaml
 api:
@@ -100,13 +161,26 @@ api:
   owner: identity:owner
   resource:
     type: user_profile
-    id_param: user_id
-    tenant_field: tenant_id
+    id_param: user_id      # path parameter naming the object
+    tenant_field: tenant_id # response field carrying the object's tenant
+
 expect:
   owner: allow
   other_user: deny
   anonymous: deny
+
+response:
+  deny_status: [401, 403, 404]  # this API hides existence behind 404
+  sensitive_fields:
+    forbidden_for: [other_user, anonymous]
 ```
+
+`response.deny_status` states how this API refuses a caller. Without it, deny
+means 401 or 403 and a 404 is ambiguous — correct as a default, but it means
+every 404 from an API that hides existence goes unevaluated. `tenant_field` lets
+the engine read the object's tenant out of the response body, so
+`cross_tenant_access` does not require knowing the target's tenant in advance.
+See [`docs/adr/0007-policy-driven-deny-classification.md`](docs/adr/0007-policy-driven-deny-classification.md).
 
 ## HTTP API
 
@@ -219,25 +293,31 @@ interface.
 ## Project layout
 
 ```
-cmd/vardrgate/       — serve + run subcommands, dependency wiring
+cmd/vardrgate/       — subcommand dispatch, exit codes
+  main.go            — dispatch, usage, version
+  execute.go         — run, policy run, demo; --fail-on gating
+  importers.go       — gen, coverage
+  serve.go           — HTTP API and its environment config
 internal/
-  api/               — HTTP handlers (GET /health, POST /tests/execute)
+  api/               — HTTP handlers (GET /health, POST /tests/execute, job queue)
   client/            — HTTP execution, credential application, SSRF protection
   compare/           — response body / status-code + sensitive-field utilities
   coverage/          — OpenAPI-vs-test-case coverage reporting
+  demo/              — vulnerable loopback fixture for `vardrgate demo`
   engine/            — validation, execution, ownership-aware finding evaluation
-  job/               — offline job envelope (vardrgate run)
+  job/               — offline job envelope (vardrgate run --job)
   model/             — domain types and constants
   openapi/           — OpenAPI 3 parsing + starter test-case generation
   postman/           — Postman v2.1 collection import
-  policy/            — declarative YAML policy parsing and compilation
-  scaffold/          — shared starter test-case builder for importers
+  policy/            — declarative YAML policy parsing, compilation, bindings
+  scaffold/          — starter test-case builder and its on-disk format
+  secretref/         — ${VAR} credential references
   store/             — runner job queue + registry (in-memory + SQLite Store)
   urlcheck/          — URL and IP validation
 docs/
   mvp.md             — first supported workflow
   adr/               — architecture decision records
-examples/            — test case, policy, and job examples
+examples/            — policy, identities, test case, and job examples
 ```
 
 ## Development
