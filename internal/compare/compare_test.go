@@ -1,6 +1,7 @@
 package compare
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -63,6 +64,86 @@ func TestResults_BodyMismatch_DifferentJSON(t *testing.T) {
 	}
 	if !containsNote(cr, "json body mismatch") {
 		t.Errorf("expected json body mismatch note, got %v", cr.Notes)
+	}
+	if cr.SizeDiff != -1 {
+		t.Errorf("JSON size difference = %d, want -1", cr.SizeDiff)
+	}
+}
+
+func TestProfile_SameSchemaDifferentValues(t *testing.T) {
+	a := Profile([]byte(`{"id":1,"user":{"email":"owner@example.com"},"items":[{"sku":"A","price":10}]}`))
+	b := Profile([]byte(`{"items":[{"price":999,"sku":"B"}],"user":{"email":"other@example.com"},"id":42}`))
+	if a == nil || b == nil || a.SchemaHash != b.SchemaHash {
+		t.Fatalf("same JSON schema produced different profiles: %#v %#v", a, b)
+	}
+	encoded, err := json.Marshal(a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, secret := range []string{"owner@example.com", `"A"`} {
+		if strings.Contains(string(encoded), secret) {
+			t.Fatalf("profile leaked response value %q: %s", secret, encoded)
+		}
+	}
+}
+
+func TestProfile_ArrayOrderAndLengthDoNotChangeSchema(t *testing.T) {
+	a := Profile([]byte(`{"items":[{"id":1,"active":true}]}`))
+	b := Profile([]byte(`{"items":[{"active":false,"id":2},{"id":3,"active":true}]}`))
+	if a.SchemaHash != b.SchemaHash {
+		t.Fatalf("array cardinality/order changed schema hash: %s != %s", a.SchemaHash, b.SchemaHash)
+	}
+}
+
+func TestProfile_FieldPathsAreUniqueForMixedTypeArrays(t *testing.T) {
+	profile := Profile([]byte(`{"values":[1,"one",null]}`))
+	seen := map[string]bool{}
+	for _, field := range profile.Fields {
+		if seen[field] {
+			t.Fatalf("duplicate field path %q in %+v", field, profile.Fields)
+		}
+		seen[field] = true
+	}
+}
+
+func TestResults_ReportsSchemaSimilarityWithoutValues(t *testing.T) {
+	a := result("owner", 200, []byte(`{"id":1,"profile":{"email":"owner@example.com","role":"admin"}}`))
+	b := result("other", 200, []byte(`{"id":2,"profile":{"email":"other@example.com","role":"user"}}`))
+	cr := Results(a, b, nil)
+	if !cr.SchemaMatch || cr.SharedFieldRatio != 1 {
+		t.Fatalf("expected identical schemas, got %+v", cr)
+	}
+	ev := strings.Join(Evidence(a, b, cr), " ")
+	if !strings.Contains(ev, "response_schema_matches_baseline") {
+		t.Fatalf("schema evidence missing: %s", ev)
+	}
+	if strings.Contains(ev, "owner@example.com") || strings.Contains(ev, "other@example.com") {
+		t.Fatalf("comparison evidence leaked values: %s", ev)
+	}
+}
+
+func TestResults_ReportsFieldLevelSchemaDifference(t *testing.T) {
+	a := result("owner", 200, []byte(`{"id":1,"profile":{"email":"a@b.c","admin":true}}`))
+	b := result("other", 200, []byte(`{"id":2,"profile":{"email":"x@y.z"}}`))
+	cr := Results(a, b, nil)
+	if cr.SchemaMatch || len(cr.FieldsOnlyInA) != 1 || cr.FieldsOnlyInA[0] != "$.profile.admin" {
+		t.Fatalf("unexpected schema difference: %+v", cr)
+	}
+}
+
+func TestResults_FindsNestedSensitiveFieldDifference(t *testing.T) {
+	a := result("owner", 200, []byte(`{"profile":{"credentials":{"api_key":"secret"}}}`))
+	b := result("other", 200, []byte(`{"profile":{"credentials":{}}}`))
+	cr := Results(a, b, nil)
+	if !containsNote(cr, `sensitive field "api_key"`) {
+		t.Fatalf("nested sensitive-field difference was missed: %v", cr.Notes)
+	}
+}
+
+func TestProfile_NonJSONDisclosesNoBodyHash(t *testing.T) {
+	profile := Profile([]byte("private plaintext response"))
+	if profile == nil || profile.Kind != "text" || profile.SchemaHash != "" || len(profile.Fields) != 0 {
+		t.Fatalf("unsafe non-JSON profile: %+v", profile)
 	}
 }
 

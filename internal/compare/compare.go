@@ -2,6 +2,7 @@ package compare
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -10,6 +11,91 @@ import (
 
 	"github.com/VardrSec/vardrgate/internal/model"
 )
+
+const (
+	maxProfileFields = 2048
+	maxProfileDepth  = 64
+)
+
+// Profile returns a deterministic, value-free description of a response body.
+// JSON object keys, array shape, and scalar types participate in the schema
+// hash; scalar values do not. Arrays collapse repeated element shapes.
+func Profile(body []byte) *model.ResponseProfile {
+	if len(bytes.TrimSpace(body)) == 0 {
+		return nil
+	}
+	var value interface{}
+	if err := json.Unmarshal(body, &value); err != nil {
+		return &model.ResponseProfile{Kind: "text"}
+	}
+	seen := map[string]struct{}{}
+	truncated := false
+	walkProfile(value, "$", 0, seen, &truncated)
+	tokens := make([]string, 0, len(seen))
+	for token := range seen {
+		tokens = append(tokens, token)
+	}
+	sort.Strings(tokens)
+	fieldSet := make(map[string]struct{}, len(tokens))
+	for _, token := range tokens {
+		if i := strings.LastIndexByte(token, ':'); i > 0 {
+			fieldSet[token[:i]] = struct{}{}
+		}
+	}
+	fields := make([]string, 0, len(fieldSet))
+	for field := range fieldSet {
+		fields = append(fields, field)
+	}
+	sort.Strings(fields)
+	sum := sha256.Sum256([]byte(strings.Join(tokens, "\n")))
+	return &model.ResponseProfile{
+		Kind: "json", SchemaHash: fmt.Sprintf("%x", sum), Fields: fields, Truncated: truncated,
+	}
+}
+
+func walkProfile(value interface{}, path string, depth int, seen map[string]struct{}, truncated *bool) {
+	if depth > maxProfileDepth || len(seen) >= maxProfileFields {
+		*truncated = true
+		return
+	}
+	add := func(kind string) bool {
+		if len(seen) >= maxProfileFields {
+			*truncated = true
+			return false
+		}
+		seen[path+":"+kind] = struct{}{}
+		return true
+	}
+	switch typed := value.(type) {
+	case map[string]interface{}:
+		if !add("object") {
+			return
+		}
+		keys := make([]string, 0, len(typed))
+		for key := range typed {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		for _, key := range keys {
+			walkProfile(typed[key], path+"."+key, depth+1, seen, truncated)
+		}
+	case []interface{}:
+		if !add("array") {
+			return
+		}
+		for _, child := range typed {
+			walkProfile(child, path+"[]", depth+1, seen, truncated)
+		}
+	case string:
+		add("string")
+	case float64:
+		add("number")
+	case bool:
+		add("boolean")
+	case nil:
+		add("null")
+	}
+}
 
 // SensitiveTiers groups field names by what their exposure means. A leaked
 // password and a leaked "created_by" are both worth knowing about and are not
@@ -334,6 +420,20 @@ func Results(a, b model.ExecutionResult, fields []string) model.ComparisonResult
 
 	// Raw body equality.
 	cr.BodyMatch = bytes.Equal(a.Body, b.Body)
+	if !cr.BodyMatch {
+		cr.SizeDiff = int64(len(b.Body)) - int64(len(a.Body))
+	}
+
+	profileA, profileB := Profile(a.Body), Profile(b.Body)
+	if profileA != nil && profileB != nil && profileA.Kind == "json" && profileB.Kind == "json" {
+		cr.SchemaMatch = profileA.SchemaHash == profileB.SchemaHash && !profileA.Truncated && !profileB.Truncated
+		cr.SharedFieldRatio, cr.FieldsOnlyInA, cr.FieldsOnlyInB = compareFields(profileA.Fields, profileB.Fields)
+		if cr.SchemaMatch && !cr.BodyMatch {
+			notes = append(notes, "response schemas match; only values differ")
+		} else if !cr.SchemaMatch {
+			notes = append(notes, fmt.Sprintf("response schema overlap: %.0f%%", cr.SharedFieldRatio*100))
+		}
+	}
 
 	// Normalised JSON equality (order-independent key comparison).
 	if !cr.BodyMatch && looksLikeJSON(a.Body) && looksLikeJSON(b.Body) {
@@ -347,7 +447,6 @@ func Results(a, b model.ExecutionResult, fields []string) model.ComparisonResult
 			))
 		}
 	} else if !cr.BodyMatch {
-		cr.SizeDiff = int64(len(b.Body)) - int64(len(a.Body))
 		notes = append(notes, fmt.Sprintf(
 			"body size difference: %d bytes (%s=%d %s=%d)",
 			abs(cr.SizeDiff), a.IdentityID, len(a.Body), b.IdentityID, len(b.Body),
@@ -355,9 +454,11 @@ func Results(a, b model.ExecutionResult, fields []string) model.ComparisonResult
 	}
 
 	// Sensitive field presence in each body.
+	sensitiveA := sensitiveFieldSet(a.Body, fields)
+	sensitiveB := sensitiveFieldSet(b.Body, fields)
 	for _, field := range fields {
-		inA := containsField(a.Body, field)
-		inB := containsField(b.Body, field)
+		_, inA := sensitiveA[normalizeField(field)]
+		_, inB := sensitiveB[normalizeField(field)]
 		if inA != inB {
 			holder := b.IdentityID
 			if inA {
@@ -373,6 +474,45 @@ func Results(a, b model.ExecutionResult, fields []string) model.ComparisonResult
 	return cr
 }
 
+func compareFields(a, b []string) (float64, []string, []string) {
+	setA, setB := map[string]struct{}{}, map[string]struct{}{}
+	for _, field := range a {
+		setA[field] = struct{}{}
+	}
+	for _, field := range b {
+		setB[field] = struct{}{}
+	}
+	shared := 0
+	var onlyA, onlyB []string
+	for field := range setA {
+		if _, ok := setB[field]; ok {
+			shared++
+		} else {
+			onlyA = append(onlyA, field)
+		}
+	}
+	for field := range setB {
+		if _, ok := setA[field]; !ok {
+			onlyB = append(onlyB, field)
+		}
+	}
+	sort.Strings(onlyA)
+	sort.Strings(onlyB)
+	union := len(setA) + len(setB) - shared
+	if union == 0 {
+		return 1, onlyA, onlyB
+	}
+	return float64(shared) / float64(union), onlyA, onlyB
+}
+
+func sensitiveFieldSet(body []byte, fields []string) map[string]struct{} {
+	set := map[string]struct{}{}
+	for _, hit := range ScanSensitive(body, fields) {
+		set[normalizeField(hit.Field)] = struct{}{}
+	}
+	return set
+}
+
 // Evidence returns a slice of strings that can be attached to a Finding,
 // summarising the most security-relevant differences.
 func Evidence(a, b model.ExecutionResult, cr model.ComparisonResult) []string {
@@ -383,6 +523,15 @@ func Evidence(a, b model.ExecutionResult, cr model.ComparisonResult) []string {
 	}
 	if !cr.BodyMatch {
 		ev = append(ev, fmt.Sprintf("bodies_differ: size_delta=%d", cr.SizeDiff))
+	}
+	if cr.SchemaMatch && !cr.BodyMatch {
+		ev = append(ev, fmt.Sprintf("response_schema_matches_baseline: field_overlap=%.0f%%", cr.SharedFieldRatio*100))
+	}
+	if len(cr.FieldsOnlyInA) > 0 {
+		ev = append(ev, "fields_only_in_baseline="+strings.Join(cr.FieldsOnlyInA, ","))
+	}
+	if len(cr.FieldsOnlyInB) > 0 {
+		ev = append(ev, "fields_only_in_compared="+strings.Join(cr.FieldsOnlyInB, ","))
 	}
 	for _, note := range cr.Notes {
 		ev = append(ev, note)
@@ -418,25 +567,6 @@ func normalizedEqual(a, b []byte) bool {
 		return false
 	}
 	return bytes.Equal(na, nb)
-}
-
-// containsField reports whether body is a JSON object that contains the
-// top-level key field (case-insensitive).
-func containsField(body []byte, field string) bool {
-	if !looksLikeJSON(body) {
-		return false
-	}
-	var m map[string]json.RawMessage
-	if err := json.Unmarshal(body, &m); err != nil {
-		return false
-	}
-	needle := []byte(field)
-	for k := range m {
-		if bytes.EqualFold([]byte(k), needle) {
-			return true
-		}
-	}
-	return false
 }
 
 func abs(n int64) int64 {

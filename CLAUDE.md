@@ -126,7 +126,7 @@ Other rules:
 - `deny_status`: `tc.DenyStatuses` (from a policy's `response.deny_status`) makes the listed status codes explicit denials, so an API that hides existence behind 404 can be evaluated. The engine reclassifies the *execution record* as well as the finding, so a result document cannot contradict itself, and adds `deny_status_declared=` evidence. A 2xx in the list is rejected by validation. See ADR 0007.
 - `tenant_field`: when `Resource.TenantID` is empty and `Resource.TenantField` is set, the resource's tenant is read from the offending identity's own response body via `compare.FieldValue` — the caller's own response proves the isolation break. A bound `TenantID` wins. See ADR 0007.
 - Every elevated category requires explicit context in the test case; `TenantID` alone still yields `unexpected_access`. The engine never guesses from a weak signal.
-- Findings include response-comparison evidence: the offending response is compared against a baseline (the owner, or any allowed identity); a matching body is flagged.
+- Findings include response-comparison evidence: the offending response is compared against a baseline (the owner, or any allowed identity); exact body matches and value-free JSON schema matches are distinguished. Every JSON execution exposes a bounded `ResponseProfile` (schema hash plus structural paths, no values) for control-plane visualization. JSON and non-JSON size deltas are accurate, and sensitive-field differences are recursive.
 - Execution errors suppress findings for that identity.
 - `decision: skip` records execution but emits no finding.
 - Ambiguous outcomes (404, 5xx, 3xx) when expected `deny` produce no finding.
@@ -183,7 +183,12 @@ Parses the offline job envelope (`type`, `program_id`, `config.test_case`, `conf
 
 Compares two `ExecutionResult` values. Wired into the engine: `comparisonEvidence` compares an offending response against a legitimate baseline and attaches the result to the finding.
 
-Comparisons: status-code equality, raw body equality, normalised JSON equality (key-order independent), response-size difference, presence/absence of sensitive fields (`token`, `secret`, `api_key`, etc.).
+Comparisons: status-code equality, raw body equality, normalised JSON equality (key-order independent), value-free JSON schema equality and field overlap, response-size difference, recursive presence/absence of sensitive fields (`token`, `secret`, `api_key`, etc.).
+
+`Profile(body)` emits a bounded structural description: at most 2,048 distinct
+paths and 64 levels, with a truncation flag. Its SHA-256 schema hash covers only
+sorted path/type tokens, never scalar values. Non-JSON bodies expose only their
+kind and deliberately receive no body hash.
 
 `Results(a, b, fields)` takes the sensitive-field set as a parameter — `nil` means `DefaultSensitiveFields`. It is passed `tc.SensitiveFields` so a case that overrides the set gets the same answer here as from the engine's sensitive-data check.
 
