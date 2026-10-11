@@ -74,7 +74,7 @@ func (e *Engine) Run(ctx context.Context, tc model.AuthorizationTestCase) (Resul
 
 	// First pass: execute every identity and index the results so finding
 	// evaluation can compare an offending response against a legitimate baseline.
-	result := Result{TestCaseID: tc.ID}
+	result := Result{TestCaseID: tc.ID, Findings: make([]model.Finding, 0)}
 	execByID := make(map[string]model.ExecutionResult, len(tc.Identities))
 	for _, identity := range tc.Identities {
 		exec := e.exec.Execute(ctx, identity, req)

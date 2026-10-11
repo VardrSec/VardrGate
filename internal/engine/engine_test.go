@@ -66,6 +66,17 @@ func TestRun_NoFindingsWhenExpectationsMet(t *testing.T) {
 	if len(result.Findings) != 0 {
 		t.Fatalf("expected no findings, got %d: %+v", len(result.Findings), result.Findings)
 	}
+	encoded, err := json.Marshal(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var wire map[string]json.RawMessage
+	if err := json.Unmarshal(encoded, &wire); err != nil {
+		t.Fatal(err)
+	}
+	if string(wire["findings"]) != "[]" {
+		t.Fatalf("clean findings must serialize as [], got %s", wire["findings"])
+	}
 }
 
 // Issue 6: deny→allow without TenantID must be unexpected_access, not potential_bola.

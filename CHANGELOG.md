@@ -8,6 +8,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Clean engine results serialize `findings` as `[]`, allowing VardrMap uploads
+  without treating an empty result as malformed.
+
 - **Misleading differential evidence for JSON responses.** JSON body mismatches
   always reported `size_delta=0`, and sensitive-field differences were checked
   only at the top level even though leak detection is recursive. Size deltas are
