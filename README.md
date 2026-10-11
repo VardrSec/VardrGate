@@ -327,8 +327,11 @@ Execute an authorization test case.
 `unexpected_access` / `authorization_mismatch`.
 
 **Response** (`application/json`): `test_case_id`, `executions[]` (status code,
-observed outcome, selected headers, duration, error), and `findings[]` (category,
-severity, confidence, identity, message, evidence, timestamp).
+observed outcome, selected headers, duration, error, and a value-free
+`response_profile`), and `findings[]` (category, severity, confidence, identity,
+message, evidence, timestamp). A JSON response profile contains a deterministic
+schema hash and structural field paths; response values and body hashes are
+never exposed. Non-JSON responses report only `kind: "text"`.
 
 **Error responses** carry a stable `code` for client branching:
 

@@ -40,7 +40,7 @@ The following were originally out of scope and are now implemented. See
 | Capability | Notes |
 |---|---|
 | `potential_bola`, `cross_tenant_access`, `privilege_escalation` | Emitted when the test case supplies resource-ownership / tenant / role context |
-| Response-body comparison in findings | Offending response compared against a legitimate baseline; matching body flagged |
+| Response-body comparison in findings | Offending response compared against a legitimate baseline; exact body and value-free JSON schema matches distinguished, with field overlap and one-sided paths |
 | Vertical privilege escalation | Via `resource.required_role` + `role_hierarchy` |
 | Declarative policies | `internal/policy` compiles a YAML control into a test case, run by `vardrgate policy run` (ADR 0006) |
 | Offline execution | `vardrgate run --job job.json --out result.json`, or `--cases` for a suite |

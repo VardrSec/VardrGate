@@ -214,14 +214,29 @@ type ExecutionResult struct {
 	DurationMS      int64              `json:"duration_ms"`
 	Error           string             `json:"error,omitempty"`
 	ErrorKind       ExecutionErrorKind `json:"error_kind,omitempty"`
+	ResponseProfile *ResponseProfile   `json:"response_profile,omitempty"`
+}
+
+// ResponseProfile is a value-free description of a retained response body.
+// It lets control planes compare API shape across identities without receiving
+// the body or a reversible hash of its values.
+type ResponseProfile struct {
+	Kind       string   `json:"kind"`
+	SchemaHash string   `json:"schema_hash,omitempty"`
+	Fields     []string `json:"fields,omitempty"`
+	Truncated  bool     `json:"truncated,omitempty"`
 }
 
 // ComparisonResult summarizes differences observed across identity executions.
 type ComparisonResult struct {
-	StatusCodeMatch bool     `json:"status_code_match"`
-	BodyMatch       bool     `json:"body_match"`
-	SizeDiff        int64    `json:"size_diff"`
-	Notes           []string `json:"notes,omitempty"`
+	StatusCodeMatch  bool     `json:"status_code_match"`
+	BodyMatch        bool     `json:"body_match"`
+	SchemaMatch      bool     `json:"schema_match"`
+	SharedFieldRatio float64  `json:"shared_field_ratio"`
+	FieldsOnlyInA    []string `json:"fields_only_in_a,omitempty"`
+	FieldsOnlyInB    []string `json:"fields_only_in_b,omitempty"`
+	SizeDiff         int64    `json:"size_diff"`
+	Notes            []string `json:"notes,omitempty"`
 }
 
 // Finding records a single authorization anomaly with evidence.

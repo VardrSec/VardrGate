@@ -74,10 +74,11 @@ func (e *Engine) Run(ctx context.Context, tc model.AuthorizationTestCase) (Resul
 
 	// First pass: execute every identity and index the results so finding
 	// evaluation can compare an offending response against a legitimate baseline.
-	result := Result{TestCaseID: tc.ID}
+	result := Result{TestCaseID: tc.ID, Findings: make([]model.Finding, 0)}
 	execByID := make(map[string]model.ExecutionResult, len(tc.Identities))
 	for _, identity := range tc.Identities {
 		exec := e.exec.Execute(ctx, identity, req)
+		exec.ResponseProfile = compare.Profile(exec.Body)
 		// The executor classifies against the default status mapping; it knows
 		// nothing about a policy-declared deny convention. Reclassify here so
 		// the execution record and the findings drawn from it cannot disagree

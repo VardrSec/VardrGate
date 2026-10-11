@@ -8,6 +8,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Clean engine results serialize `findings` as `[]`, allowing VardrMap uploads
+  without treating an empty result as malformed.
+
+- **Misleading differential evidence for JSON responses.** JSON body mismatches
+  always reported `size_delta=0`, and sensitive-field differences were checked
+  only at the top level even though leak detection is recursive. Size deltas are
+  now accurate for every body type and nested sensitive fields are compared.
+
 - **False `missing_authentication` at critical severity against APIs that refuse
   with a success status.** An API answering `200 OK` with `{"error":"forbidden"}`
   was classified as an allow, so an anonymous caller the server had *correctly
@@ -17,6 +25,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   against correctly-behaving software. See ADR 0008.
 
 ### Added
+
+- **Value-free response profiles.** Every JSON execution now carries a stable
+  schema hash and sorted structural field paths, never response values. Baseline
+  comparison distinguishes exact-body equality from schema equality, reports
+  field overlap and one-sided paths, and strengthens BOLA evidence when two
+  identities receive the same object shape with identity-specific values.
+  Profiles are bounded to 2,048 paths and 64 levels; truncation is explicit.
 
 - **`response.deny_when`**: recognise a denial expressed in the response body
   rather than the status line, via `body_contains` or a dotted-path

@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strings"
 	"testing"
@@ -64,6 +65,17 @@ func TestRun_NoFindingsWhenExpectationsMet(t *testing.T) {
 	}
 	if len(result.Findings) != 0 {
 		t.Fatalf("expected no findings, got %d: %+v", len(result.Findings), result.Findings)
+	}
+	encoded, err := json.Marshal(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var wire map[string]json.RawMessage
+	if err := json.Unmarshal(encoded, &wire); err != nil {
+		t.Fatal(err)
+	}
+	if string(wire["findings"]) != "[]" {
+		t.Fatalf("clean findings must serialize as [], got %s", wire["findings"])
 	}
 }
 
@@ -446,6 +458,29 @@ func TestRun_ComparisonEvidenceWhenBodiesMatch(t *testing.T) {
 	}
 	if !matched {
 		t.Errorf("expected comparison evidence noting matching bodies, got %+v", result.Findings[0].Evidence)
+	}
+}
+
+func TestRun_EmitsValueFreeResponseProfiles(t *testing.T) {
+	tc := baseTC()
+	body := []byte(`{"id":42,"profile":{"email":"secret@example.com"}}`)
+	eng := New(&stubExecutor{responses: map[string]int{"admin": 200, "user": 403}, body: map[string][]byte{"admin": body, "user": []byte(`{"error":"forbidden"}`)}})
+	result, err := eng.Run(context.Background(), tc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Executions) != 2 || result.Executions[0].ResponseProfile == nil {
+		t.Fatalf("missing response profile: %+v", result.Executions)
+	}
+	encoded, err := json.Marshal(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), "secret@example.com") {
+		t.Fatalf("result leaked response value: %s", encoded)
+	}
+	if !strings.Contains(string(encoded), `"response_profile"`) || !strings.Contains(string(encoded), `"schema_hash"`) {
+		t.Fatalf("response profile absent from result JSON: %s", encoded)
 	}
 }
 
