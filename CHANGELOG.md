@@ -6,6 +6,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Documentation
+
+- Align Go/dependency requirements with `go.mod`; clarify planned PostgreSQL storage,
+  definition-based operation coverage, standalone authentication boundaries and
+  Map/Runner assessment integration. Refresh contributor guidance and verification
+  scope. No runtime behavior changed.
+
 ### Fixed
 
 - Clean engine results serialize `findings` as `[]`, allowing VardrMap uploads
