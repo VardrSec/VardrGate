@@ -6,15 +6,13 @@ VardrGate is an API authorization assurance engine. It accepts a test case (or a
 
 ## Technology
 
-- Go 1.24 or newer
-- Standard library for everything except policy parsing
-- `gopkg.in/yaml.v3` — the **only** external dependency, for YAML policy files (see ADR 0001). Do not add further dependencies without an ADR.
+- Go 1.25 or newer, matching `go.mod`
+- Standard library plus two direct dependencies: `gopkg.in/yaml.v3` for policy parsing (ADR 0001) and `modernc.org/sqlite` for durable queue storage (ADR 0004), with their indirect dependencies recorded in `go.mod`
+- Do not add further dependencies without an ADR.
 - `net/http` for HTTP clients and server
 - `http.ServeMux` for routing
 - `log/slog` for structured logging
-- `go test -race`, `go vet`, `gofmt` before every commit
-
-- `modernc.org/sqlite` — the durable job store (see ADR 0004). Pure Go, no cgo.
+- Code changes require `go test -race ./...`, `go vet ./...` and formatting checks before review. Docs-only changes require a diff and Markdown-link check rather than rerunning the Go suite.
 
 Do not add PostgreSQL, Redis, Docker, Kubernetes, message queues, background workers, or cloud deployment unless explicitly requested.
 
@@ -74,7 +72,7 @@ CHANGELOG.md                 Keep a Changelog / SemVer
 
 ### `internal/model`
 
-Owns all domain types. No business logic except `ClassifyOutcome`, which converts an HTTP status code to an `ObservedOutcome` constant. All types that cross the API boundary carry JSON tags. `Credential.Value` has `json:"-"` and a custom `UnmarshalJSON` so callers can supply the secret in request JSON but it is never written to any response, finding, or log.
+Owns all domain types. `ClassifyOutcome` maps default HTTP statuses and `ClassifyOutcomeWith` adds reviewed denial statuses; the engine applies body-aware denial conditions. All types that cross the API boundary carry JSON tags. `Credential.Value` has `json:"-"` and a custom `UnmarshalJSON` so callers can supply the secret in request JSON but it is never written to any response, finding, or log.
 
 Current types: `Identity`, `Credential`, `RequestTemplate`, `ExpectedAccess`, `ExecutionResult`, `ComparisonResult`, `Finding`, `AuthorizationTestCase`.
 
@@ -129,17 +127,17 @@ Other rules:
 - Findings include response-comparison evidence: the offending response is compared against a baseline (the owner, or any allowed identity); exact body matches and value-free JSON schema matches are distinguished. Every JSON execution exposes a bounded `ResponseProfile` (schema hash plus structural paths, no values) for control-plane visualization. JSON and non-JSON size deltas are accurate, and sensitive-field differences are recursive.
 - Execution errors suppress findings for that identity.
 - `decision: skip` records execution but emits no finding.
-- Ambiguous outcomes (404, 5xx, 3xx) when expected `deny` produce no finding.
+- Ambiguous outcomes (undeclared 404, 5xx, 3xx) when expected `deny` produce no authorization finding. A reviewed `deny_status` can explicitly classify 404 as denial.
 
 Validation rejects: duplicate identity ids, expected-access references to unknown identities, invalid credential type/header/value combinations, and resource references to unknown owner identities or roles absent from `role_hierarchy`.
 
 The `Executor` interface is defined in the engine package and satisfied by `*client.Client`. Tests use a `stubExecutor`. `Run` executes all identities first, then evaluates findings so it can compare against a baseline.
 
-`engine.Result` has JSON tags (`test_case_id`, `executions`, `findings`). `engine.Validate` is exported so a caller holding a suite can check every case before running any of them.
+`engine.Result` has JSON tags (`test_case_id`, `executions`, `findings`). A clean run serializes `findings` as `[]`, not `null`, for Map's import contract. `engine.Validate` is exported so a caller holding a suite can check every case before running any of them.
 
 ### `internal/coverage`
 
-`Analyze(spec, cases)` reports which spec operations are exercised by a set of test cases (tested/untested + percent). Matches a case to an operation on HTTP method and a path-template suffix match (`{param}` wildcards; server base path ignored). Exposed via `vardrgate coverage`.
+`Analyze(spec, cases)` maps case definitions to spec operations (output labels tested/untested + percent). It does not run cases or measure verified security coverage. Matches a case to an operation on HTTP method and a path-template suffix match (`{param}` wildcards; server base path ignored). Exposed via `vardrgate coverage`.
 
 ### `internal/scaffold`
 
@@ -206,7 +204,7 @@ Runner job queue and runner registry behind a `Store` interface. Two implementat
 
 Exposes the HTTP API. No business logic.
 
-- `New(log, eng, store, apiKey)` registers routes on a `ServeMux` and returns a `Handler`.
+- `New(log, eng, store, keys)` registers routes on a `ServeMux` and returns a `Handler`; `keys` maps bearer tokens to tenants.
 - `GET /health` — 200 `{"status":"ok"}`.
 - `POST /tests/execute` — synchronous execution; 1 MB `MaxBytesReader`, single-decoder, second `Decode` must return `io.EOF`, stable error codes.
 - Runner job queue (in `jobs.go`), matching VardrRunner's client shapes: `POST /jobs`, `GET /jobs/pending`, `GET /jobs/{id}`, `POST /jobs/{id}/claim` (409 on double-claim), `PATCH /jobs/{id}`, `POST /jobs/{id}/done|failed|events|upload`, `POST /runner/heartbeat`. Uses Go 1.22 method+path routing.
@@ -234,6 +232,10 @@ Exit codes are shared by every command that executes a test case: `0` ran clean,
 
 ## Development rules
 
+Use focused tests while editing, then run the relevant full checks for code changes.
+For docs-only changes, inspect the diff and local Markdown links; steps 3–6 below
+apply when runtime code or tests change.
+
 Before committing:
 1. Read the files you plan to change.
 2. Make the smallest coherent change.
@@ -245,6 +247,32 @@ Before committing:
 8. Do not introduce speculative interfaces or abstractions.
 9. Do not add external dependencies without a written justification.
 10. Stop when the task is complete.
+
+## Map and Runner integration
+
+- Map is the engagement control plane; Runner drives this binary over JSON. Gate's
+  standalone queue is separate from Map's job queue and assessment storage.
+- Runner adds a `case_hash` of the unresolved reviewed spec to the retained artifact;
+  Map verifies it against the claim-time snapshot. Gate does not compute this hash
+  or know Map's evidence foreign keys. Preserve the result fields and empty arrays.
+- Gate's exit 0 means nothing reached the configured finding threshold, not that
+  every identity was evaluated or the API is secure. Map separately reports
+  conclusive, partial or inconclusive assessment completeness using a bound case
+  and legitimate baseline. Findings remain candidates for operator verification.
+- Map/Runner share original versioned playbook guidance; those guides are not
+  Gate policies and do not execute, mark coverage or replace reviewed expectations.
+- Map's disposable three-repository acceptance harness runs this real binary and
+  Runner against loopback fixtures with SQLite or migrated PostgreSQL for Map.
+  It does not add a PostgreSQL Store to Gate or establish hosted OAuth success.
+- Preserve local private-target opt-in, declared deny conventions, mutation safety
+  and setup failure behavior. Automatic login refresh and a general workflow
+  language remain future work.
+
+## Communication
+
+Report major results, blockers and required decisions; omit routine command-by-command
+updates to conserve tokens. Use dated, inspected evidence when comparing the platform
+with ars0n after platform changes; no weekly polling is requested.
 
 ## Code quality standards
 

@@ -5,15 +5,16 @@ different callers, run the request as each of them, and get structured,
 evidence-backed findings when the real behaviour disagrees.
 
 VardrGate is the first execution primitive of a larger API security control
-plane. Today it proves authorization controls; it is designed to be driven
-locally, in CI, from the HTTP API, or by [VardrRunner](../VardrRunner).
+plane. It evaluates reviewed authorization expectations and is designed to be driven
+locally, in CI, from the HTTP API, or by [VardrRunner](https://github.com/VardrSec/VardrRunner).
 
 ## What it does
 
 Given a test case — a request, a set of identities with credentials, optional
 resource-ownership context, and the expected authorization decision per identity
 — VardrGate executes the request once per identity, classifies each observed
-response, and returns findings for every mismatch.
+response, and returns candidate findings for definite mismatches. Errors and ambiguous
+responses do not establish a clean assessment; verify candidates before reporting them.
 
 ### Finding categories
 
@@ -35,7 +36,7 @@ category from a weak signal. See [`docs/adr/0002-ownership-aware-classification.
 
 ## Quickstart
 
-**Requirements:** Go 1.24 or newer.
+**Requirements:** Go 1.25 or newer, matching `go.mod`.
 
 ```sh
 git clone https://github.com/VardrSec/VardrGate
@@ -139,8 +140,9 @@ A Postman v2.1 collection works too:
 ./vardrgate coverage --spec openapi.json --cases cases.json
 ```
 
-Reports which spec operations are tested vs untested (with a percentage), so you
-can see the gaps in your authorization test suite.
+Maps case definitions to spec operations, using the output labels tested/untested
+and a percentage. This shows authoring gaps; it does not execute cases or measure
+verified controls, successful assessments or overall API security coverage.
 
 Environment variables (serve mode):
 
@@ -346,7 +348,7 @@ never exposed. Non-JSON responses report only `kind: "text"`.
 ## Runner job queue
 
 For continuous, distributed execution, VardrGate exposes a job queue that
-[VardrRunner](../VardrRunner) drives: it polls for pending jobs, claims them,
+[VardrRunner](https://github.com/VardrSec/VardrRunner) drives: it polls for pending jobs, claims them,
 streams events, uploads results, and marks them done or failed. The endpoint
 shapes match VardrRunner's existing client, so VardrGate is a drop-in backend.
 See [`docs/adr/0003-runner-job-queue.md`](docs/adr/0003-runner-job-queue.md).
@@ -368,8 +370,27 @@ All of these require a bearer token when keys are configured. With
 that tenant — a caller can only see and act on its own jobs and audit entries;
 cross-tenant access returns 404. Set `VARDRGATE_DB` to a file path for a durable
 queue (SQLite) whose jobs survive a restart; unset uses an in-memory store.
-PostgreSQL is the intended production driver and implements the same `Store`
-interface.
+PostgreSQL remains a planned driver behind the same `Store` interface; it is not
+implemented in Gate. VardrMap's separate backend uses PostgreSQL.
+
+### Using Map as the control plane
+
+[VardrMap](https://github.com/VardrSec/VardrMap) stores reviewed cases and queues jobs;
+Runner invokes the local Gate binary and uploads its result. This workflow uses Map's
+queue rather than requiring the standalone Gate HTTP server. Runner retains a hash of
+the unresolved case, which Map checks against its claim-time snapshot. Gate's own
+result contract remains `test_case_id`, `executions` and `findings` (an empty array
+when clean).
+
+Map's separate assessment is conclusive, partial or inconclusive; an exit-0 command
+or zero candidates alone does not prove a secure API. The shared API playbooks are
+operator guidance, not executable Gate policies or evidence of coverage. The matching
+Map/Runner additions are currently Unreleased; deploy the backend migration/endpoints
+before publishing that Runner release.
+
+The [combined acceptance harness](https://github.com/VardrSec/VardrMap/blob/main/scripts/integration/README.md)
+tests this workflow against bounded loopback fixtures with disposable SQLite or
+PostgreSQL for Map. It does not verify hosted GitHub OAuth or production deployment.
 
 ## Security defaults
 
@@ -383,6 +404,9 @@ interface.
   response, finding, or log; URL userinfo and sensitive query params are redacted
   from evidence.
 - Redirects are not followed; response bodies are capped (5 MB default).
+- Standalone `/tests/execute` is unauthenticated even when queue bearer keys are
+  configured. Restrict access to that server appropriately; keys protect the queue,
+  runner and audit routes, not the synchronous executor.
 
 ## Project layout
 
