@@ -72,12 +72,13 @@ type wireCase struct {
 }
 
 type wireIdentity struct {
-	ID          string         `json:"id"`
-	Name        string         `json:"name,omitempty"`
-	Role        string         `json:"role,omitempty"`
-	TenantID    string         `json:"tenant_id,omitempty"`
-	Description string         `json:"description,omitempty"`
-	Credential  wireCredential `json:"credential"`
+	ID          string                   `json:"id"`
+	Name        string                   `json:"name,omitempty"`
+	Role        string                   `json:"role,omitempty"`
+	TenantID    string                   `json:"tenant_id,omitempty"`
+	Description string                   `json:"description,omitempty"`
+	Credential  wireCredential           `json:"credential"`
+	Preflight   *model.IdentityPreflight `json:"preflight,omitempty"`
 }
 
 type wireCredential struct {
@@ -95,6 +96,7 @@ func toWire(tc model.AuthorizationTestCase) wireCase {
 			Role:        id.Role,
 			TenantID:    id.TenantID,
 			Description: id.Description,
+			Preflight:   id.Preflight,
 			Credential: wireCredential{
 				Type:   id.Credential.Type,
 				Header: id.Credential.Header,

@@ -153,6 +153,7 @@ func TestMarshalCases_PreservesEveryTestCaseField(t *testing.T) {
 			Role:        "owner",
 			TenantID:    "tenant-a",
 			Description: "the legitimate owner",
+			Preflight:   &model.IdentityPreflight{URL: "https://api.example.com/session", ExpectedStatus: 200, JSONFields: map[string]string{"id": "owner"}},
 			Credential:  model.Credential{Type: model.CredentialTypeBearer, Value: "literal"},
 		}},
 		Request:         model.RequestTemplate{Method: "GET", URL: "https://api.example.com/x"},

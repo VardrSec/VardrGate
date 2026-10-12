@@ -277,6 +277,28 @@ See [`docs/adr/0009-policy-discovery.md`](docs/adr/0009-policy-discovery.md).
 
 ## HTTP API
 
+### Check sessions before authorization requests
+
+An authenticated identity may declare an optional reviewed preflight:
+
+```json
+"preflight": {
+  "url": "https://api.example.com/session",
+  "expected_status": 200,
+  "json_fields": {"user.id": "known-owner-id", "tenant": "known-tenant"}
+}
+```
+
+Gate sends one same-origin GET with that identity's credential after setup and
+before resource testing. Every declared public principal field must match. Any
+failed check stops the case with no resource executions/findings; the safe
+`preflight` diagnostic array is written and the CLI exits 3. Bodies, cookies and
+matched values are not retained. Never put secrets in field matches or URLs.
+Unconfigured cases retain their behavior. This does not refresh tokens or replace
+a legitimate allow baseline on the resource. Runner uses
+`run --require-identity-preflight` so older Gate builds fail before traffic.
+See [ADR 0011](docs/adr/0011-identity-preflight.md).
+
 ### `GET /health`
 
 Returns `{"status":"ok"}` with HTTP 200.

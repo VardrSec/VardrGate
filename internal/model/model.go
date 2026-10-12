@@ -1,6 +1,7 @@
 package model
 
 import (
+	"bytes"
 	"encoding/json"
 	"strings"
 	"time"
@@ -141,12 +142,42 @@ func ClassifyOutcomeWith(statusCode int, hasError bool, denyStatuses []int) Obse
 
 // Identity represents a principal (user, role, service account) used in a test.
 type Identity struct {
-	ID          string     `json:"id"`
-	Name        string     `json:"name,omitempty"`
-	Role        string     `json:"role,omitempty"`
-	TenantID    string     `json:"tenant_id,omitempty"`
-	Description string     `json:"description,omitempty"`
-	Credential  Credential `json:"credential"`
+	ID          string             `json:"id"`
+	Name        string             `json:"name,omitempty"`
+	Role        string             `json:"role,omitempty"`
+	TenantID    string             `json:"tenant_id,omitempty"`
+	Description string             `json:"description,omitempty"`
+	Credential  Credential         `json:"credential"`
+	Preflight   *IdentityPreflight `json:"preflight,omitempty"`
+}
+
+// IdentityPreflight verifies a reviewed session endpoint with the same credential.
+// JSONFields contains public principal metadata, never credentials or response secrets.
+type IdentityPreflight struct {
+	URL            string            `json:"url"`
+	ExpectedStatus int               `json:"expected_status"`
+	JSONFields     map[string]string `json:"json_fields"`
+}
+
+// Reject misspelled options instead of silently weakening an identity check.
+func (p *IdentityPreflight) UnmarshalJSON(data []byte) error {
+	type wire IdentityPreflight
+	var value wire
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&value); err != nil {
+		return err
+	}
+	*p = IdentityPreflight(value)
+	return nil
+}
+
+// PreflightResult contains only bounded diagnostics, never response values or headers.
+type PreflightResult struct {
+	IdentityID string `json:"identity_id"`
+	Status     string `json:"status"`
+	Reason     string `json:"reason"`
+	StatusCode int    `json:"status_code"`
 }
 
 // Credential carries type and header metadata.

@@ -46,6 +46,7 @@ Flags:
 	failOn := fs.String("fail-on", failOnNone, "exit 2 when a finding at or above this severity is reported (none, info, low, medium, high, critical)")
 	allowPrivate := fs.Bool("allow-private-targets", false, "permit loopback and private-network targets (--cases only; a job envelope carries its own setting)")
 	allowMutating := fs.Bool("allow-mutating", false, "confirm that replaying an unsafe method (POST/PUT/PATCH/DELETE) once per identity is intended")
+	requirePreflight := fs.Bool("require-identity-preflight", false, "require at least one declared identity preflight (Runner compatibility guard)")
 	timeout := fs.Duration("timeout", 0, "per-request timeout (--cases only; 0 uses the client default)")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -70,6 +71,9 @@ Flags:
 			return err
 		}
 		tc := env.TestCase()
+		if *requirePreflight && !hasPreflight(tc) {
+			return errors.New("identity preflight required but not declared")
+		}
 		if *allowMutating {
 			tc.Mutating = true
 		}
@@ -94,6 +98,13 @@ Flags:
 		}
 		if err := validateSuite(cases); err != nil {
 			return err
+		}
+		if *requirePreflight {
+			for _, tc := range cases {
+				if !hasPreflight(tc) {
+					return errors.New("identity preflight required but not declared")
+				}
+			}
 		}
 		cfg := client.Config{AllowPrivateTargets: *allowPrivate, Timeout: *timeout}
 		eng := engine.New(client.NewWithConfig(nil, cfg))
@@ -295,6 +306,11 @@ func demoNarrative(res engine.Result) string {
 func gate(results []engine.Result, threshold model.Severity) error {
 	var unreached []string
 	for _, res := range results {
+		for _, p := range res.Preflight {
+			if p.Status != "passed" {
+				return exitError{code: exitNotExecuted, err: errors.New("identity preflight failed; authorization requests were not executed")}
+			}
+		}
 		if len(res.Executions) == 0 {
 			continue
 		}
@@ -334,6 +350,15 @@ func gate(results []engine.Result, threshold model.Severity) error {
 		code: exitFindings,
 		err:  fmt.Errorf("%s at or above %s: %s", plural(len(breaching), "finding", "findings"), threshold, summarize(breaching)),
 	}
+}
+
+func hasPreflight(tc model.AuthorizationTestCase) bool {
+	for _, identity := range tc.Identities {
+		if identity.Preflight != nil {
+			return true
+		}
+	}
+	return false
 }
 
 // runError maps an engine failure to the right exit code. A failed setup step

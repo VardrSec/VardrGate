@@ -35,6 +35,7 @@ internal/
 ├── discover/                draft policies proposed from a spec (never executable)
 ├── engine/                  engine.go: validation, execution, findings
 │                         setup.go: pre-request steps, capture, substitution
+│                         preflight.go: same-origin session principal checks
 ├── job/                     offline job envelope for `vardrgate run --job`
 ├── model/                   domain types, constants, Resource, ClassifyOutcomeWith
 ├── openapi/                 OpenAPI 3 parse + starter case generation
@@ -53,6 +54,7 @@ docs/
                              0004 persistence · 0005 tenancy · 0006 policy CLI
                              0007 policy-driven deny · 0008 body-aware deny +
                              mutation safety · 0009 discovery · 0010 setup steps
+                             0011 identity preflight
 
 examples/
 ├── bola_check.json              three-identity unauthorized-access scenario
@@ -267,6 +269,12 @@ Before committing:
 - Preserve local private-target opt-in, declared deny conventions, mutation safety
   and setup failure behavior. Automatic login refresh and a general workflow
   language remain future work.
+- Optional `Identity.Preflight` is a reviewed same-origin GET plus explicit public
+  principal field matches. It runs after setup and before resource testing;
+  any failure returns safe diagnostics, no executions/findings and CLI exit 3.
+  Never retain response values, headers or raw errors, infer expiry, or treat a
+  probe as an authorization baseline. `--require-identity-preflight` is Runner's
+  compatibility guard. See ADR 0011; automatic refresh remains future work.
 
 ## Communication
 
