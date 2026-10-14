@@ -40,6 +40,7 @@ type Result struct {
 	TestCaseID string                  `json:"test_case_id"`
 	Executions []model.ExecutionResult `json:"executions"`
 	Findings   []model.Finding         `json:"findings"`
+	Preflight  []model.PreflightResult `json:"preflight,omitempty"`
 }
 
 // Run validates the test case, executes the request for each identity,
@@ -60,6 +61,13 @@ func (e *Engine) Run(ctx context.Context, tc model.AuthorizationTestCase) (Resul
 		return Result{}, fmt.Errorf("%w: %s", ErrSetupFailed, err)
 	}
 
+	result := Result{TestCaseID: tc.ID, Executions: make([]model.ExecutionResult, 0), Findings: make([]model.Finding, 0)}
+	var ready bool
+	result.Preflight, ready = e.runPreflight(ctx, tc)
+	if !ready {
+		return result, nil
+	}
+
 	expected := make(map[string]model.AccessDecision, len(tc.ExpectedAccess))
 	for _, ea := range tc.ExpectedAccess {
 		expected[ea.IdentityID] = ea.Decision
@@ -74,7 +82,6 @@ func (e *Engine) Run(ctx context.Context, tc model.AuthorizationTestCase) (Resul
 
 	// First pass: execute every identity and index the results so finding
 	// evaluation can compare an offending response against a legitimate baseline.
-	result := Result{TestCaseID: tc.ID, Findings: make([]model.Finding, 0)}
 	execByID := make(map[string]model.ExecutionResult, len(tc.Identities))
 	for _, identity := range tc.Identities {
 		exec := e.exec.Execute(ctx, identity, req)
@@ -619,6 +626,9 @@ func validate(tc model.AuthorizationTestCase) error {
 	}
 
 	if err := validateSetup(tc); err != nil {
+		return err
+	}
+	if err := validatePreflight(tc); err != nil {
 		return err
 	}
 

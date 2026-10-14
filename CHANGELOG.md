@@ -6,6 +6,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Optional reviewed identity preflight: verify session principal metadata with a
+  same-origin GET before authorization requests. Any failure aborts the case with
+  safe per-identity diagnostics and CLI exit 3. Add a required-preflight CLI guard
+  for Runner compatibility. No automatic refresh or new dependency is introduced.
+  See [ADR 0011](docs/adr/0011-identity-preflight.md).
+
 ### Documentation
 
 - Align Go/dependency requirements with `go.mod`; clarify planned PostgreSQL storage,
@@ -14,6 +22,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   scope. No runtime behavior changed.
 
 ### Fixed
+
+- CI selects the Go version from `go.mod`, matching the documented compiler requirement.
 
 - Clean engine results serialize `findings` as `[]`, allowing VardrMap uploads
   without treating an empty result as malformed.
