@@ -276,6 +276,16 @@ Before committing:
   probe as an authorization baseline. `--require-identity-preflight` is Runner's
   compatibility guard. See ADR 0011; automatic refresh remains future work.
 
+## Binary releases
+
+`VERSION` is the packaged version. Prepare matching changelog and
+`docs/releases/vX.Y.Z.md` notes in a PR, merge after CI/cross-builds pass, then
+push the matching tag. `release.yml` verifies source, builds Linux/macOS amd64
+and arm64 plus Windows amd64, adds SHA256SUMS and provenance, and publishes the
+archives. Release actions are commit-pinned; verify checksums and repository
+attestations before installing. See ADR 0012. Tagging requires explicit release
+authorization; merging a feature PR alone is not permission to publish.
+
 ## Communication
 
 Report major results, blockers and required decisions; omit routine command-by-command

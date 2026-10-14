@@ -36,7 +36,12 @@ category from a weak signal. See [`docs/adr/0002-ownership-aware-classification.
 
 ## Quickstart
 
-**Requirements:** Go 1.25 or newer, matching `go.mod`.
+Download a checksummed archive from [GitHub Releases](https://github.com/VardrSec/VardrGate/releases)
+for Linux/macOS (amd64 or arm64) or Windows amd64. Extract `vardrgate` (Windows:
+`vardrgate.exe`) and put it on your `PATH`. The prebuilt binaries require no Go
+installation. See [verification and installation](docs/releases/v0.1.0.md).
+
+**Building from source requires** Go 1.25 or newer, matching `go.mod`:
 
 ```sh
 git clone https://github.com/VardrSec/VardrGate
@@ -407,8 +412,8 @@ when clean).
 Map's separate assessment is conclusive, partial or inconclusive; an exit-0 command
 or zero candidates alone does not prove a secure API. The shared API playbooks are
 operator guidance, not executable Gate policies or evidence of coverage. The matching
-Map/Runner additions are currently Unreleased; deploy the backend migration/endpoints
-before publishing that Runner release.
+Runner 0.47.0 adds the matching assessment and preflight contract. Deploy the
+matching Map backend and upgrade Runner plus Gate before authoring preflight cases.
 
 The [combined acceptance harness](https://github.com/VardrSec/VardrMap/blob/main/scripts/integration/README.md)
 tests this workflow against bounded loopback fixtures with disposable SQLite or
@@ -471,5 +476,8 @@ go vet ./...
 gofmt -l .
 ```
 
-CI runs formatting, vet, race tests, and build on every push. See
+CI runs formatting, vet, race tests, and build on every push. Releases use the
+version in `VERSION`; a matching `vX.Y.Z` tag verifies source, builds all five
+platform archives, attests their provenance and publishes them with checksums.
+See [ADR 0012](docs/adr/0012-binary-releases.md) and
 [`CHANGELOG.md`](CHANGELOG.md) for release notes.
