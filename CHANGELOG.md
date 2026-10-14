@@ -6,6 +6,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.0] — 2026-10-14
+
+First packaged release: reviewed API authorization testing, identity/session
+preflight, spec/policy authoring and the standalone queue. Five platform archives
+include SHA-256 checksums and GitHub build provenance. See
+[release and installation notes](docs/releases/v0.1.0.md).
+
 ### Added
 
 - Optional reviewed identity preflight: verify session principal metadata with a
