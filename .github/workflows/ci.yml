@@ -36,3 +36,87 @@ jobs:
 
       - name: Build
         run: go build ./...
+
+  # Exercises action.yml end to end against a published release on every runner
+  # OS: download, checksum check, PATH setup, and exit-code propagation.
+  action:
+    name: Action on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Install a release and run the demo
+        uses: ./
+        with:
+          version: 0.1.0
+          args: demo
+          step-summary: "false"
+
+      - name: Findings at or above --fail-on fail the step
+        id: gated
+        continue-on-error: true
+        uses: ./
+        with:
+          install: "false"
+          args: demo --fail-on high
+
+      - name: The exit code is surfaced as an output
+        shell: bash
+        env:
+          CODE: ${{ steps.gated.outputs.exit-code }}
+          OUTCOME: ${{ steps.gated.outcome }}
+        run: |
+          test "$CODE" = 2
+          test "$OUTCOME" = failure
+
+      - name: Multi-line args keep every line
+        id: multiline
+        continue-on-error: true
+        uses: ./
+        with:
+          install: "false"
+          args: |
+            demo
+            --fail-on high
+
+      - name: The second line's --fail-on took effect
+        shell: bash
+        env:
+          CODE: ${{ steps.multiline.outputs.exit-code }}
+        run: test "$CODE" = 2
+
+      - name: Empty args are refused rather than starting the server
+        id: emptyargs
+        continue-on-error: true
+        uses: ./
+        with:
+          install: "false"
+          args: " "
+
+      - name: The empty invocation failed fast
+        shell: bash
+        env:
+          OUTCOME: ${{ steps.emptyargs.outcome }}
+          CODE: ${{ steps.emptyargs.outputs.exit-code }}
+        run: |
+          test "$OUTCOME" = failure
+          test -z "$CODE"
+
+      - name: A missing version is an error, never an implicit latest
+        id: noversion
+        continue-on-error: true
+        uses: ./
+        with:
+          args: version
+
+      - name: The unpinned install was refused
+        shell: bash
+        env:
+          OUTCOME: ${{ steps.noversion.outcome }}
+        run: test "$OUTCOME" = failure

@@ -1,0 +1,160 @@
+name: VardrGate
+description: Test API authorization against declarative policies and fail the job on findings.
+author: VardrSec
+branding:
+  icon: shield
+  color: blue
+
+inputs:
+  args:
+    description: >
+      Arguments passed to the vardrgate binary, for example
+      "policy run --suite vardrgate/suite.yaml --fail-on high --sarif vardrgate.sarif --format markdown".
+      Split on whitespace; quote nothing.
+    required: true
+  version:
+    description: >
+      Release to install, such as 0.2.0. Defaults to the version in the action
+      reference (VardrSec/VardrGate@v0.2.0). There is no implicit "latest": a CI
+      gate must not change behavior on its own.
+    required: false
+    default: ""
+  install:
+    description: Set to "false" to use a vardrgate binary already on PATH.
+    required: false
+    default: "true"
+  verify-attestation:
+    description: >
+      Also verify the archive's GitHub build provenance with `gh attestation verify`.
+      The checksum check only proves the download is intact; provenance proves it
+      was built by this repository's release workflow.
+    required: false
+    default: "false"
+  step-summary:
+    description: Append stdout to the job summary. Pair with --format markdown.
+    required: false
+    default: "true"
+
+outputs:
+  exit-code:
+    description: "vardrgate's exit code: 0 clean, 1 usage error, 2 findings at or above --fail-on, 3 nothing tested."
+    value: ${{ steps.run.outputs.exit-code }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install vardrgate
+      if: inputs.install == 'true'
+      shell: bash
+      env:
+        INPUT_VERSION: ${{ inputs.version }}
+        ACTION_REF: ${{ github.action_ref }}
+        VERIFY_ATTESTATION: ${{ inputs.verify-attestation }}
+        RUNNER_OS_NAME: ${{ runner.os }}
+        RUNNER_ARCH_NAME: ${{ runner.arch }}
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        set -euo pipefail
+
+        version="${INPUT_VERSION#v}"
+        if [ -z "$version" ]; then
+          if [[ "$ACTION_REF" =~ ^v?([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+            version="${BASH_REMATCH[1]}"
+          else
+            echo "::error::Set the version input, or reference the action by a release tag such as VardrSec/VardrGate@v0.2.0 (got ref '${ACTION_REF}')."
+            exit 1
+          fi
+        fi
+        if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          echo "::error::version must look like 0.2.0, got '${INPUT_VERSION}'."
+          exit 1
+        fi
+
+        case "$RUNNER_OS_NAME" in
+          Linux) os=linux ;;
+          macOS) os=darwin ;;
+          Windows) os=windows ;;
+          *) echo "::error::Unsupported runner OS: $RUNNER_OS_NAME"; exit 1 ;;
+        esac
+        case "$RUNNER_ARCH_NAME" in
+          X64) arch=amd64 ;;
+          ARM64) arch=arm64 ;;
+          *) echo "::error::Unsupported runner architecture: $RUNNER_ARCH_NAME"; exit 1 ;;
+        esac
+        if [ "$os/$arch" = windows/arm64 ]; then
+          echo "::error::No Windows arm64 build is published. Use a Windows x64 or Linux runner."
+          exit 1
+        fi
+
+        ext=tar.gz
+        binary=vardrgate
+        if [ "$os" = windows ]; then ext=zip; binary=vardrgate.exe; fi
+        archive="vardrgate_${version}_${os}_${arch}.${ext}"
+        base="https://github.com/VardrSec/VardrGate/releases/download/v${version}"
+
+        dir="$RUNNER_TEMP/vardrgate-${version}"
+        mkdir -p "$dir"
+        curl -fsSL --retry 3 -o "$dir/$archive" "$base/$archive"
+        curl -fsSL --retry 3 -o "$dir/SHA256SUMS" "$base/SHA256SUMS"
+
+        expected=$(awk -v f="$archive" '$2 == f || $2 == "*"f {print $1}' "$dir/SHA256SUMS")
+        if [ -z "$expected" ]; then
+          echo "::error::$archive is not listed in SHA256SUMS for v${version}."
+          exit 1
+        fi
+        if command -v sha256sum >/dev/null; then
+          actual=$(sha256sum "$dir/$archive" | awk '{print $1}')
+        else
+          actual=$(shasum -a 256 "$dir/$archive" | awk '{print $1}')
+        fi
+        if [ "$expected" != "$actual" ]; then
+          echo "::error::Checksum mismatch for $archive."
+          exit 1
+        fi
+
+        if [ "$VERIFY_ATTESTATION" = true ]; then
+          gh attestation verify "$dir/$archive" --repo VardrSec/VardrGate
+        fi
+
+        if [ "$ext" = zip ]; then
+          if command -v unzip >/dev/null; then
+            unzip -oq "$dir/$archive" -d "$dir/bin"
+          else
+            7z x -y -o"$dir/bin" "$dir/$archive" >/dev/null
+          fi
+        else
+          mkdir -p "$dir/bin"
+          tar -xzf "$dir/$archive" -C "$dir/bin"
+        fi
+        chmod +x "$dir/bin/$binary" 2>/dev/null || true
+        echo "$dir/bin" >> "$GITHUB_PATH"
+        "$dir/bin/$binary" version
+
+    - name: Run vardrgate
+      id: run
+      shell: bash
+      env:
+        VARDRGATE_ARGS: ${{ inputs.args }}
+        STEP_SUMMARY: ${{ inputs.step-summary }}
+      run: |
+        set -uo pipefail
+        # Word splitting is deliberate: args is a plain argument list. Nothing
+        # from the input is evaluated by the shell. -d '' reads every line, so a
+        # multi-line `args: |` cannot silently drop a later --fail-on.
+        read -r -d '' -a argv <<< "$VARDRGATE_ARGS" || true
+        if [ "${#argv[@]}" -eq 0 ]; then
+          # A bare `vardrgate` starts the HTTP server and would hang the job.
+          echo "::error::The args input is empty. Pass a command, for example: policy run --suite suite.yaml --fail-on high"
+          exit 1
+        fi
+        out="$RUNNER_TEMP/vardrgate-stdout.txt"
+        set +e
+        vardrgate "${argv[@]}" > "$out"
+        code=$?
+        set -e
+        cat "$out"
+        if [ "$STEP_SUMMARY" = true ] && [ -s "$out" ]; then
+          cat "$out" >> "$GITHUB_STEP_SUMMARY"
+        fi
+        echo "exit-code=$code" >> "$GITHUB_OUTPUT"
+        exit "$code"

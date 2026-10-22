@@ -1179,3 +1179,30 @@ func TestRun_SensitiveEvidenceUsesPaths(t *testing.T) {
 	}
 	t.Fatalf("expected a sensitive_data_exposure finding, got %+v", res.Findings)
 }
+
+func TestResult_PreflightFailedAndUnreached(t *testing.T) {
+	ok := model.ExecutionResult{IdentityID: "a", StatusCode: 200}
+	failed := model.ExecutionResult{IdentityID: "b", Error: "connection refused"}
+	cases := []struct {
+		name               string
+		res                Result
+		preflight, unreach bool
+	}{
+		{"clean", Result{Executions: []model.ExecutionResult{ok}}, false, false},
+		{"partial failure still tested something", Result{Executions: []model.ExecutionResult{ok, failed}}, false, false},
+		{"every identity failed", Result{Executions: []model.ExecutionResult{failed, failed}}, false, true},
+		{"no executions is not unreached", Result{}, false, false},
+		{"preflight passed", Result{Preflight: []model.PreflightResult{{Status: "passed"}}, Executions: []model.ExecutionResult{ok}}, false, false},
+		{"preflight failed", Result{Preflight: []model.PreflightResult{{Status: "passed"}, {Status: "failed"}}}, true, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := c.res.PreflightFailed(); got != c.preflight {
+				t.Errorf("PreflightFailed = %v, want %v", got, c.preflight)
+			}
+			if got := c.res.Unreached(); got != c.unreach {
+				t.Errorf("Unreached = %v, want %v", got, c.unreach)
+			}
+		})
+	}
+}

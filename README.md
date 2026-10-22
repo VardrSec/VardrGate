@@ -1,22 +1,182 @@
 # VardrGate
 
-Continuous API authorization assurance. Describe how an endpoint *should* treat
-different callers, run the request as each of them, and get structured,
-evidence-backed findings when the real behaviour disagrees.
+Scanners cannot find broken access control, because the rules an API is meant
+to enforce are not written down anywhere a tool can read. VardrGate has you write
+them down: a short policy per endpoint stating which callers should be allowed.
+It replays the request as each caller and reports every place the API disagrees,
+with request and response evidence. It runs locally or in CI and exits non-zero
+when it finds something.
 
-VardrGate is the first execution primitive of a larger API security control
-plane. It evaluates reviewed authorization expectations and is designed to be driven
-locally, in CI, from the HTTP API, or by [VardrRunner](https://github.com/VardrSec/VardrRunner).
+```yaml
+api:
+  endpoint: GET /users/{user_id}/profile
+  owner: identity:owner
+expect:
+  owner: allow
+  other_user: deny
+  anonymous: deny
+```
 
-## What it does
+Findings are candidates for review, not verdicts. VardrGate reports a
+high-severity category only when the policy supplies the context to justify it,
+and a run that reached nothing fails instead of passing.
 
-Given a test case — a request, a set of identities with credentials, optional
-resource-ownership context, and the expected authorization decision per identity
-— VardrGate executes the request once per identity, classifies each observed
-response, and returns candidate findings for definite mismatches. Errors and ambiguous
-responses do not establish a clean assessment; verify candidates before reporting them.
+## See it work
 
-### Finding categories
+Download a checksummed archive from [GitHub Releases](https://github.com/VardrSec/VardrGate/releases)
+for Linux or macOS (amd64, arm64) or Windows (amd64), extract `vardrgate`
+(Windows: `vardrgate.exe`) and put it on your `PATH`. No Go installation is
+needed. See [verification and installation](docs/releases/v0.1.0.md).
+
+```sh
+vardrgate demo
+```
+
+`demo` starts a deliberately broken profile API on loopback, runs the bundled
+policy against it, and prints the findings. Nothing leaves the machine.
+
+```
+Executions:
+  owner        200 allow
+  other_user   200 allow
+  anonymous    200 allow
+
+4 findings:
+  [CRITICAL] cross_tenant_access — identity "other_user" received access that should have been denied
+  [CRITICAL] sensitive_data_exposure — identity "other_user" received sensitive fields it must not see
+  [CRITICAL] missing_authentication — identity "anonymous" received access that should have been denied
+  [CRITICAL] sensitive_data_exposure — identity "anonymous" received sensitive fields it must not see
+```
+
+The data-exposure findings are critical rather than high because the leaked
+field is an API key. Severity follows the field's tier.
+
+To build from source instead, use Go 1.25 or newer, matching `go.mod`:
+
+```sh
+git clone https://github.com/VardrSec/VardrGate
+cd VardrGate
+go build ./cmd/vardrgate
+```
+
+## Test one endpoint
+
+Bind a policy to an environment and a set of identities:
+
+```sh
+export VARDRGATE_OWNER_TOKEN=... VARDRGATE_OTHER_USER_TOKEN=...
+
+vardrgate policy run \
+  --policy examples/profile_ownership.policy.yaml \
+  --base https://api.example.com \
+  --param user_id=42 \
+  --identities examples/identities.json \
+  --format text --fail-on high
+```
+
+Each identity's `role` matches a key under the policy's `expect`. Credential
+values may reference environment variables as `${VAR}`, so the identities file is
+committed next to the policy without containing a secret. An unset variable is an
+error, not an empty token.
+
+Supported credential types are `bearer`, `api_key_header` and `static_header`. A
+session cookie is a `static_header` whose `header` is `Cookie`. An anonymous
+caller is a `static_header` with no header.
+
+## Test a whole API
+
+A suite runs many policies against one environment as one command with one exit
+code. Identities are shared: each policy binds only the roles it names, and fails
+if a role it names has no identity.
+
+```yaml
+# examples/suite.yaml
+base: ${VARDRGATE_BASE_URL}
+identities: identities.json
+policies:
+  - policy: profile_ownership.policy.yaml
+    params: {user_id: "${VARDRGATE_OWNER_USER_ID}"}
+  - policy: user_orders.policy.yaml
+    params: {user_id: "${VARDRGATE_OWNER_USER_ID}"}
+```
+
+```sh
+vardrgate policy run --suite examples/suite.yaml --fail-on high --format text
+```
+
+Paths are relative to the suite file, `--base` overrides `base`, and every entry
+is compiled and validated before any request is sent, so all authoring errors
+are reported at once. If one entry fails at run time, such as a failed setup
+step, it is reported as not run and the rest of the suite still runs. An entry
+may also set `tenant`, `id` and its own `identities` file. See
+[ADR 0013](docs/adr/0013-policy-suites.md).
+
+## Run it in CI
+
+`--fail-on` is what makes VardrGate a CI check:
+
+| Exit code | Meaning |
+|---|---|
+| `0` | Ran; nothing at or above the threshold |
+| `1` | Usage or input error |
+| `2` | Findings at or above `--fail-on` |
+| `3` | A case tested nothing: every identity failed to connect, or an identity preflight failed |
+
+Exit 3 is separate on purpose: a run where nothing connected reports zero
+findings, and treating that as a pass is worse than having no check. It is
+evaluated per case, so a target that dies partway through a suite still fails the
+build. Without `--fail-on` (default `none`), findings never affect the exit code,
+but exit 3 still applies.
+
+### GitHub Actions
+
+```yaml
+permissions:
+  contents: read
+  security-events: write   # only needed for the SARIF upload
+
+steps:
+  - uses: actions/checkout@v4
+  - uses: VardrSec/VardrGate@v0.2.0
+    env:
+      VARDRGATE_BASE_URL: ${{ vars.STAGING_API }}
+      VARDRGATE_OWNER_USER_ID: "42"
+      VARDRGATE_OWNER_TOKEN: ${{ secrets.OWNER_TOKEN }}
+      VARDRGATE_OTHER_USER_TOKEN: ${{ secrets.OTHER_USER_TOKEN }}
+    with:
+      args: policy run --suite vardrgate/suite.yaml --fail-on high --format markdown --sarif vardrgate.sarif
+  - uses: github/codeql-action/upload-sarif@v3
+    if: always()
+    with:
+      sarif_file: vardrgate.sarif
+```
+
+The action installs the release named by its tag, verifies the archive against
+that release's `SHA256SUMS`, runs `vardrgate` with `args`, writes stdout to the
+job summary, and exposes the exit code as `steps.<id>.outputs.exit-code`. Set
+`verify-attestation: true` to also check build provenance with
+`gh attestation verify`. There is no implicit "latest": pin a release. See
+[ADR 0015](docs/adr/0015-github-action.md).
+
+### Output formats
+
+`policy run` and `run` share these flags:
+
+| Flag | Writes |
+|---|---|
+| `--format json` (default) | Result JSON on stdout; nothing on stdout when `--out` is set |
+| `--format text` | A readable report on stdout: executions, findings by severity, a summary line |
+| `--format markdown` | Summary and findings tables on stdout, for a job summary or PR comment |
+| `--out <file>` | Result JSON, always |
+| `--sarif <file>` | SARIF 2.1.0 for GitHub code scanning and other dashboards |
+
+All outputs are written before the exit code is decided, so they exist on exit 2
+and 3. Every format states when a case tested nothing, and SARIF marks the
+invocation unsuccessful rather than showing an empty, clean-looking scan. Run
+from the repository root so SARIF locations resolve to the policy files. See
+[ADR 0014](docs/adr/0014-report-formats.md).
+
+## Finding categories
 
 | Category | Severity | Meaning |
 |---|---|---|
@@ -34,132 +194,7 @@ The engine only elevates beyond `unexpected_access` when the test case supplies
 explicit ownership/tenant/role context. It never guesses a high-severity
 category from a weak signal. See [`docs/adr/0002-ownership-aware-classification.md`](docs/adr/0002-ownership-aware-classification.md).
 
-## Quickstart
-
-Download a checksummed archive from [GitHub Releases](https://github.com/VardrSec/VardrGate/releases)
-for Linux/macOS (amd64 or arm64) or Windows amd64. Extract `vardrgate` (Windows:
-`vardrgate.exe`) and put it on your `PATH`. The prebuilt binaries require no Go
-installation. See [verification and installation](docs/releases/v0.1.0.md).
-
-**Building from source requires** Go 1.25 or newer, matching `go.mod`:
-
-```sh
-git clone https://github.com/VardrSec/VardrGate
-cd VardrGate
-go build ./cmd/vardrgate
-./vardrgate demo
-```
-
-`demo` starts a deliberately broken profile API on loopback, runs the bundled
-policy against it, and prints the findings. No setup, no credentials, nothing
-leaves the machine. It is the fastest way to see what a finding looks like:
-
-```
-Executions:
-  owner        200 allow
-  other_user   200 allow
-  anonymous    200 allow
-
-4 findings:
-  [CRITICAL] cross_tenant_access — identity "other_user" received access that should have been denied
-  [CRITICAL] sensitive_data_exposure — identity "other_user" received sensitive fields it must not see
-  [CRITICAL] missing_authentication — identity "anonymous" received access that should have been denied
-  [CRITICAL] sensitive_data_exposure — identity "anonymous" received sensitive fields it must not see
-```
-
-The data-exposure findings are critical rather than high because the leaked
-field is an API key. Severity follows the field's tier, so a leaked `created_by`
-does not read the same as a leaked credential.
-
-### Run a policy against a real environment
-
-```sh
-export VARDRGATE_OWNER_TOKEN=... VARDRGATE_OTHER_USER_TOKEN=...
-
-./vardrgate policy run \
-  --policy examples/profile_ownership.policy.yaml \
-  --base https://api.example.com \
-  --param user_id=42 \
-  --identities examples/identities.json \
-  --fail-on high
-```
-
-This is the same policy the demo runs, bound to a real environment. Credential
-values in the identities file may reference environment variables as `${VAR}`,
-so the file is committed next to the policy without containing a secret. An
-unset variable is an error, not an empty token.
-
-### Gate a pipeline on the result
-
-`--fail-on` is what makes VardrGate usable as a CI check:
-
-| Exit code | Meaning |
-|---|---|
-| `0` | Ran; nothing at or above the threshold |
-| `1` | Usage or input error |
-| `2` | Findings at or above `--fail-on` |
-| `3` | A case reached nothing — every identity failed to connect |
-
-Exit 3 is deliberate and separate: a run where nothing connected reports zero
-findings, and treating that as a pass is worse than having no check at all. It
-is evaluated per case, so a target that dies partway through a suite still fails
-the build. Without `--fail-on` (the default, `none`), findings never affect the
-exit code — but exit 3 still applies.
-
-### Run a job envelope offline (VardrRunner contract)
-
-```sh
-./vardrgate run --job job.json --out result.json
-```
-
-`run` reads a job envelope, executes the embedded test case, and writes the
-sanitized result JSON. `examples/job_profile_check.json` is a **template** — its
-tokens and its `localhost:8081` URL are placeholders to replace, not a target
-that exists. Use `./vardrgate demo` for something that runs as shipped. See
-[`docs/adr/0001-policy-input-and-run-cli.md`](docs/adr/0001-policy-input-and-run-cli.md).
-
-### Generate starter tests from an OpenAPI spec
-
-```sh
-./vardrgate gen --spec openapi.json --base https://api.example.com --out cases.json
-```
-
-Emits one starter test case per path+method (request pre-filled, plus an
-authenticated and an anonymous template identity). Each credential carries a
-`${VARDRGATE_<IDENTITY>_TOKEN}` placeholder showing where the token belongs; set
-those variables and run the file directly:
-
-```sh
-VARDRGATE_AUTHENTICATED_TOKEN=... ./vardrgate run --cases cases.json --fail-on high
-```
-
-A Postman v2.1 collection works too:
-
-```sh
-./vardrgate gen --postman collection.json --base https://api.example.com
-```
-
-### Report coverage of a spec
-
-```sh
-./vardrgate coverage --spec openapi.json --cases cases.json
-```
-
-Maps case definitions to spec operations, using the output labels tested/untested
-and a percentage. This shows authoring gaps; it does not execute cases or measure
-verified controls, successful assessments or overall API security coverage.
-
-Environment variables (serve mode):
-
-| Variable | Default | Description |
-|---|---|---|
-| `PORT` | `8080` | Listening port (1–65535) |
-| `ALLOW_PRIVATE_TARGETS` | `false` | Permit loopback and RFC-1918 targets. Enable only for local lab testing. |
-| `VARDRGATE_API_KEY` | _(unset)_ | Single bearer token for the runner endpoints (`/jobs`, `/runner`, `/audit`); maps to the `default` tenant. Unset disables auth for local dev. |
-| `VARDRGATE_API_KEYS` | _(unset)_ | Per-tenant keys `"tenant-a:key1,tenant-b:key2"` for tenant isolation; takes precedence over `VARDRGATE_API_KEY`. |
-| `VARDRGATE_DB` | _(unset)_ | Path to a SQLite database for a durable job queue (jobs survive restart). Unset uses an in-memory store. |
-
-## Declarative policies
+## Writing policies
 
 A policy expresses an authorization control once, independent of environment.
 Bind it to a base URL, path parameters, and concrete identities (each identity's
@@ -259,29 +294,6 @@ authorization test there is, and it needs this. A failed setup step aborts the
 run with exit 3: the precondition was not met, so nothing was tested. See
 [`docs/adr/0010-setup-steps.md`](docs/adr/0010-setup-steps.md).
 
-## Drafting policies for an API you have not covered yet
-
-The honest limitation of a declarative tool is that it says nothing about
-endpoints nobody wrote a policy for. `discover` removes the blank page:
-
-```sh
-./vardrgate discover --spec openapi.json --sample response.json --out policies/
-```
-
-It proposes one policy per operation that addresses an object, inferring the
-object identifier, the resource type, and — from a captured response body — the
-tenant field and any sensitive properties, printing its reasoning for each.
-
-**Every expectation is written as `TODO`, and the policy parser rejects `TODO`.**
-A draft cannot run until you replace them. That is deliberate and enforced
-rather than advised: discovery can infer the *shape* of a control, but who
-should be allowed to call an endpoint is a decision recorded nowhere a machine
-can read, and a plausible-looking guess is exactly what VardrGate must never put
-behind a finding. Inference informs authoring; it never becomes an assertion.
-See [`docs/adr/0009-policy-discovery.md`](docs/adr/0009-policy-discovery.md).
-
-## HTTP API
-
 ### Check sessions before authorization requests
 
 An authenticated identity may declare an optional reviewed preflight:
@@ -303,6 +315,60 @@ Unconfigured cases retain their behavior. This does not refresh tokens or replac
 a legitimate allow baseline on the resource. Runner uses
 `run --require-identity-preflight` so older Gate builds fail before traffic.
 See [ADR 0011](docs/adr/0011-identity-preflight.md).
+
+## Drafting policies for an API you have not covered yet
+
+The honest limitation of a declarative tool is that it says nothing about
+endpoints nobody wrote a policy for. `discover` removes the blank page:
+
+```sh
+vardrgate discover --spec openapi.json --sample response.json --out policies/
+```
+
+It proposes one policy per operation that addresses an object, inferring the
+object identifier, the resource type, and — from a captured response body — the
+tenant field and any sensitive properties, printing its reasoning for each.
+
+**Every expectation is written as `TODO`, and the policy parser rejects `TODO`.**
+A draft cannot run until you replace them. That is deliberate and enforced
+rather than advised: discovery can infer the *shape* of a control, but who
+should be allowed to call an endpoint is a decision recorded nowhere a machine
+can read, and a plausible-looking guess is exactly what VardrGate must never put
+behind a finding. Inference informs authoring; it never becomes an assertion.
+See [`docs/adr/0009-policy-discovery.md`](docs/adr/0009-policy-discovery.md).
+
+## Starting from a spec
+
+```sh
+vardrgate gen --spec openapi.json --base https://api.example.com --out cases.json
+```
+
+Emits one starter test case per path+method (request pre-filled, plus an
+authenticated and an anonymous template identity). Each credential carries a
+`${VARDRGATE_<IDENTITY>_TOKEN}` placeholder showing where the token belongs; set
+those variables and run the file directly:
+
+```sh
+VARDRGATE_AUTHENTICATED_TOKEN=... vardrgate run --cases cases.json --fail-on high
+```
+
+A Postman v2.1 collection works too:
+
+```sh
+vardrgate gen --postman collection.json --base https://api.example.com
+```
+
+### Report coverage of a spec
+
+```sh
+vardrgate coverage --spec openapi.json --cases cases.json
+```
+
+Maps case definitions to spec operations, using the output labels tested/untested
+and a percentage. This shows authoring gaps; it does not execute cases or measure
+verified controls, successful assessments or overall API security coverage.
+
+## HTTP API
 
 ### `GET /health`
 
@@ -372,6 +438,18 @@ never exposed. Non-JSON responses report only `kind: "text"`.
 | 422 | `validation_failed` | Test case fails validation |
 | 405 | `method_not_allowed` | Wrong HTTP method |
 
+### Serve-mode environment variables
+
+Environment variables (serve mode):
+
+| Variable | Default | Description |
+|---|---|---|
+| `PORT` | `8080` | Listening port (1–65535) |
+| `ALLOW_PRIVATE_TARGETS` | `false` | Permit loopback and RFC-1918 targets. Enable only for local lab testing. |
+| `VARDRGATE_API_KEY` | _(unset)_ | Single bearer token for the runner endpoints (`/jobs`, `/runner`, `/audit`); maps to the `default` tenant. Unset disables auth for local dev. |
+| `VARDRGATE_API_KEYS` | _(unset)_ | Per-tenant keys `"tenant-a:key1,tenant-b:key2"` for tenant isolation; takes precedence over `VARDRGATE_API_KEY`. |
+| `VARDRGATE_DB` | _(unset)_ | Path to a SQLite database for a durable job queue (jobs survive restart). Unset uses an in-memory store. |
+
 ## Runner job queue
 
 For continuous, distributed execution, VardrGate exposes a job queue that
@@ -419,6 +497,18 @@ The [combined acceptance harness](https://github.com/VardrSec/VardrMap/blob/main
 tests this workflow against bounded loopback fixtures with disposable SQLite or
 PostgreSQL for Map. It does not verify hosted GitHub OAuth or production deployment.
 
+### Run a job envelope offline (VardrRunner contract)
+
+```sh
+vardrgate run --job job.json --out result.json
+```
+
+`run` reads a job envelope, executes the embedded test case, and writes the
+sanitized result JSON. `examples/job_profile_check.json` is a **template** — its
+tokens and its `localhost:8081` URL are placeholders to replace, not a target
+that exists. Use `vardrgate demo` for something that runs as shipped. See
+[`docs/adr/0001-policy-input-and-run-cli.md`](docs/adr/0001-policy-input-and-run-cli.md).
+
 ## Security defaults
 
 - Only `http` and `https` targets are accepted.
@@ -438,9 +528,10 @@ PostgreSQL for Map. It does not verify hosted GitHub OAuth or production deploym
 ## Project layout
 
 ```
+action.yml           — GitHub Action: verified install + run
 cmd/vardrgate/       — subcommand dispatch, exit codes
   main.go            — dispatch, usage, version
-  execute.go         — run, policy run, demo; --fail-on gating
+  execute.go         — run, policy run (--policy, --suite), demo; output flags, --fail-on gating
   discover.go        — discover
   importers.go       — gen, coverage
   serve.go           — HTTP API and its environment config
@@ -458,14 +549,16 @@ internal/
   openapi/           — OpenAPI 3 parsing + starter test-case generation
   postman/           — Postman v2.1 collection import
   policy/            — declarative YAML policy parsing, compilation, bindings
+  report/            — text, Markdown and SARIF renderers
   scaffold/          — starter test-case builder and its on-disk format
   secretref/         — ${VAR} credential references
   store/             — runner job queue + registry (in-memory + SQLite Store)
+  suite/             — suite files: many policies bound to one environment
   urlcheck/          — URL and IP validation
 docs/
   mvp.md             — first supported workflow
   adr/               — architecture decision records
-examples/            — policy, identities, test case, and job examples
+examples/            — policies, a suite, identities, test case, and job examples
 ```
 
 ## Development

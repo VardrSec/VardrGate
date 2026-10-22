@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -17,8 +18,115 @@ import (
 	"github.com/VardrSec/vardrgate/internal/job"
 	"github.com/VardrSec/vardrgate/internal/model"
 	"github.com/VardrSec/vardrgate/internal/policy"
+	"github.com/VardrSec/vardrgate/internal/report"
 	"github.com/VardrSec/vardrgate/internal/secretref"
+	"github.com/VardrSec/vardrgate/internal/suite"
 )
+
+// Stdout formats. JSON is the default everywhere because VardrRunner and
+// VardrMap consume it; the others are for people and CI logs (ADR 0014).
+const (
+	formatJSON     = "json"
+	formatText     = "text"
+	formatMarkdown = "markdown"
+)
+
+// outputs are the result destinations shared by every command that executes a
+// test case.
+type outputs struct {
+	out    *string
+	sarif  *string
+	format *string
+}
+
+func addOutputFlags(fs *flag.FlagSet) outputs {
+	return outputs{
+		out:    fs.String("out", "", "path to write the result JSON (default: stdout, when --format is json)"),
+		sarif:  fs.String("sarif", "", "path to write a SARIF 2.1.0 report for code scanning"),
+		format: fs.String("format", formatJSON, "stdout format: json, text, or markdown (--out always writes JSON)"),
+	}
+}
+
+func (o outputs) validate() error {
+	switch *o.format {
+	case formatJSON, formatText, formatMarkdown:
+		return nil
+	default:
+		return fmt.Errorf("invalid --format %q (want json, text, or markdown)", *o.format)
+	}
+}
+
+// emit writes every requested output. It runs before gate so that the result
+// file, SARIF and summary exist even when the command exits 2 or 3, which is
+// exactly when a CI job needs them.
+//
+// With the default JSON format and no --out, the result goes to stdout as it
+// always has; with --out, stdout stays empty. Both are the contract VardrRunner
+// relies on.
+func (o outputs) emit(payload any, cases []report.Case) error {
+	if *o.out != "" {
+		if err := writeJSON(*o.out, payload); err != nil {
+			return err
+		}
+	}
+	if *o.sarif != "" {
+		if err := writeSARIF(*o.sarif, cases); err != nil {
+			return err
+		}
+	}
+	switch *o.format {
+	case formatText:
+		return report.Text(os.Stdout, cases)
+	case formatMarkdown:
+		return report.Markdown(os.Stdout, cases)
+	default:
+		if *o.out == "" {
+			return writeJSON("", payload)
+		}
+		return nil
+	}
+}
+
+func writeSARIF(path string, cases []report.Case) error {
+	f, err := os.Create(path)
+	if err != nil {
+		return fmt.Errorf("write sarif: %w", err)
+	}
+	if err := report.SARIF(f, cases, versionString()); err != nil {
+		_ = f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("write sarif: %w", err)
+	}
+	return nil
+}
+
+// sourcePath renders a file path the way reports name it: relative to the
+// working directory with forward slashes, because code scanning rejects
+// absolute paths and a CI job runs from the repository root. A path outside the
+// working directory is kept as given.
+func sourcePath(path string) string {
+	if path == "" {
+		return ""
+	}
+	if abs, err := filepath.Abs(path); err == nil {
+		if wd, err := os.Getwd(); err == nil {
+			if rel, err := filepath.Rel(wd, abs); err == nil && !strings.HasPrefix(rel, "..") {
+				return filepath.ToSlash(rel)
+			}
+		}
+	}
+	return filepath.ToSlash(path)
+}
+
+func reportCases(source string, results []engine.Result) []report.Case {
+	cases := make([]report.Case, len(results))
+	for i, res := range results {
+		cases[i] = report.Case{Source: sourcePath(source), Result: res}
+	}
+	return cases
+}
 
 // failOnNone disables finding-based gating. It is the default so that adding
 // the flag to an existing pipeline is a deliberate act, never a surprise.
@@ -42,7 +150,7 @@ Flags:
 	}
 	jobPath := fs.String("job", "", "path to a job envelope JSON file")
 	casesPath := fs.String("cases", "", "path to a JSON array of test cases (as produced by `vardrgate gen`)")
-	outPath := fs.String("out", "", "path to write the result JSON (default: stdout)")
+	out := addOutputFlags(fs)
 	failOn := fs.String("fail-on", failOnNone, "exit 2 when a finding at or above this severity is reported (none, info, low, medium, high, critical)")
 	allowPrivate := fs.Bool("allow-private-targets", false, "permit loopback and private-network targets (--cases only; a job envelope carries its own setting)")
 	allowMutating := fs.Bool("allow-mutating", false, "confirm that replaying an unsafe method (POST/PUT/PATCH/DELETE) once per identity is intended")
@@ -53,6 +161,9 @@ Flags:
 	}
 	if (*jobPath == "") == (*casesPath == "") {
 		return errors.New("exactly one of --job or --cases is required")
+	}
+	if err := out.validate(); err != nil {
+		return err
 	}
 
 	threshold, err := parseFailOn(*failOn)
@@ -96,7 +207,7 @@ Flags:
 				cases[i].Mutating = true
 			}
 		}
-		if err := validateSuite(cases); err != nil {
+		if err := validateSuite(cases, genScaffoldHint); err != nil {
 			return err
 		}
 		if *requirePreflight {
@@ -118,7 +229,11 @@ Flags:
 		payload = results
 	}
 
-	if err := writeJSON(*outPath, payload); err != nil {
+	source := *casesPath
+	if *jobPath != "" {
+		source = *jobPath
+	}
+	if err := out.emit(payload, reportCases(source, results)); err != nil {
 		return err
 	}
 	return gate(results, threshold)
@@ -142,82 +257,151 @@ func runPolicy(args []string) error {
 	}
 }
 
-// runPolicyRun compiles a declarative policy against a concrete environment and
-// executes it. This is the path the policy format was written for: before it,
-// internal/policy compiled test cases that nothing could run.
+// runPolicyRun compiles declarative policies against a concrete environment and
+// executes them: one policy with --policy, or a suite of them with --suite.
+// This is the path the policy format was written for: before it, internal/policy
+// compiled test cases that nothing could run.
 func runPolicyRun(args []string) error {
 	fs := flag.NewFlagSet("policy run", flag.ContinueOnError)
 	fs.Usage = func() {
 		fmt.Fprint(fs.Output(), `Usage: vardrgate policy run --policy <file> --base <url> --identities <file> [flags]
+       vardrgate policy run --suite <file> [--base <url>] [flags]
 
-Compiles a declarative policy against one environment and executes it.
+Compiles declarative policies against one environment and executes them.
 
 The identities file is a JSON array of identities whose "role" matches a key in
 the policy's expect map. Credential values may reference environment variables
 as ${VAR}, so the file can be committed next to the policy without secrets.
 
+A suite file lists many policies with their path parameters and shares one
+identities file between them, so a whole API runs as one command with one exit
+code. --base overrides the suite's base URL.
+
 Flags:
 `)
 		fs.PrintDefaults()
 	}
-	policyPath := fs.String("policy", "", "path to the YAML policy file (required)")
-	baseURL := fs.String("base", "", "base URL of the environment under test (required)")
-	identitiesPath := fs.String("identities", "", "path to a JSON array of identities (required)")
+	policyPath := fs.String("policy", "", "path to the YAML policy file (required unless --suite)")
+	suitePath := fs.String("suite", "", "path to a suite file listing many policies")
+	baseURL := fs.String("base", "", "base URL of the environment under test (required with --policy; overrides the suite's base)")
+	identitiesPath := fs.String("identities", "", "path to a JSON array of identities (required with --policy)")
 	params := paramFlag{}
 	fs.Var(&params, "param", "path parameter as name=value; repeat for each parameter")
 	tenant := fs.String("tenant", "", "tenant the target object belongs to; enables cross_tenant_access without reading it from the response")
 	allowMutating := fs.Bool("allow-mutating", false, "confirm that replaying an unsafe method (POST/PUT/PATCH/DELETE) once per identity is intended")
 	caseID := fs.String("id", "", "test case id (default: derived from the endpoint)")
-	outPath := fs.String("out", "", "path to write the result JSON (default: stdout)")
+	out := addOutputFlags(fs)
 	failOn := fs.String("fail-on", failOnNone, "exit 2 when a finding at or above this severity is reported (none, info, low, medium, high, critical)")
 	allowPrivate := fs.Bool("allow-private-targets", false, "permit loopback and private-network targets")
 	timeout := fs.Duration("timeout", 0, "per-request timeout (0 uses the client default)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	for name, val := range map[string]string{"--policy": *policyPath, "--base": *baseURL, "--identities": *identitiesPath} {
-		if val == "" {
-			return fmt.Errorf("%s is required", name)
-		}
+	if err := out.validate(); err != nil {
+		return err
 	}
-
 	threshold, err := parseFailOn(*failOn)
 	if err != nil {
 		return err
 	}
 
-	p, err := policy.Load(*policyPath)
-	if err != nil {
-		return err
-	}
-	identities, err := policy.LoadIdentities(*identitiesPath)
-	if err != nil {
-		return err
+	var cases []suite.Case
+	if *suitePath != "" {
+		// Per-policy bindings live in the suite file. Accepting them on the
+		// command line as well would leave it unclear which one won.
+		for name, set := range map[string]bool{
+			"--policy": *policyPath != "", "--identities": *identitiesPath != "",
+			"--param": len(params) > 0, "--tenant": *tenant != "", "--id": *caseID != "",
+		} {
+			if set {
+				return fmt.Errorf("%s cannot be combined with --suite; set it in the suite file", name)
+			}
+		}
+		s, err := suite.Load(*suitePath)
+		if err != nil {
+			return err
+		}
+		cases, err = s.Compile(filepath.Dir(*suitePath), suite.Options{BaseOverride: *baseURL, AllowMutating: *allowMutating})
+		if err != nil {
+			return err
+		}
+	} else {
+		for name, val := range map[string]string{"--policy": *policyPath, "--base": *baseURL, "--identities": *identitiesPath} {
+			if val == "" {
+				return fmt.Errorf("%s is required (or use --suite)", name)
+			}
+		}
+		tc, err := compilePolicy(*policyPath, *identitiesPath, policy.Bindings{
+			TestCaseID:       *caseID,
+			BaseURL:          *baseURL,
+			PathParams:       params,
+			ResourceTenantID: *tenant,
+			AllowMutating:    *allowMutating,
+		})
+		if err != nil {
+			return err
+		}
+		cases = []suite.Case{{Source: *policyPath, TestCase: tc}}
 	}
 
-	tc, err := p.Compile(policy.Bindings{
-		TestCaseID:       *caseID,
-		BaseURL:          *baseURL,
-		PathParams:       params,
-		Identities:       identities,
-		ResourceTenantID: *tenant,
-		AllowMutating:    *allowMutating,
-	})
-	if err != nil {
+	// Validate every case before any request is sent. Compilation does not catch
+	// everything engine validation does, such as an unconfirmed unsafe method,
+	// and finding that out at entry five means entries one to four already sent
+	// live traffic.
+	compiled := make([]model.AuthorizationTestCase, len(cases))
+	for i, c := range cases {
+		compiled[i] = c.TestCase
+	}
+	if err := validateSuite(compiled, ""); err != nil {
 		return err
 	}
 
 	cfg := client.Config{AllowPrivateTargets: *allowPrivate, Timeout: *timeout}
 	eng := engine.New(client.NewWithConfig(nil, cfg))
-	res, err := eng.Run(context.Background(), tc)
-	if err != nil {
-		return runError(err)
+	results := make([]engine.Result, 0, len(cases))
+	reported := make([]report.Case, 0, len(cases))
+	for _, c := range cases {
+		res, err := eng.Run(context.Background(), c.TestCase)
+		if err != nil {
+			if *suitePath == "" {
+				return runError(fmt.Errorf("case %q: %w", c.TestCase.ID, err))
+			}
+			// In a suite, one entry's failed setup must not hide every later
+			// result or suppress the reports. It is recorded as not run, the
+			// rest continue, and gate exits 3.
+			res = engine.Result{
+				TestCaseID: c.TestCase.ID,
+				Executions: []model.ExecutionResult{},
+				Findings:   []model.Finding{},
+				Error:      err.Error(),
+			}
+		}
+		results = append(results, res)
+		reported = append(reported, report.Case{Source: sourcePath(c.Source), Result: res})
 	}
 
-	if err := writeJSON(*outPath, res); err != nil {
+	// A single policy keeps emitting a single object, as it always has; a
+	// suite emits an array, matching `run --cases`.
+	var payload any = results
+	if *suitePath == "" {
+		payload = results[0]
+	}
+	if err := out.emit(payload, reported); err != nil {
 		return err
 	}
-	return gate([]engine.Result{res}, threshold)
+	return gate(results, threshold)
+}
+
+func compilePolicy(policyPath, identitiesPath string, b policy.Bindings) (model.AuthorizationTestCase, error) {
+	p, err := policy.Load(policyPath)
+	if err != nil {
+		return model.AuthorizationTestCase{}, err
+	}
+	b.Identities, err = policy.LoadIdentities(identitiesPath)
+	if err != nil {
+		return model.AuthorizationTestCase{}, err
+	}
+	return p.Compile(b)
 }
 
 // runDemo executes the bundled policy against a local vulnerable fixture so a
@@ -268,26 +452,10 @@ func demoNarrative(res engine.Result) string {
 	b.WriteString("\nVardrGate demo — a profile API that enforces nothing.\n")
 	b.WriteString("Policy: only the owner may read /users/{user_id}/profile.\n\n")
 
-	b.WriteString("Executions:\n")
-	for _, ex := range res.Executions {
-		if ex.Error != "" {
-			fmt.Fprintf(&b, "  %-12s error: %s\n", ex.IdentityID, ex.Error)
-			continue
-		}
-		fmt.Fprintf(&b, "  %-12s %d %s\n", ex.IdentityID, ex.StatusCode, ex.ObservedOutcome)
-	}
-
+	report.TextCase(&b, res)
 	if len(res.Findings) == 0 {
-		b.WriteString("\nNo findings. (That is unexpected for this fixture.)\n")
+		b.WriteString("(That is unexpected for this fixture.)\n")
 		return b.String()
-	}
-
-	fmt.Fprintf(&b, "\n%s:\n", plural(len(res.Findings), "finding", "findings"))
-	for _, f := range sortedBySeverity(res.Findings) {
-		fmt.Fprintf(&b, "  [%s] %s — %s\n", strings.ToUpper(string(f.Severity)), f.Category, f.Message)
-		for _, ev := range f.Evidence {
-			fmt.Fprintf(&b, "      %s\n", ev)
-		}
 	}
 	b.WriteString("\nThe same policy runs against a real environment with:\n")
 	b.WriteString("  vardrgate policy run --policy examples/profile_ownership.policy.yaml \\\n")
@@ -304,24 +472,22 @@ func demoNarrative(res engine.Result) string {
 // looks partial — which is exactly the green-but-tested-nothing result this
 // exists to prevent.
 func gate(results []engine.Result, threshold model.Severity) error {
-	var unreached []string
+	var unreached, notRun []string
 	for _, res := range results {
-		for _, p := range res.Preflight {
-			if p.Status != "passed" {
-				return exitError{code: exitNotExecuted, err: errors.New("identity preflight failed; authorization requests were not executed")}
-			}
+		if res.PreflightFailed() {
+			return exitError{code: exitNotExecuted, err: errors.New("identity preflight failed; authorization requests were not executed")}
 		}
-		if len(res.Executions) == 0 {
-			continue
+		if res.Error != "" {
+			notRun = append(notRun, fmt.Sprintf("%s (%s)", res.TestCaseID, res.Error))
 		}
-		failed := 0
-		for _, ex := range res.Executions {
-			if ex.Error != "" {
-				failed++
-			}
-		}
-		if failed == len(res.Executions) {
+		if res.Unreached() {
 			unreached = append(unreached, res.TestCaseID)
+		}
+	}
+	if len(notRun) > 0 {
+		return exitError{
+			code: exitNotExecuted,
+			err:  fmt.Errorf("%s could not run, so nothing was tested for them: %s", plural(len(notRun), "case", "cases"), strings.Join(notRun, "; ")),
 		}
 	}
 	if len(unreached) > 0 {
@@ -412,13 +578,6 @@ func summarize(findings []model.Finding) string {
 	return strings.Join(parts, ", ")
 }
 
-func sortedBySeverity(findings []model.Finding) []model.Finding {
-	out := make([]model.Finding, len(findings))
-	copy(out, findings)
-	sort.SliceStable(out, func(i, j int) bool { return out[i].Severity.Rank() > out[j].Severity.Rank() })
-	return out
-}
-
 func plural(n int, singular, plural string) string {
 	if n == 1 {
 		return fmt.Sprintf("%d %s", n, singular)
@@ -429,8 +588,8 @@ func plural(n int, singular, plural string) string {
 // validateSuite checks every case before any of them runs and reports all the
 // problems together. A suite generated by `vardrgate gen` is a scaffold with
 // empty credentials; discovering that one case at a time, after each partial
-// run, is the wrong way to find out.
-func validateSuite(cases []model.AuthorizationTestCase) error {
+// run, is the wrong way to find out. hint, when set, is appended to the error.
+func validateSuite(cases []model.AuthorizationTestCase, hint string) error {
 	var problems []string
 	for i, tc := range cases {
 		if err := engine.Validate(tc); err != nil {
@@ -444,9 +603,16 @@ func validateSuite(cases []model.AuthorizationTestCase) error {
 	if len(problems) == 0 {
 		return nil
 	}
-	return fmt.Errorf("%s could not be run:\n%s\n\nCases from `vardrgate gen` are scaffolds — fill in the credential values before running them.",
-		plural(len(problems), "case", "cases"), strings.Join(problems, "\n"))
+	msg := fmt.Sprintf("%s could not be run:\n%s", plural(len(problems), "case", "cases"), strings.Join(problems, "\n"))
+	if hint != "" {
+		msg += "\n\n" + hint
+	}
+	return errors.New(msg)
 }
+
+// genScaffoldHint explains the most common reason a --cases suite fails
+// validation.
+const genScaffoldHint = "Cases from `vardrgate gen` are scaffolds — fill in the credential values before running them."
 
 // loadCases reads a JSON array of test cases, also accepting a single object so
 // a hand-written case does not have to be wrapped in brackets.

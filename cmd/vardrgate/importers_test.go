@@ -58,7 +58,7 @@ func TestGenTestCases_OutputIsRunnableInput(t *testing.T) {
 	if got := cases[0].Identities[0].Credential.Value; got != "a-token" {
 		t.Errorf("placeholder was not resolved: %q", got)
 	}
-	if err := validateSuite(cases); err != nil {
+	if err := validateSuite(cases, genScaffoldHint); err != nil {
 		t.Errorf("a generated suite with credentials set must validate: %v", err)
 	}
 }

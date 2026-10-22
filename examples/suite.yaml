@@ -1,0 +1,22 @@
+# A suite binds many policies to one environment so a whole API runs as one
+# command with one exit code:
+#
+#   vardrgate policy run --suite examples/suite.yaml --fail-on high
+#
+# Paths are relative to this file. ${VAR} references resolve from the
+# environment, so the same suite runs against staging and production; --base
+# overrides `base` as well.
+base: ${VARDRGATE_BASE_URL}
+
+# Shared by every entry. Each policy binds only the identities whose role it
+# names, and fails if a role it names has no identity.
+identities: identities.json
+
+policies:
+  - policy: profile_ownership.policy.yaml
+    params:
+      user_id: "${VARDRGATE_OWNER_USER_ID}"
+
+  - policy: user_orders.policy.yaml
+    params:
+      user_id: "${VARDRGATE_OWNER_USER_ID}"

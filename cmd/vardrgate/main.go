@@ -115,7 +115,7 @@ Usage:
 
 Commands:
   demo       Run a bundled policy against a local vulnerable fixture (no setup)
-  policy     Compile a declarative policy and execute it
+  policy     Execute a declarative policy, or a suite of them (--suite)
   run        Execute a job envelope or a file of test cases
   discover   Draft policies from an OpenAPI spec for you to complete
   gen        Generate starter test cases from an OpenAPI spec or Postman collection
@@ -132,11 +132,18 @@ Exit codes for commands that execute a test:
   2  findings at or above --fail-on
   3  every identity errored; nothing was tested
 
+Output (policy run, run):
+  --format json|text|markdown   stdout format (default json)
+  --out <file>                  result JSON
+  --sarif <file>                SARIF 2.1.0 for code scanning
+
 Examples:
   vardrgate demo
   vardrgate discover --spec openapi.json --out policies/
   vardrgate policy run --policy profile.yaml --base https://api.example.com \
       --param user_id=42 --identities identities.json --fail-on high
+  vardrgate policy run --suite suite.yaml --fail-on high \
+      --format text --sarif vardrgate.sarif
   vardrgate run --cases cases.json --fail-on critical
 `)
 }
