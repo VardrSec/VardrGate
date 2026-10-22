@@ -285,3 +285,17 @@ func TestGate_CaseWithNoExecutionsIsNotCountedAsUnreached(t *testing.T) {
 		t.Errorf("exit = %d, want %d", code, exitOK)
 	}
 }
+
+func TestGate_CaseThatCouldNotRunIsNotExecuted(t *testing.T) {
+	res := []engine.Result{
+		resultWith(finding(model.SeverityCritical, model.CategoryMissingAuthentication)),
+		{TestCaseID: "broken", Error: "setup step failed: step \"login\" returned 500"},
+	}
+	err := gate(res, model.SeverityHigh)
+	if code := exitCode(t, err); code != exitNotExecuted {
+		t.Fatalf("exit = %d, want %d: a case that never ran outranks findings", code, exitNotExecuted)
+	}
+	if !strings.Contains(err.Error(), "broken") {
+		t.Errorf("message does not name the case: %v", err)
+	}
+}

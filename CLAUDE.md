@@ -2,7 +2,7 @@
 
 ## What this project is
 
-VardrGate is an API authorization assurance engine. It accepts a test case (or a declarative policy compiled into one), executes a single HTTP request as multiple identities, classifies each observed outcome against the expected access decision with optional ownership/tenant/role context, and returns structured, evidence-backed findings. It can be driven four ways: the HTTP API (`POST /tests/execute`), a declarative policy (`vardrgate policy run`), the offline CLI (`vardrgate run --job` / `--cases`), or as a library. It is the first execution primitive of a larger API security control plane. No frontend; the job queue optionally persists to SQLite.
+VardrGate is an API authorization assurance engine. It accepts a test case (or a declarative policy compiled into one), executes a single HTTP request as multiple identities, classifies each observed outcome against the expected access decision with optional ownership/tenant/role context, and returns structured, evidence-backed findings. It can be driven four ways: the HTTP API (`POST /tests/execute`), a declarative policy or suite of policies (`vardrgate policy run`, also packaged as the GitHub Action in `action.yml`), the offline CLI (`vardrgate run --job` / `--cases`), or as a library. It is the first execution primitive of a larger API security control plane. No frontend; the job queue optionally persists to SQLite.
 
 ## Technology
 
@@ -21,7 +21,7 @@ Do not add PostgreSQL, Redis, Docker, Kubernetes, message queues, background wor
 ```
 cmd/vardrgate/
 ├── main.go                  subcommand dispatch, usage, version, exit codes
-├── execute.go               run / policy run / demo, --fail-on gating, suite loading
+├── execute.go               run / policy run (--policy, --suite) / demo, output flags, --fail-on gating
 ├── discover.go              discover
 ├── importers.go             gen, coverage
 └── serve.go                 HTTP server, env config, wiring, shutdown
@@ -41,9 +41,11 @@ internal/
 ├── openapi/                 OpenAPI 3 parse + starter case generation
 ├── policy/                  policy.go (parse/compile) + identities.go (bindings)
 ├── postman/                 Postman v2.1 collection import
+├── report/                  text, Markdown and SARIF renderers
 ├── scaffold/                starter case builder + MarshalCases on-disk format
 ├── secretref/               ${VAR} credential references
 ├── store/                   runner job queue + registry (Memory + SQLite)
+├── suite/                   suite files: many policies bound to one environment
 └── urlcheck/                URL scheme validation, CheckIP, DialContext-ready exports
 
 Every package above has a _test.go alongside it.
@@ -54,7 +56,9 @@ docs/
                              0004 persistence · 0005 tenancy · 0006 policy CLI
                              0007 policy-driven deny · 0008 body-aware deny +
                              mutation safety · 0009 discovery · 0010 setup steps
-                             0011 identity preflight
+                             0011 identity preflight · 0012 binary releases
+                             0013 policy suites · 0014 report formats
+                             0015 GitHub Action
 
 examples/
 ├── bola_check.json              three-identity unauthorized-access scenario
@@ -64,10 +68,14 @@ examples/
 ├── identities.json              policy bindings with ${VAR} credential references
 ├── petstore.openapi.json        import fixture
 ├── store.postman_collection.json import fixture
-└── profile_ownership.policy.yaml declarative policy example (run by `vardrgate demo`)
+├── profile_ownership.policy.yaml declarative policy example (run by `vardrgate demo`)
+├── user_orders.policy.yaml       second policy for the suite example
+└── suite.yaml                    suite binding both policies (compiled by a test)
 
-.github/workflows/ci.yml     gofmt + vet + race tests + build
+action.yml                   composite GitHub Action: verified release install + run
+.github/workflows/ci.yml     gofmt + vet + race tests + build; Action on Ubuntu/macOS/Windows
 CHANGELOG.md                 Keep a Changelog / SemVer
+SECURITY.md                  private vulnerability reporting and scope
 ```
 
 ## Package responsibilities
@@ -136,6 +144,16 @@ Validation rejects: duplicate identity ids, expected-access references to unknow
 The `Executor` interface is defined in the engine package and satisfied by `*client.Client`. Tests use a `stubExecutor`. `Run` executes all identities first, then evaluates findings so it can compare against a baseline.
 
 `engine.Result` has JSON tags (`test_case_id`, `executions`, `findings`). A clean run serializes `findings` as `[]`, not `null`, for Map's import contract. `engine.Validate` is exported so a caller holding a suite can check every case before running any of them.
+
+`Result.PreflightFailed()` and `Result.Unreached()` are the single definition of "this case tested nothing", shared by the CLI's exit-code gate and every report format. `Result.Error` (`omitempty`) is set only by the CLI, for a suite entry that failed at run time; `Run` never sets it, so `run --job` output is unchanged.
+
+### `internal/suite`
+
+Loads a suite file (`base`, `identities`, `policies[]` with `policy`, `params`, `tenant`, `id`, per-entry `identities`) and `Compile`s every entry into a test case. Unknown fields are rejected. Paths resolve relative to the suite file; `${VAR}` resolves in `base`, `params` and `tenant` through `secretref`; `Options.BaseOverride` (from `--base`) wins over `base`. Each entry binds only the identities whose role its policy names, and a role in `expect` with no identity is an error. All problems are reported together, and duplicate test case ids are rejected. See ADR 0013.
+
+### `internal/report`
+
+Renders `[]report.Case` (a source path plus an `engine.Result`) as text, Markdown or SARIF 2.1.0. JSON is not here: the CLI writes it directly, because it is the Runner/Map contract. Every format states when a case tested nothing; SARIF sets `executionSuccessful: false` with an error notification. Markdown escapes untrusted evidence. SARIF fingerprints hash only case id, category and identity — never timestamps or evidence. `TextCase` is shared with `vardrgate demo`. Built on `encoding/json`, no SARIF library. See ADR 0014.
 
 ### `internal/coverage`
 
@@ -222,8 +240,10 @@ Exit codes are shared by every command that executes a test case: `0` ran clean,
 | Command | Purpose |
 |---|---|
 | `serve` (default) | HTTP API. Reads `PORT` (1–65535, default 8080), `ALLOW_PRIVATE_TARGETS`, `VARDRGATE_API_KEY(S)`, `VARDRGATE_DB`; wires `client → engine → handler` with a store (`ReadHeaderTimeout` 5 s, `ReadTimeout` 30 s, `WriteTimeout` 60 s, `IdleTimeout` 120 s; 10 s graceful shutdown on `SIGINT`/`SIGTERM`) |
-| `policy run` | Compile a policy against one environment and run it: `--policy --base --param name=value (repeatable) --identities [--tenant --id --out --fail-on --allow-private-targets --timeout]` |
+| `policy run` | Compile a policy against one environment and run it: `--policy --base --param name=value (repeatable) --identities [--tenant --id --fail-on --allow-private-targets --timeout]`. Or `--suite <file> [--base]` to run a suite; per-policy flags are rejected with `--suite`. Every compiled case is validated before any request; in suite mode a run-time failure (e.g. setup) is recorded in `Result.Error`, the rest continue, and the run exits 3 |
 | `run` | `--job <file>` (one envelope) or `--cases <file>` (a JSON array). A suite is fully validated via `engine.Validate` before any of it runs, so every authoring error is reported together |
+
+`policy run` and `run` share output flags: `--format json|text|markdown` (stdout; default `json`), `--out` (always JSON) and `--sarif`. With the default format and `--out` set, stdout stays empty — Runner's `run --job --out` contract. Outputs are written before `gate` decides the exit code.
 | `demo` | Bundled policy against the `internal/demo` loopback fixture; prints a human summary rather than JSON |
 | `discover` | `--spec` [`--sample`] [`--out` dir] [`--roles`] — draft policies whose expectations are `TODO` and therefore unrunnable |
 | `gen` | `--spec` / `--postman` [`--base`] [`--out`] — starter cases through `scaffold.MarshalCases` |
@@ -237,6 +257,10 @@ Exit codes are shared by every command that executes a test case: `0` ran clean,
 Use focused tests while editing, then run the relevant full checks for code changes.
 For docs-only changes, inspect the diff and local Markdown links; steps 3–6 below
 apply when runtime code or tests change.
+
+Before starting:
+- `git fetch && git status -sb` — is local `main` behind?
+- `gh run list --limit 1` — is CI red already? This repo's `main` did not compile for a month because `.gitignore` silently excluded `internal/coverage/coverage.go`; every local check passed the whole time.
 
 Before committing:
 1. Read the files you plan to change.
@@ -324,7 +348,8 @@ Phases 1–3 and the Phase 2 importers are complete: resource ownership, ownersh
 - Further vulnerability packs: rate-limit, JWT, GraphQL (Phase 5). CORS and BOPLA are done
 - Live crawling in `discover` — it is spec-driven and offline by design
 - Teardown, retries, or conditional `setup` steps: that turns setup into a workflow language (ADR 0010)
-- SARIF or JUnit output — findings are JSON only, deliberately (ADR 0006)
+- JUnit output — text, Markdown and SARIF cover the CI log, summary and dashboard cases (ADR 0014)
+- Concurrency, ordering or shared setup across suite entries — each entry is an independent policy run (ADR 0013)
 - User accounts, organizations, SSO, billing
 - Concurrency in the execution loop — sequential is a stated decision (`docs/mvp.md`)
 - Additional HTTP API endpoints

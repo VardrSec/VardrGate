@@ -6,6 +6,46 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **Policy suites.** `vardrgate policy run --suite <file>` runs many policies
+  against one environment as one command with one exit code. Each entry names a
+  policy and its path parameters, with an optional tenant, id and identities
+  file. Identities are shared, and each policy binds only the roles it names. A
+  role in `expect` with no matching identity is an error rather than a silently
+  untested control. Paths resolve relative to the suite file, `${VAR}` works in
+  `base`, `params` and `tenant`, `--base` overrides the suite, and every entry is
+  compiled and validated before any request is sent. An entry that fails at run
+  time, such as a failed setup step, is reported as not run while the rest of
+  the suite continues, and the run exits 3. See
+  [ADR 0013](docs/adr/0013-policy-suites.md) and `examples/suite.yaml`.
+- **Report formats.** `policy run` and `run` accept `--format text|markdown`
+  for readable stdout and `--sarif <file>` for SARIF 2.1.0 (GitHub code
+  scanning). JSON remains the default and `--out` always writes JSON, so
+  VardrRunner's `run --job --out` contract is unchanged. Outputs are written
+  before the exit code is decided. Every format states when a case tested
+  nothing, and SARIF marks such a run unsuccessful instead of showing an empty
+  scan. SARIF fingerprints use only the case id, category and identity, so
+  alerts track across runs. See [ADR 0014](docs/adr/0014-report-formats.md).
+- **GitHub Action.** `uses: VardrSec/VardrGate@vX.Y.Z` installs the matching
+  release, verifies it against `SHA256SUMS` (optionally also its build
+  provenance), runs `vardrgate` with the given arguments, writes stdout to the
+  job summary, and exposes the exit code. It never installs an unpinned
+  "latest". CI exercises it on Ubuntu, macOS and Windows. See
+  [ADR 0015](docs/adr/0015-github-action.md).
+- `SECURITY.md` with private reporting instructions and scope.
+
+### Changed
+
+- README leads with the problem, the demo, single-endpoint and suite usage, and
+  CI. Reference material (policy features, spec importers, HTTP API, queue and
+  Map integration) follows, and session cookies are documented as a
+  `static_header` credential.
+- `vardrgate demo` and `--format text` share one renderer, so the demo narrative
+  and real runs cannot drift.
+- A `policy run` engine error is now prefixed with the case id, as `run --cases`
+  errors already were.
+
 ## [0.1.0] — 2026-10-14
 
 First packaged release: reviewed API authorization testing, identity/session

@@ -1,0 +1,15 @@
+# A second control for examples/suite.yaml: only the owner may list their orders.
+api:
+  endpoint: GET /users/{user_id}/orders
+  owner: identity:owner
+  resource:
+    type: order_list
+    id_param: user_id
+
+expect:
+  owner: allow
+  other_user: deny
+  anonymous: deny
+
+response:
+  deny_status: [401, 403, 404]

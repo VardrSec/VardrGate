@@ -41,6 +41,37 @@ type Result struct {
 	Executions []model.ExecutionResult `json:"executions"`
 	Findings   []model.Finding         `json:"findings"`
 	Preflight  []model.PreflightResult `json:"preflight,omitempty"`
+	// Error records why a case in a suite could not run, such as a failed
+	// setup step, so the rest of the suite still runs and reports. Run never
+	// sets it; a single case returns its error instead.
+	Error string `json:"error,omitempty"`
+}
+
+// PreflightFailed reports whether an identity preflight check did not pass, in
+// which case no authorization request was sent.
+func (r Result) PreflightFailed() bool {
+	for _, p := range r.Preflight {
+		if p.Status != "passed" {
+			return true
+		}
+	}
+	return false
+}
+
+// Unreached reports whether every identity's request failed before a response
+// arrived. Zero findings from such a run means nothing, so the CLI exits 3 and
+// every report format says the case was not tested. A result with no
+// executions at all is not counted: there was nothing to reach.
+func (r Result) Unreached() bool {
+	if len(r.Executions) == 0 {
+		return false
+	}
+	for _, ex := range r.Executions {
+		if ex.Error == "" {
+			return false
+		}
+	}
+	return true
 }
 
 // Run validates the test case, executes the request for each identity,
