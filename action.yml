@@ -102,10 +102,12 @@ runs:
           echo "::error::$archive is not listed in SHA256SUMS for v${version}."
           exit 1
         fi
+        # Hash from stdin: given a filename containing a backslash (every Windows
+        # runner path), sha256sum escapes its output with a leading "\".
         if command -v sha256sum >/dev/null; then
-          actual=$(sha256sum "$dir/$archive" | awk '{print $1}')
+          actual=$(sha256sum < "$dir/$archive" | awk '{print $1}')
         else
-          actual=$(shasum -a 256 "$dir/$archive" | awk '{print $1}')
+          actual=$(shasum -a 256 < "$dir/$archive" | awk '{print $1}')
         fi
         if [ "$expected" != "$actual" ]; then
           echo "::error::Checksum mismatch for $archive."
