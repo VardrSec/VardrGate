@@ -287,6 +287,11 @@ api:
 
 or pass `--allow-mutating`. Setup steps are held to the same rule.
 
+A 204 does not prove a write happened, and a 500 does not prove it failed.
+`verify` names a separate reader that checks the target's state before and after
+each identity's request, so the result reflects what changed. See
+[`docs/write-verification.md`](docs/write-verification.md).
+
 A write endpoint usually needs a JSON body. `api.body` is sent by every identity,
 with `Content-Type: application/json` unless `api.headers` sets one:
 

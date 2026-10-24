@@ -133,8 +133,16 @@ func (e *Engine) Run(ctx context.Context, tc model.AuthorizationTestCase) (Resul
 	// First pass: execute every identity and index the results so finding
 	// evaluation can compare an offending response against a legitimate baseline.
 	execByID := make(map[string]model.ExecutionResult, len(tc.Identities))
+	verified := make(map[string]model.Assessment)
 	for _, identity := range tc.Identities {
-		exec := e.exec.Execute(ctx, identity, req)
+		var exec model.ExecutionResult
+		if ea, ok := expectedFor(tc, identity.ID); ok && tc.WriteVerification != nil && ea.Decision != model.AccessDecisionSkip {
+			var a model.Assessment
+			exec, a = e.verifiedExecute(ctx, tc.WriteVerification, identity, req, ea)
+			verified[identity.ID] = a
+		} else {
+			exec = e.exec.Execute(ctx, identity, req)
+		}
 		exec.ResponseProfile = compare.Profile(exec.Body)
 		// The executor classifies against the default status mapping; it knows
 		// nothing about a policy-declared deny convention. Reclassify here so
@@ -163,20 +171,23 @@ func (e *Engine) Run(ctx context.Context, tc model.AuthorizationTestCase) (Resul
 	for _, identity := range tc.Identities {
 		ea, hasExpected := expectedByID[identity.ID]
 
-		assessment := assess(identity.ID, execByID[identity.ID], ea, hasExpected)
+		assessment, isVerified := verified[identity.ID]
+		if !isVerified {
+			assessment = assess(identity.ID, execByID[identity.ID], ea, hasExpected)
+		}
 		result.Assessments = append(result.Assessments, assessment)
 
 		if !hasExpected || ea.Decision == model.AccessDecisionSkip {
 			continue
 		}
 
-		if len(ea.ResponseAssertions) > 0 {
+		if isVerified || len(ea.ResponseAssertions) > 0 {
 			// Explicit assertions are authoritative: the decision comes from
 			// response content, so a denial sent with HTTP 200 or protected
 			// data leaked in an error body is judged correctly. An inconclusive
 			// assessment (no match, conflict, unusable body) emits no finding
 			// but is recorded, never a silent pass.
-			if finding, ok := assertionFinding(tc, identity, execByID, ea, assessment); ok {
+			if finding, ok := assessmentFinding(tc, identity, execByID, ea, assessment); ok {
 				result.Findings = append(result.Findings, finding)
 			}
 		} else if finding, ok := e.evaluate(tc, identity, execByID, ea.Decision); ok {
@@ -296,12 +307,12 @@ func (e *Engine) evaluate(tc model.AuthorizationTestCase, identity model.Identit
 	}
 }
 
-// assertionFinding turns an assertion-derived assessment into a finding, reusing
+// assessmentFinding turns an assertion- or verification-derived assessment into a finding, reusing
 // the same categorization as the status path (ownership, tenant, role). It fires
 // only when the explicit assessment contradicts the expectation; a matching or
 // inconclusive assessment yields no finding. The attached evidence names the
 // matched assertion indices, never their values or the response body.
-func assertionFinding(tc model.AuthorizationTestCase, identity model.Identity, execByID map[string]model.ExecutionResult, ea model.ExpectedAccess, a model.Assessment) (model.Finding, bool) {
+func assessmentFinding(tc model.AuthorizationTestCase, identity model.Identity, execByID map[string]model.ExecutionResult, ea model.ExpectedAccess, a model.Assessment) (model.Finding, bool) {
 	exec := execByID[identity.ID]
 	var f model.Finding
 	switch {
@@ -313,11 +324,12 @@ func assertionFinding(tc model.AuthorizationTestCase, identity model.Identity, e
 		return model.Finding{}, false
 	}
 	f.Confidence = model.ConfidenceHigh
-	f.Evidence = append(f.Evidence,
-		"assessment="+string(a.Decision),
-		"source=response_assertion",
-		fmt.Sprintf("matched_assertions=%v", a.MatchedAssertions),
-	)
+	f.Evidence = append(f.Evidence, "assessment="+string(a.Decision), "source="+a.Source)
+	if a.Source == sourceWriteVerification {
+		f.Evidence = append(f.Evidence, "verification="+a.Reason)
+	} else {
+		f.Evidence = append(f.Evidence, fmt.Sprintf("matched_assertions=%v", a.MatchedAssertions))
+	}
 	return f, true
 }
 
@@ -728,6 +740,9 @@ func validate(tc model.AuthorizationTestCase) error {
 			return fmt.Errorf("expected_access[%d]: %w", i, err)
 		}
 	}
+	if err := validateVerification(tc, ids); err != nil {
+		return err
+	}
 
 	if err := validateSetup(tc); err != nil {
 		return err
@@ -783,4 +798,13 @@ func validateCredential(identity model.Identity) error {
 		return fmt.Errorf("identity %q: unknown credential type %q", identity.ID, cred.Type)
 	}
 	return nil
+}
+
+func expectedFor(tc model.AuthorizationTestCase, identityID string) (model.ExpectedAccess, bool) {
+	for _, ea := range tc.ExpectedAccess {
+		if ea.IdentityID == identityID {
+			return ea, true
+		}
+	}
+	return model.ExpectedAccess{}, false
 }

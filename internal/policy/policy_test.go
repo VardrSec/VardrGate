@@ -587,3 +587,80 @@ func TestCompile_RequestBodyAndHeaders(t *testing.T) {
 		t.Fatalf("want an error that does not echo the body, got %v", err)
 	}
 }
+
+const verifyPolicy = `
+api:
+  endpoint: PUT /users/{username}/email
+  mutating: true
+  body: '{"email": "taken@example.io"}'
+expect:
+  owner: allow
+  peer: deny
+verify:
+  as: auditor
+  request:
+    method: GET
+    path: /users/{username}
+  json_pointer: /email
+  changed_to: taken@example.io
+`
+
+func verifyBindings() Bindings {
+	return Bindings{BaseURL: "http://localhost:5000", PathParams: map[string]string{"username": "alice"}, Identities: []model.Identity{
+		{ID: "o", Role: "owner", Credential: model.Credential{Type: model.CredentialTypeBearer, Value: "t1"}},
+		{ID: "p", Role: "peer", Credential: model.Credential{Type: model.CredentialTypeBearer, Value: "t2"}},
+		{ID: "aud", Role: "auditor", Credential: model.Credential{Type: model.CredentialTypeStaticHeader}},
+	}}
+}
+
+func TestCompile_Verify(t *testing.T) {
+	p, err := Parse([]byte(verifyPolicy))
+	if err != nil {
+		t.Fatal(err)
+	}
+	tc, err := p.Compile(verifyBindings())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := engine.Validate(tc); err != nil {
+		t.Fatalf("compiled verification does not validate: %v", err)
+	}
+	for _, id := range tc.Identities {
+		if id.ID == "aud" {
+			t.Fatal("the verifier must not be executed")
+		}
+	}
+	wv := tc.WriteVerification
+	if wv == nil || wv.Identity.ID != "aud" || wv.Request.URL != "http://localhost:5000/users/alice" ||
+		wv.JSONPointer != "/email" || string(wv.ChangedTo) != `"taken@example.io"` {
+		t.Fatalf("verification = %+v", wv)
+	}
+}
+
+func TestCompile_VerifyErrors(t *testing.T) {
+	for name, tt := range map[string]struct {
+		doc string
+		ids func([]model.Identity) []model.Identity
+	}{
+		"verifier role in expect": {strings.Replace(verifyPolicy, "as: auditor", "as: peer", 1), nil},
+		"no verifier identity":    {verifyPolicy, func(ids []model.Identity) []model.Identity { return ids[:2] }},
+		"two verifier identities": {verifyPolicy, func(ids []model.Identity) []model.Identity {
+			return append(ids, model.Identity{ID: "aud2", Role: "auditor", Credential: model.Credential{Type: model.CredentialTypeStaticHeader}})
+		}},
+		"missing as": {strings.Replace(verifyPolicy, "as: auditor", "as: ''", 1), nil},
+	} {
+		t.Run(name, func(t *testing.T) {
+			p, err := Parse([]byte(tt.doc))
+			if err != nil {
+				t.Fatal(err)
+			}
+			b := verifyBindings()
+			if tt.ids != nil {
+				b.Identities = tt.ids(b.Identities)
+			}
+			if _, err := p.Compile(b); err == nil {
+				t.Fatal("expected an error")
+			}
+		})
+	}
+}

@@ -8,6 +8,7 @@
 package secretref
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -45,6 +46,61 @@ func Expand(s string) (string, error) {
 		b.WriteString(val)
 		s = s[end+1:]
 	}
+}
+
+// ExpandVerification resolves references in a write verifier's credential and
+// in the string values of its JSON request body, such as a victim's password
+// for a login oracle. Values are JSON-escaped by re-encoding the body.
+func ExpandVerification(wv *model.WriteVerification) error {
+	if wv == nil {
+		return nil
+	}
+	ids := []model.Identity{wv.Identity}
+	if err := ExpandIdentities(ids); err != nil {
+		return fmt.Errorf("write_verification: %w", err)
+	}
+	wv.Identity = ids[0]
+	if len(wv.Request.Body) == 0 || !strings.Contains(string(wv.Request.Body), "${") {
+		return nil
+	}
+	var body any
+	if err := json.Unmarshal(wv.Request.Body, &body); err != nil {
+		return fmt.Errorf("write_verification: request body is not valid JSON")
+	}
+	expanded, err := expandStrings(body)
+	if err != nil {
+		return fmt.Errorf("write_verification: request body: %w", err)
+	}
+	out, err := json.Marshal(expanded)
+	if err != nil {
+		return fmt.Errorf("write_verification: request body: %w", err)
+	}
+	wv.Request.Body = out
+	return nil
+}
+
+func expandStrings(v any) (any, error) {
+	switch t := v.(type) {
+	case string:
+		return Expand(t)
+	case []any:
+		for i := range t {
+			e, err := expandStrings(t[i])
+			if err != nil {
+				return nil, err
+			}
+			t[i] = e
+		}
+	case map[string]any:
+		for k := range t {
+			e, err := expandStrings(t[k])
+			if err != nil {
+				return nil, err
+			}
+			t[k] = e
+		}
+	}
+	return v, nil
 }
 
 // ExpandIdentities resolves references in every identity's credential in place.
