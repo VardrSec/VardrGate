@@ -72,6 +72,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Sensitive query parameters (`token`, `api_key`, ...) are now redacted from
+  finding evidence regardless of case; `?Token=` or `?API_KEY=` previously
+  passed through.
 - `tenant_field` now matches the response field regardless of separators, as
   sensitive-field matching already did: `tenant_id` finds `tenantId` and
   `tenant-id`. A tenant-isolation break against a camelCase API was previously

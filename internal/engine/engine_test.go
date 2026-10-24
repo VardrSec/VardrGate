@@ -1232,3 +1232,17 @@ func TestResult_PreflightFailedAndUnreached(t *testing.T) {
 		})
 	}
 }
+
+// Query parameter names are case-insensitive in practice; a capitalized secret
+// must not reach finding evidence.
+func TestSanitizeURL_RedactsSensitiveParamsCaseInsensitively(t *testing.T) {
+	got := sanitizeURL("https://example.com/r?Token=s3cret-1&API_KEY=s3cret-2&Access_Token=s3cret-3&page=2")
+	for _, bad := range []string{"s3cret-1", "s3cret-2", "s3cret-3"} {
+		if strings.Contains(got, bad) {
+			t.Errorf("sanitizeURL leaked %q: %s", bad, got)
+		}
+	}
+	if !strings.Contains(got, "page=2") {
+		t.Errorf("non-sensitive param removed: %s", got)
+	}
+}

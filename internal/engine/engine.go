@@ -630,6 +630,17 @@ var sensitiveQueryParams = []string{
 	"secret", "key", "password", "auth", "authorization",
 }
 
+// isSensitiveQueryParam matches case-insensitively: servers commonly accept
+// ?Token= or ?API_KEY=, and evidence must not carry them either.
+func isSensitiveQueryParam(key string) bool {
+	for _, p := range sensitiveQueryParams {
+		if strings.EqualFold(key, p) {
+			return true
+		}
+	}
+	return false
+}
+
 // sanitizeURL removes credentials from URLs before they are written into
 // evidence: userinfo (user:pass@host) is stripped entirely and known sensitive
 // query parameters are redacted.
@@ -643,9 +654,9 @@ func sanitizeURL(rawURL string) string {
 	}
 	q := u.Query()
 	redacted := false
-	for _, p := range sensitiveQueryParams {
-		if q.Has(p) {
-			q.Set(p, "[REDACTED]")
+	for key := range q {
+		if isSensitiveQueryParam(key) {
+			q.Set(key, "[REDACTED]")
 			redacted = true
 		}
 	}
