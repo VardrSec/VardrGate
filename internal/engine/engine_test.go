@@ -107,7 +107,7 @@ func TestRun_UnexpectedAccess_WhenDeniedIdentityGetsAllow(t *testing.T) {
 
 // TenantID alone is not sufficient to establish a cross-tenant object-access
 // relationship. The finding must remain unexpected_access until resource-
-// ownership context (owner identity, target tenant, object ID) is modelled.
+// ownership context (owner identity, target tenant, object ID) is modeled.
 func TestRun_TenantIDAloneDoesNotElevateToBOLA(t *testing.T) {
 	tc := baseTC()
 	tc.Identities[1].TenantID = "tenant-b"

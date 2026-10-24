@@ -1,7 +1,7 @@
 // Package policy parses declarative API authorization policies and compiles
 // them into executable authorization test cases.
 //
-// A policy describes expected security behaviour independent of any concrete
+// A policy describes expected security behavior independent of any concrete
 // environment: which logical identity is the owner, which roles may access the
 // object, and what the deny statuses are. Binding a policy to a base URL, path
 // parameters, and concrete identities produces a model.AuthorizationTestCase

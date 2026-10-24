@@ -25,7 +25,7 @@
     "id": "anonymous",
     "name": "Unauthenticated Caller",
     "role": "anonymous",
-    "description": "Sends no credentials at all. A static_header with no header name is how an anonymous identity is modelled.",
+    "description": "Sends no credentials at all. A static_header with no header name is how an anonymous identity is modeled.",
     "credential": {
       "type": "static_header"
     }

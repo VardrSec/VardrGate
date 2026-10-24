@@ -27,7 +27,7 @@ supports, in this precedence order:
 3. `privilege_escalation` (high) — the identity's role ranks below the
    resource's `required_role` within the declared `role_hierarchy`.
 4. `unexpected_access` (high) — no ownership context; conservative fallback,
-   unchanged behaviour.
+   unchanged behavior.
 
 The engine never guesses a higher-severity category from a weak signal: every
 elevated category requires explicit context in the test case. `TenantID` alone

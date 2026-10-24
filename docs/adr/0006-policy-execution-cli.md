@@ -75,7 +75,7 @@ loopback fixture (`internal/demo`). The quickstart now proves the tool works
 with no setup, no credentials, and no network egress.
 
 **Unknown arguments are errors.** Dispatch previously fell through to `serve`
-for anything it did not recognise, so `vardrgate --help` started a web server on
+for anything it did not recognize, so `vardrgate --help` started a web server on
 :8080. `help`, `version`, and unknown commands are now handled explicitly; a
 bare invocation still serves, which is the documented default.
 
@@ -84,7 +84,7 @@ bare invocation still serves, which is the documented default.
 - The policy format is reachable from the command line, and the example policy
   in `examples/` is now something a reader can run.
 - **Breaking:** `vardrgate run` against an unreachable target exits 3 where it
-  previously exited 0. Any pipeline that depended on the old behaviour was
+  previously exited 0. Any pipeline that depended on the old behavior was
   passing without testing anything.
 - **Breaking:** `gen` output now contains a `value` key holding a `${VAR}`
   placeholder. Files generated before this change still run; they simply

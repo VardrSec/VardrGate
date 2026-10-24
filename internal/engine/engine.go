@@ -378,7 +378,7 @@ func accessDeniedFinding(tc model.AuthorizationTestCase, identity model.Identity
 	}
 }
 
-// classify determines the observed outcome for one execution, honouring the
+// classify determines the observed outcome for one execution, honoring the
 // deny conventions the policy declared. It returns a description of a matched
 // body condition so a finding can disclose why a 2xx was read as a refusal.
 //
@@ -690,7 +690,7 @@ func validate(tc model.AuthorizationTestCase) error {
 
 // validateCredential enforces the header/value rules for each credential type.
 // Empty static_header credentials are permitted so an anonymous identity can be
-// modelled explicitly.
+// modeled explicitly.
 func validateCredential(identity model.Identity) error {
 	cred := identity.Credential
 	switch cred.Type {

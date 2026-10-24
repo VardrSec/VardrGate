@@ -53,9 +53,9 @@ type Options struct {
 // legitimate owner, a different authenticated user, and nobody at all.
 var DefaultRoles = []string{"owner", "other_user", "anonymous"}
 
-// idParamPattern recognises a path parameter that addresses an object.
+// idParamPattern recognizes a path parameter that addresses an object.
 //
-// The match is on the whole parameter name after normalisation, never a
+// The match is on the whole parameter name after normalization, never a
 // substring: "user" appearing inside "username" is the kind of noise that is
 // free in a prober and unacceptable in something whose output a person signs.
 var idParamPattern = regexp.MustCompile(`^(id|uid|uuid|guid|key|.*(id|uuid|guid|key|ref|no|num|number))$`)
@@ -217,7 +217,7 @@ func pathParams(path string) []string {
 }
 
 // resourceTypeFromPath takes the collection segment preceding the identifier
-// and singularises it: /users/{user_id}/profile → "profile", /users/{id} → "user".
+// and singularizes it: /users/{user_id}/profile → "profile", /users/{id} → "user".
 func resourceTypeFromPath(path string) string {
 	segments := strings.Split(strings.Trim(path, "/"), "/")
 	for i := len(segments) - 1; i >= 0; i-- {

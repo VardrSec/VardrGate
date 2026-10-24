@@ -77,7 +77,7 @@ const (
 )
 
 // severityRank orders severities from least to most impactful. Unknown values
-// rank below info so an unrecognised severity never trips a threshold.
+// rank below info so an unrecognized severity never trips a threshold.
 var severityRank = map[Severity]int{
 	SeverityInfo:     1,
 	SeverityLow:      2,
@@ -87,7 +87,7 @@ var severityRank = map[Severity]int{
 }
 
 // Rank returns the ordinal of a severity for threshold comparison.
-// An unrecognised severity ranks 0, below every named level.
+// An unrecognized severity ranks 0, below every named level.
 func (s Severity) Rank() int { return severityRank[s] }
 
 // ParseSeverity converts a case-insensitive severity name into a Severity.
@@ -309,7 +309,7 @@ type Resource struct {
 	TenantField string `json:"tenant_field,omitempty"`
 }
 
-// DenyCondition recognises a refusal that the status line does not express.
+// DenyCondition recognizes a refusal that the status line does not express.
 //
 // An API that answers "200 OK {"error":"forbidden"}" denies the caller while
 // reporting success. Under status-code classification alone that reads as an
@@ -441,7 +441,7 @@ type AuthorizationTestCase struct {
 	// APIs whose deny convention is not the default 401/403 (a 404 that hides
 	// existence is the common case). Empty uses the default mapping.
 	DenyStatuses []int `json:"deny_status,omitempty"`
-	// DenyWhen recognises a refusal expressed in the response body rather than
+	// DenyWhen recognizes a refusal expressed in the response body rather than
 	// the status line. Nil leaves classification to the status code alone.
 	DenyWhen *DenyCondition `json:"deny_when,omitempty"`
 	// Mutating acknowledges that the request changes server state. Required

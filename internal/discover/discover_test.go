@@ -82,10 +82,10 @@ func TestFromSpec_InfersTheLastIdentifierInThePath(t *testing.T) {
 	t.Fatal("no draft for the nested path")
 }
 
-func TestFromSpec_RecognisesCamelCaseIdentifiers(t *testing.T) {
+func TestFromSpec_RecognizesCamelCaseIdentifiers(t *testing.T) {
 	for _, d := range FromSpec(parseSpec(t), Options{}) {
 		if strings.Contains(d.Endpoint, "/companies/") && !strings.Contains(d.YAML, "id_param: companyId") {
-			t.Errorf("companyId not recognised as an identifier:\n%s", d.YAML)
+			t.Errorf("companyId not recognized as an identifier:\n%s", d.YAML)
 		}
 	}
 }

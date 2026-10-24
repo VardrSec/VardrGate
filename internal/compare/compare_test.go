@@ -48,7 +48,7 @@ func TestResults_BodyMatch_JSONWhitespace(t *testing.T) {
 	b := result("b", 200, []byte(`{ "name": "alice", "id": 1 }`))
 	cr := Results(a, b, nil)
 	if !cr.BodyMatch {
-		t.Fatal("expected body match after JSON normalisation")
+		t.Fatal("expected body match after JSON normalization")
 	}
 	if !containsNote(cr, "whitespace/key order") {
 		t.Errorf("expected whitespace note, got %v", cr.Notes)

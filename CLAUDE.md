@@ -128,7 +128,7 @@ Other rules:
 - `sensitive_data_exposure` (high): an identity whose expected access has `ForbidSensitiveData` receives a response body containing sensitive fields. Independent of the allow/deny decision. Detection (in `compare.SensitiveFieldsPresent`) is recursive and case-insensitive; evidence records field *names* only, never values. Field set defaults to `compare.DefaultSensitiveFields`, overridable via `tc.SensitiveFields`. Policy `response.sensitive_fields.forbidden_for` roles compile to `ForbidSensitiveData`.
 - `authorization_mismatch` (low): expected `allow`, observed `deny` (401/403).
 - `cors_misconfiguration`: opt-in via `tc.CORS.ProbeOrigin`. The engine injects that `Origin` header (once, endpoint-level) and inspects `Access-Control-Allow-Origin`/`-Credentials` (captured by the client). Reflected arbitrary origin + credentials → high; reflected/wildcard without credentials → low; otherwise none.
-- `deny_when`: `tc.DenyWhen` (from `response.deny_when`) recognises a refusal in the response *body* — `body_contains` or a dotted-path `json_field` match — and **outranks the status line**. This is a correctness fix, not a convenience: an API answering `200 {"error":"forbidden"}` previously produced a false `missing_authentication` at critical severity against correctly-behaving software. Classification is centralised in `engine.classify`, which every path uses, so the execution record and the findings drawn from it cannot disagree. See ADR 0008.
+- `deny_when`: `tc.DenyWhen` (from `response.deny_when`) recognizes a refusal in the response *body* — `body_contains` or a dotted-path `json_field` match — and **outranks the status line**. This is a correctness fix, not a convenience: an API answering `200 {"error":"forbidden"}` previously produced a false `missing_authentication` at critical severity against correctly-behaving software. Classification is centralized in `engine.classify`, which every path uses, so the execution record and the findings drawn from it cannot disagree. See ADR 0008.
 - `mutating`: unsafe methods (POST/PUT/PATCH/DELETE) fail validation unless `tc.Mutating` is set via `api.mutating` or `--allow-mutating`. A test case replays one request per identity, so an unsafe method mutates once per caller. Setup steps obey the same rule. Refusing rather than warning is deliberate — the failure mode is destroyed data. See ADR 0008.
 - `object_property_exposure` (OWASP API3, BOPLA): an `elevated`-tier field (`role`, `is_admin`, `permissions`, `balance`) reaching a caller marked `ForbidSensitiveData`. Split from `sensitive_data_exposure` by tier in `sensitiveDataFindings`; severity is the highest tier in each group.
 - `deny_status`: `tc.DenyStatuses` (from a policy's `response.deny_status`) makes the listed status codes explicit denials, so an API that hides existence behind 404 can be evaluated. The engine reclassifies the *execution record* as well as the finding, so a result document cannot contradict itself, and adds `deny_status_declared=` evidence. A 2xx in the list is rejected by validation. See ADR 0007.
@@ -161,7 +161,7 @@ Renders `[]report.Case` (a source path plus an `engine.Result`) as text, Markdow
 
 ### `internal/scaffold`
 
-Shared starter-test-case builder used by the importers. `StarterCase(id, description, method, url)` returns a scaffold with the request pre-filled plus an `authenticated` (allow) and `anonymous` (deny) template identity; `Slug` normalises a path into an id fragment.
+Shared starter-test-case builder used by the importers. `StarterCase(id, description, method, url)` returns a scaffold with the request pre-filled plus an `authenticated` (allow) and `anonymous` (deny) template identity; `Slug` normalizes a path into an id fragment.
 
 ### `internal/openapi` / `internal/postman`
 
@@ -183,7 +183,7 @@ Parses a declarative YAML policy (`api`/`expect`/`response`) and `Compile`s it i
 
 Proposes draft policies from an OpenAPI spec (`FromSpec`), inferring the object identifier, resource type, and — given a captured response body via `--sample` — the tenant field and sensitive properties. Every inference is explained in `Draft.Notes`.
 
-**The invariant:** every expectation is emitted as `policy.DraftMarker` (`TODO`), which `policy.toDecision` rejects. A draft therefore *cannot execute* until a human has typed a decision — enforced by the compiler, not promised in docs, and asserted by `discover_test.go`. Identifier matching is on whole normalised names, never substrings. Inference may inform **authoring**; it must never produce an **assertion**. Any future heuristic obeys the same rule. See ADR 0009.
+**The invariant:** every expectation is emitted as `policy.DraftMarker` (`TODO`), which `policy.toDecision` rejects. A draft therefore *cannot execute* until a human has typed a decision — enforced by the compiler, not promised in docs, and asserted by `discover_test.go`. Identifier matching is on whole normalized names, never substrings. Inference may inform **authoring**; it must never produce an **assertion**. Any future heuristic obeys the same rule. See ADR 0009.
 
 ### `internal/secretref`
 
@@ -201,7 +201,7 @@ Parses the offline job envelope (`type`, `program_id`, `config.test_case`, `conf
 
 Compares two `ExecutionResult` values. Wired into the engine: `comparisonEvidence` compares an offending response against a legitimate baseline and attaches the result to the finding.
 
-Comparisons: status-code equality, raw body equality, normalised JSON equality (key-order independent), value-free JSON schema equality and field overlap, response-size difference, recursive presence/absence of sensitive fields (`token`, `secret`, `api_key`, etc.).
+Comparisons: status-code equality, raw body equality, normalized JSON equality (key-order independent), value-free JSON schema equality and field overlap, response-size difference, recursive presence/absence of sensitive fields (`token`, `secret`, `api_key`, etc.).
 
 `Profile(body)` emits a bounded structural description: at most 2,048 distinct
 paths and 64 levels, with a truncation flag. Its SHA-256 schema hash covers only
@@ -214,7 +214,7 @@ kind and deliberately receive no body hash.
 
 `FieldValue(body, field)` is a recursive scalar lookup, case- and separator-insensitive like `ScanSensitive`, used to read a resource's tenant out of a response body (see ADR 0007). `ValueAtPath(body, "error.code")` navigates a dotted path exactly rather than searching, for callers that know the response shape.
 
-`SensitiveTiers` groups field names into `critical`/`elevated`/`pii`/`internal`; `ScanSensitive(body, declared)` returns `SensitiveHit{Path, Field, Tier}` so evidence locates a leak (`user.profile.ssn`) instead of merely naming it, and arrays collapse to one representative path. Matching is on whole normalised names — **never substrings**, which would classify `username` as `user`. A non-empty `declared` list replaces the tiers entirely and reports at `TierDeclared`. `MatchesDeny(body, cond)` evaluates a declared deny condition and describes what matched.
+`SensitiveTiers` groups field names into `critical`/`elevated`/`pii`/`internal`; `ScanSensitive(body, declared)` returns `SensitiveHit{Path, Field, Tier}` so evidence locates a leak (`user.profile.ssn`) instead of merely naming it, and arrays collapse to one representative path. Matching is on whole normalized names — **never substrings**, which would classify `username` as `user`. A non-empty `declared` list replaces the tiers entirely and reports at `TierDeclared`. `MatchesDeny(body, cond)` evaluates a declared deny condition and describes what matched.
 
 ### `internal/store`
 
@@ -233,7 +233,7 @@ Exposes the HTTP API. No business logic.
 
 ### `cmd/vardrgate`
 
-Subcommand dispatch (`main.go`). A bare invocation serves, which is the documented default; **any unrecognised argument is an error**, not a fallthrough to `serve` — that fallthrough is why `vardrgate --help` used to start a web server.
+Subcommand dispatch (`main.go`). A bare invocation serves, which is the documented default; **any unrecognized argument is an error**, not a fallthrough to `serve` — that fallthrough is why `vardrgate --help` used to start a web server.
 
 Exit codes are shared by every command that executes a test case: `0` ran clean, `1` usage or input error, `2` findings at or above `--fail-on`, `3` a case reached nothing. `exitError` carries the code out of a subcommand; `gate` decides it. Exit 3 is not gated on the threshold and outranks findings — zero findings means nothing when no request succeeded — and it is evaluated **per case**, so a target that dies partway through a suite still fails the run.
 

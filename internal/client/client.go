@@ -18,7 +18,7 @@ const (
 	defaultMaxBodyBytes = 5 * 1024 * 1024 // 5 MB
 )
 
-// Config controls client behaviour. Zero values use safe defaults.
+// Config controls client behavior. Zero values use safe defaults.
 type Config struct {
 	Timeout             time.Duration
 	MaxBodyBytes        int64

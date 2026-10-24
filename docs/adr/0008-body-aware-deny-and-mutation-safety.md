@@ -12,7 +12,7 @@ ADR 0007 established that a policy declares what a denial looks like, but it
 only handled the status line. Classification remained: 2xx means `allow`.
 
 A great many APIs refuse a caller by answering `200 OK` with an error body —
-`{"error": "forbidden"}` — because the framework serialises a result object
+`{"error": "forbidden"}` — because the framework serializes a result object
 rather than mapping failures onto HTTP status codes. Against such an API,
 VardrGate produced a **false finding at critical severity**: an anonymous
 identity that the server correctly refused was classified as an allow, an
