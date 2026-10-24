@@ -8,6 +8,30 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Response assertions.** Policy `response.assertions`, and
+  `expected_access[].response_assertions` in the HTTP API, declare JSON values
+  (by JSON Pointer) that prove an allow or a deny. This catches protected data
+  returned with 403, 404 or 500, and refusals returned with 200. When
+  configured, assertions decide the result with no status fallback, and they
+  outrank `deny_status`/`deny_when`. Unmatched or conflicting evidence is
+  inconclusive. Evidence carries assertion indices only. See
+  [ADR 0016](docs/adr/0016-response-assertions.md) and
+  `docs/response-assertions.md`.
+- **Request body in policies.** `api.body` (JSON) and `api.headers` are sent
+  by every identity, so a policy can test a write endpoint that reads JSON.
+  Content-Type defaults to `application/json` when a body is set.
+- **Assessments.** Every result has an `assessments` array: `allowed`,
+  `denied`, `inconclusive` or `skipped` per identity, with a source and a reason
+  code. The field is additive.
+- **Inconclusive is never a pass.** Text, Markdown and SARIF reports list
+  inconclusive assessments with an explanation. Markdown shows ⚠️ rather than
+  ✅, and SARIF adds a warning notification. `--fail-on-inconclusive` exits 4.
+- **Authorization benchmark.** `go run ./cmd/authbench` scores Gate against a
+  deliberately vulnerable loopback API, with recorded reports under
+  `benchmarks/`. CI runs both modes, retains the reports, and enforces
+  regression budgets in `go test`.
+
+
 - **Policy suites.** `vardrgate policy run --suite <file>` runs many policies
   against one environment as one command with one exit code. Each entry names a
   policy and its path parameters, with an optional tenant, id and identities
@@ -37,6 +61,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Reports now show status-only ambiguous outcomes (for example, an undeclared
+  404 on an expected denial) as inconclusive. Findings and exit codes are
+  unchanged.
 - README leads with the problem, the demo, single-endpoint and suite usage, and
   CI. Reference material (policy features, spec importers, HTTP API, queue and
   Map integration) follows, and session cookies are documented as a
@@ -48,6 +75,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Sensitive query parameters (`token`, `api_key`, ...) are now redacted from
+  finding evidence regardless of case; `?Token=` or `?API_KEY=` previously
+  passed through.
 - `tenant_field` now matches the response field regardless of separators, as
   sensitive-field matching already did: `tenant_id` finds `tenantId` and
   `tenant-id`. A tenant-isolation break against a camelCase API was previously

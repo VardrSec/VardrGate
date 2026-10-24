@@ -256,6 +256,13 @@ func SARIF(w io.Writer, cases []Case, toolVersion string) error {
 				Locations: location(c.Source),
 			})
 		}
+		for _, a := range c.Result.Inconclusive() {
+			inv.Notifications = append(inv.Notifications, sarifNotification{
+				Level:     "warning",
+				Message:   sarifText{Text: fmt.Sprintf("Case %s: %s.", id, Explain(a))},
+				Locations: location(c.Source),
+			})
+		}
 		for _, f := range c.Result.Findings {
 			ri, ok := index[f.Category]
 			if !ok {

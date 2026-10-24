@@ -472,3 +472,118 @@ func TestSubstitutePath_LeavesRuntimeReferencesAlone(t *testing.T) {
 		t.Errorf("got %q", got)
 	}
 }
+
+const assertionPolicy = `
+api:
+  endpoint: GET /books/{title}
+expect:
+  owner: allow
+  peer: deny
+  anonymous: deny
+response:
+  assertions:
+    - json_pointer: /secret
+      equals: owner-secret
+      decision: allow
+    - json_pointer: /status
+      equals: fail
+      decision: deny
+      roles: [peer]
+    - json_pointer: /id
+      equals: 9007199254740993
+      decision: allow
+      roles: [owner]
+`
+
+func assertionBindings() Bindings {
+	return Bindings{BaseURL: "http://localhost:5000", PathParams: map[string]string{"title": "b1"}, Identities: []model.Identity{
+		{ID: "o", Role: "owner", Credential: model.Credential{Type: model.CredentialTypeBearer, Value: "t1"}},
+		{ID: "p", Role: "peer", Credential: model.Credential{Type: model.CredentialTypeBearer, Value: "t2"}},
+		{ID: "a", Role: "anonymous", Credential: model.Credential{Type: model.CredentialTypeBearer, Value: "t3"}},
+	}}
+}
+
+func TestCompile_ResponseAssertions(t *testing.T) {
+	p, err := Parse([]byte(assertionPolicy))
+	if err != nil {
+		t.Fatal(err)
+	}
+	tc, err := p.Compile(assertionBindings())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := engine.Validate(tc); err != nil {
+		t.Fatalf("compiled assertions do not validate: %v", err)
+	}
+	got := map[string][]string{}
+	for _, ea := range tc.ExpectedAccess {
+		for _, r := range ea.ResponseAssertions {
+			got[ea.IdentityID] = append(got[ea.IdentityID], r.JSONPointer+"="+string(r.Equals)+":"+string(r.Decision))
+		}
+	}
+	want := map[string][]string{
+		"o": {`/secret="owner-secret":allow`, `/id=9007199254740993:allow`},
+		"p": {`/secret="owner-secret":allow`, `/status="fail":deny`},
+		"a": {`/secret="owner-secret":allow`},
+	}
+	for id, w := range want {
+		if strings.Join(got[id], " ") != strings.Join(w, " ") {
+			t.Errorf("%s: got %v, want %v", id, got[id], w)
+		}
+	}
+}
+
+func TestCompile_RejectsBadAssertions(t *testing.T) {
+	for name, tail := range map[string]string{
+		"missing equals": "    - json_pointer: /x\n      decision: allow\n",
+		"bad decision":   "    - json_pointer: /x\n      equals: 1\n      decision: skip\n",
+		"unknown role":   "    - json_pointer: /x\n      equals: 1\n      decision: deny\n      roles: [admin]\n",
+		"bad pointer":    "    - json_pointer: x\n      equals: 1\n      decision: deny\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			doc := "api:\n  endpoint: GET /x\nexpect:\n  owner: allow\nresponse:\n  assertions:\n" + tail
+			p, err := Parse([]byte(doc))
+			if err != nil {
+				t.Fatal(err)
+			}
+			b := assertionBindings()
+			b.Identities = b.Identities[:1]
+			tc, err := p.Compile(b)
+			if err == nil {
+				err = engine.Validate(tc)
+			}
+			if err == nil {
+				t.Fatal("expected an error")
+			}
+		})
+	}
+}
+
+func TestCompile_RequestBodyAndHeaders(t *testing.T) {
+	doc := "api:\n  endpoint: PUT /users/{user_id}/email\n  mutating: true\n  body: '{\"email\": \"new@example.com\"}'\n  headers:\n    X-Trace: gate\nexpect:\n  owner: allow\n"
+	p, err := Parse([]byte(doc))
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := bindings()
+	b.Identities = b.Identities[:1]
+	tc, err := p.Compile(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(tc.Request.Body) != `{"email": "new@example.com"}` {
+		t.Errorf("body = %s", tc.Request.Body)
+	}
+	if tc.Request.Headers["Content-Type"] != "application/json" || tc.Request.Headers["X-Trace"] != "gate" {
+		t.Errorf("headers = %v", tc.Request.Headers)
+	}
+
+	bad := strings.Replace(doc, `'{"email": "new@example.com"}'`, "not json", 1)
+	p, err = Parse([]byte(bad))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.Compile(b); err == nil || strings.Contains(err.Error(), "not json") {
+		t.Fatalf("want an error that does not echo the body, got %v", err)
+	}
+}
