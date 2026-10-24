@@ -103,6 +103,20 @@ func TestVerifierSuccessfulStatusChangeAloneIsNotAMutation(t *testing.T) {
 	}
 }
 
+func TestUnusableBaselineKeepsExistingDiagnostic(t *testing.T) {
+	for _, code := range []int{0, 302, 400, 405, 429} {
+		tc := verifiedCase(model.AccessDecisionDeny)
+		x := &stateTarget{value: "original", writeStatus: 204, readStatus: []int{code}}
+		r, err := New(x).Run(context.Background(), tc)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if x.sent != 0 || r.Assessments[0].Decision != model.AssessmentInconclusive || r.Assessments[0].Reason != reasonBaselineMissing {
+			t.Fatalf("status %d: sent=%d result=%+v", code, x.sent, r)
+		}
+	}
+}
+
 type calibrationExecutor struct {
 	value string
 	good  bool

@@ -156,6 +156,11 @@ func (e *Engine) verifiedExecute(ctx context.Context, wv *model.WriteVerificatio
 		Decision: model.AssessmentInconclusive, Source: sourceWriteVerification}
 
 	before, reason := e.observe(ctx, wv)
+	if reason == reasonVerifierStatus {
+		// Preserve the baseline diagnostic for an unusable first read; after
+		// reads use the more specific unexpected-status reason.
+		reason = reasonBaselineMissing
+	}
 	if reason == "" && (before.status < 200 || before.status >= 300) {
 		// A missing resource is not a baseline: a mistyped verifier path would
 		// read 404 before and after and look like a refused write.
