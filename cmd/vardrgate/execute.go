@@ -668,6 +668,9 @@ func loadCases(path string) ([]model.AuthorizationTestCase, error) {
 		if err := secretref.ExpandIdentities(cases[i].Identities); err != nil {
 			return nil, fmt.Errorf("case %q: %w", cases[i].ID, err)
 		}
+		if err := secretref.ExpandVerification(cases[i].WriteVerification); err != nil {
+			return nil, fmt.Errorf("case %q: %w", cases[i].ID, err)
+		}
 	}
 	return cases, nil
 }

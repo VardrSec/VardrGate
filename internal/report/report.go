@@ -91,11 +91,18 @@ func (s summary) headline() string {
 // inconclusiveReasons explains each assessment reason in terms an operator can
 // act on. Reasons are fixed codes from the engine, never response content.
 var inconclusiveReasons = map[string]string{
-	"no_assertion_matched":        "no response assertion matched; the assertion may be stale or the response format changed",
-	"conflicting_assertions":      "both an allow and a deny assertion matched; the assertions contradict each other",
-	"invalid_or_unsupported_json": "response assertions are configured but the body is not usable JSON",
-	"execution_error":             "the request failed before a usable response arrived",
-	"ambiguous_http_outcome":      "the status is neither a success nor a declared denial; declare deny_status or add response assertions",
+	"no_assertion_matched":         "no response assertion matched; the assertion may be stale or the response format changed",
+	"conflicting_assertions":       "both an allow and a deny assertion matched; the assertions contradict each other",
+	"invalid_or_unsupported_json":  "response assertions are configured but the body is not usable JSON",
+	"execution_error":              "the request failed before a usable response arrived",
+	"ambiguous_http_outcome":       "the status is neither a success nor a declared denial; declare deny_status or add response assertions",
+	"verifier_read_failed":         "the write verifier could not read the target state; the request was withheld if this happened before it",
+	"verifier_denied":              "the write verifier was refused; check its credential",
+	"verifier_value_unavailable":   "the write verifier's response has no value at its json_pointer; the pointer may be stale",
+	"state_changing_concurrently":  "the target state changed between two reads before the request; something else is writing to it",
+	"target_value_already_present": "the target already holds the value the write would set, so a change cannot be observed; reset the fixture",
+	"verifier_baseline_missing":    "the write verifier's first read was not a success; check its path, or the resource does not exist",
+	"state_changed_unexpectedly":   "the target state changed, but not to the value this write attempts",
 }
 
 // Explain renders an inconclusive assessment as one line of operator guidance.

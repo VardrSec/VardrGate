@@ -199,11 +199,15 @@ func (e Entry) compile(dir, base, defaultIdentities string, opts Options, loadId
 func bindRoles(p policy.Policy, all []model.Identity) ([]model.Identity, error) {
 	have := map[string]bool{}
 	var ids []model.Identity
+	verifier := p.VerifierRole()
 	for _, id := range all {
-		if _, ok := p.Expect[id.Role]; ok {
+		if _, ok := p.Expect[id.Role]; ok || (verifier != "" && id.Role == verifier) {
 			ids = append(ids, id)
 			have[id.Role] = true
 		}
+	}
+	if verifier != "" && !have[verifier] {
+		return nil, fmt.Errorf("no identity has role %q, which the policy's verify.as requires", verifier)
 	}
 	var missing []string
 	for role := range p.Expect {

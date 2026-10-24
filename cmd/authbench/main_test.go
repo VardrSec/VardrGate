@@ -108,3 +108,24 @@ func TestAssertionBenchmarkRegressionBudget(t *testing.T) {
 		t.Fatalf("incorrect split: %+v", groups)
 	}
 }
+
+// Write verification closes the write-before-500 miss and must not cost
+// precision or raise inconclusive assessments.
+func TestWriteVerificationBenchmarkBudget(t *testing.T) {
+	rows, err := runSuiteWith(true, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := summarize(rows)
+	if m.Total != 22 || m.KnownFailures != 9 || m.TP < 9 || m.FP != 0 || m.FN != 0 || m.Inconclusive > 5 {
+		t.Fatalf("accuracy regression: %+v", m)
+	}
+	for _, row := range rows {
+		if verifiedWrites[row.Scenario.ID] && row.Inconclusive {
+			t.Errorf("%s is inconclusive with verification", row.Scenario.ID)
+		}
+		if row.Scenario.ID == "write-before-500" && row.Verdict != "true_positive" {
+			t.Errorf("write-before-500 = %s", row.Verdict)
+		}
+	}
+}

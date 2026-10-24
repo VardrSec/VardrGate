@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/VardrSec/vardrgate/internal/model"
+	"github.com/VardrSec/vardrgate/internal/secretref"
 	"gopkg.in/yaml.v3"
 )
 
@@ -25,6 +26,27 @@ type Policy struct {
 	Setup    []SetupSpec       `yaml:"setup"`
 	Expect   map[string]string `yaml:"expect"`
 	Response ResponseSpec      `yaml:"response"`
+	Verify   *VerifySpec       `yaml:"verify"`
+}
+
+// VerifySpec declares a write verifier: a separate reader, bound by role, that
+// observes the target's state before and after each identity's request. The
+// role must not appear in expect, so the reader never performs the write.
+type VerifySpec struct {
+	As                string           `yaml:"as"`
+	Request           SetupRequestSpec `yaml:"request"`
+	AllowUnsafeMethod bool             `yaml:"allow_unsafe_method"`
+	JSONPointer       string           `yaml:"json_pointer"`
+	ChangedTo         yaml.Node        `yaml:"changed_to"`
+}
+
+// VerifierRole is the role whose identity reads state for write verification,
+// or "" when the policy declares none. Suites bind it alongside expect roles.
+func (p Policy) VerifierRole() string {
+	if p.Verify == nil {
+		return ""
+	}
+	return strings.TrimSpace(p.Verify.As)
 }
 
 // APISpec identifies the endpoint under test and its ownership model.
@@ -219,6 +241,12 @@ func (p Policy) Compile(b Bindings) (model.AuthorizationTestCase, error) {
 	}
 	url := strings.TrimRight(b.BaseURL, "/") + path
 
+	executed, verification, err := p.compileVerify(b)
+	if err != nil {
+		return model.AuthorizationTestCase{}, err
+	}
+	b.Identities = executed
+
 	forbidden := make(map[string]struct{}, len(p.Response.SensitiveFields.ForbiddenFor))
 	for _, role := range p.Response.SensitiveFields.ForbiddenFor {
 		forbidden[role] = struct{}{}
@@ -264,14 +292,15 @@ func (p Policy) Compile(b Bindings) (model.AuthorizationTestCase, error) {
 	}
 
 	tc := model.AuthorizationTestCase{
-		ID:             defaultID(b.TestCaseID, method, path),
-		Identities:     b.Identities,
-		Request:        request,
-		ExpectedAccess: expected,
-		DenyStatuses:   p.Response.DenyStatus,
-		DenyWhen:       p.Response.DenyWhen.condition(),
-		Mutating:       p.API.Mutating || b.AllowMutating,
-		Setup:          setup,
+		ID:                defaultID(b.TestCaseID, method, path),
+		Identities:        b.Identities,
+		Request:           request,
+		ExpectedAccess:    expected,
+		DenyStatuses:      p.Response.DenyStatus,
+		DenyWhen:          p.Response.DenyWhen.condition(),
+		Mutating:          p.API.Mutating || b.AllowMutating,
+		WriteVerification: verification,
+		Setup:             setup,
 	}
 
 	if res := p.resource(b, ownerIdentity); res != nil {
@@ -565,4 +594,72 @@ func hasHeader(h map[string]string, name string) bool {
 		}
 	}
 	return false
+}
+
+// compileVerify separates the verifier identity from the identities under test
+// and builds the engine's WriteVerification. Same-origin, method and pointer
+// rules are enforced by engine validation.
+func (p Policy) compileVerify(b Bindings) ([]model.Identity, *model.WriteVerification, error) {
+	role := p.VerifierRole()
+	if p.Verify == nil {
+		return b.Identities, nil, nil
+	}
+	if role == "" {
+		return nil, nil, fmt.Errorf("compile: verify.as must name the role that reads state")
+	}
+	if _, ok := p.Expect[role]; ok {
+		return nil, nil, fmt.Errorf("compile: verify.as role %q is also in expect; the verifier must not perform the write", role)
+	}
+	var executed []model.Identity
+	var verifier *model.Identity
+	for i, id := range b.Identities {
+		if id.Role != role {
+			executed = append(executed, id)
+			continue
+		}
+		if verifier != nil {
+			return nil, nil, fmt.Errorf("compile: more than one identity has verifier role %q", role)
+		}
+		verifier = &b.Identities[i]
+	}
+	if verifier == nil {
+		return nil, nil, fmt.Errorf("compile: no identity has verifier role %q", role)
+	}
+	vpath, err := substitutePath(p.Verify.Request.Path, b.PathParams)
+	if err != nil {
+		return nil, nil, fmt.Errorf("compile: verify.request.path: %w", err)
+	}
+	vreq := model.RequestTemplate{
+		Method:  strings.ToUpper(strings.TrimSpace(p.Verify.Request.Method)),
+		URL:     strings.TrimRight(b.BaseURL, "/") + vpath,
+		Headers: p.Verify.Request.Headers,
+	}
+	if body := strings.TrimSpace(p.Verify.Request.Body); body != "" {
+		if !json.Valid([]byte(body)) {
+			return nil, nil, fmt.Errorf("compile: verify.request.body is not valid JSON")
+		}
+		vreq.Body = json.RawMessage(body)
+		if !hasHeader(vreq.Headers, "Content-Type") {
+			h := map[string]string{"Content-Type": "application/json"}
+			for k, v := range vreq.Headers {
+				h[k] = v
+			}
+			vreq.Headers = h
+		}
+	}
+	wv := &model.WriteVerification{
+		Identity:          *verifier,
+		Request:           vreq,
+		AllowUnsafeMethod: p.Verify.AllowUnsafeMethod,
+		JSONPointer:       p.Verify.JSONPointer,
+	}
+	if p.Verify.ChangedTo.Kind != 0 {
+		if wv.ChangedTo, err = nodeJSON(&p.Verify.ChangedTo); err != nil {
+			return nil, nil, fmt.Errorf("compile: verify.changed_to: %w", err)
+		}
+	}
+	if err := secretref.ExpandVerification(wv); err != nil {
+		return nil, nil, fmt.Errorf("compile: %w", err)
+	}
+	return executed, wv, nil
 }

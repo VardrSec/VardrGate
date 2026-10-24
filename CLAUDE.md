@@ -63,6 +63,7 @@ docs/
                              0011 identity preflight · 0012 binary releases
                              0013 policy suites · 0014 report formats
                              0015 GitHub Action · 0016 response assertions
+                             0017 write verification
 
 examples/
 ├── bola_check.json              three-identity unauthorized-access scenario
@@ -143,6 +144,7 @@ Other rules:
 - `decision: skip` records execution but emits no finding.
 - Ambiguous outcomes (undeclared 404, 5xx, 3xx) when expected `deny` produce no authorization finding. A reviewed `deny_status` can explicitly classify 404 as denial.
 - `response_assertions` (`ExpectedAccess.ResponseAssertions`, policy `response.assertions`): JSON Pointer + exact JSON `equals` + the decision a match proves. When an identity has assertions they are authoritative — no status fallback, and they outrank `deny_status`/`deny_when`; unmatched or conflicting evidence is inconclusive. Findings still go through the ADR 0002 categorization (`assertionFinding`). Evidence carries assertion indices only. Evaluator in `engine/assertions.go`; exact, duplicate-key-rejecting JSON decoding in `engine/assertion_json.go`. See ADR 0016 and `docs/response-assertions.md`.
+- `write_verification` (`tc.WriteVerification`, policy `verify` with a role not in `expect`): a separate reader identity, same-origin request (GET unless `allow_unsafe_method`), optional JSON Pointer and `changed_to`. `verifiedExecute` reads twice before and once after each identity's request; unchanged → denied, changed → allowed, every failure or ambiguity → inconclusive with a fixed reason; the request is withheld when the before-state is unreadable. Outranks assertions and status. Observed values never leave memory. Requires `mutating`. In `engine/verify.go`; see ADR 0017.
 - Every identity gets an `Assessment` (`allowed`/`denied`/`inconclusive`/`skipped`, source, fixed reason code). Without assertions, findings come from `evaluate` unchanged and the assessment is recorded alongside.
 
 Validation rejects: duplicate identity ids, expected-access references to unknown identities, invalid credential type/header/value combinations, and resource references to unknown owner identities or roles absent from `role_hierarchy`.

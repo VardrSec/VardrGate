@@ -1,6 +1,7 @@
 package secretref
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -70,5 +71,29 @@ func TestExpandIdentities_NamesTheFailingIdentity(t *testing.T) {
 	err := ExpandIdentities(ids)
 	if err == nil || !strings.Contains(err.Error(), "other_user") {
 		t.Fatalf("error did not name the identity: %v", err)
+	}
+}
+
+func TestExpandVerification(t *testing.T) {
+	t.Setenv("GATE_TEST_VERIFIER_TOKEN", "tok")
+	t.Setenv("GATE_TEST_VICTIM_PASSWORD", `p"a\ss`)
+	wv := &model.WriteVerification{
+		Identity: model.Identity{ID: "v", Credential: model.Credential{Type: model.CredentialTypeBearer, Value: "${GATE_TEST_VERIFIER_TOKEN}"}},
+		Request:  model.RequestTemplate{Body: json.RawMessage(`{"username":"alice","password":"${GATE_TEST_VICTIM_PASSWORD}"}`)},
+	}
+	if err := ExpandVerification(wv); err != nil {
+		t.Fatal(err)
+	}
+	var body map[string]string
+	if err := json.Unmarshal(wv.Request.Body, &body); err != nil {
+		t.Fatalf("expanded body is not JSON: %v", err)
+	}
+	if body["password"] != `p"a\ss` || wv.Identity.Credential.Value != "tok" {
+		t.Fatalf("body=%v credential=%q", body, wv.Identity.Credential.Value)
+	}
+
+	wv.Request.Body = json.RawMessage(`{"password":"${GATE_TEST_UNSET_VAR_X}"}`)
+	if err := ExpandVerification(wv); err == nil {
+		t.Fatal("an unset variable must be an error")
 	}
 }

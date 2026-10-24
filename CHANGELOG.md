@@ -17,6 +17,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   inconclusive. Evidence carries assertion indices only. See
   [ADR 0016](docs/adr/0016-response-assertions.md) and
   `docs/response-assertions.md`.
+- **Write verification.** Policy `verify` and `write_verification` in the HTTP
+  API name a separate reader that observes the target's state before and after
+  each identity's request. An unchanged state is a denial, and a changed state
+  is access, whatever the write's own status says. Failed or refused reads,
+  concurrent changes, an already-present target value and unexpected changes
+  are inconclusive. The request is withheld when its before-state cannot be
+  read. Only reason codes are reported. See
+  [ADR 0017](docs/adr/0017-write-verification.md) and
+  `docs/write-verification.md`.
 - **Request body in policies.** `api.body` (JSON) and `api.headers` are sent
   by every identity, so a policy can test a write endpoint that reads JSON.
   Content-Type defaults to `application/json` when a body is set.
