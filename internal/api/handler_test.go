@@ -103,10 +103,27 @@ func validTestCase() model.AuthorizationTestCase {
 	}
 }
 
+func validTestCaseJSON() []byte {
+	return []byte(`{
+		"id": "tc-api-1",
+		"identities": [
+			{"id": "admin", "credential": {"type": "bearer", "value": "tok-a"}},
+			{"id": "user", "credential": {"type": "bearer", "value": "tok-u"}}
+		],
+		"request": {
+			"method": "GET",
+			"url": "https://example.com/resource/1"
+		},
+		"expected_access": [
+			{"identity_id": "admin", "decision": "allow"},
+			{"identity_id": "user", "decision": "deny"}
+		]
+	}`)
+}
+
 func TestTestsExecute_Returns200OnSuccess(t *testing.T) {
 	h := newTestHandlerWithResponses(map[string]int{"admin": 200, "user": 403})
-	body, _ := json.Marshal(validTestCase())
-	req := httptest.NewRequest(http.MethodPost, "/tests/execute", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/tests/execute", bytes.NewReader(validTestCaseJSON()))
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
 	if rr.Code != http.StatusOK {
@@ -116,8 +133,7 @@ func TestTestsExecute_Returns200OnSuccess(t *testing.T) {
 
 func TestTestsExecute_ContentTypeJSON(t *testing.T) {
 	h := newTestHandlerWithResponses(map[string]int{"admin": 200, "user": 403})
-	body, _ := json.Marshal(validTestCase())
-	req := httptest.NewRequest(http.MethodPost, "/tests/execute", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/tests/execute", bytes.NewReader(validTestCaseJSON()))
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
 	if !strings.HasPrefix(rr.Header().Get("Content-Type"), "application/json") {
@@ -127,8 +143,7 @@ func TestTestsExecute_ContentTypeJSON(t *testing.T) {
 
 func TestTestsExecute_ResponseContainsSnakeCaseFields(t *testing.T) {
 	h := newTestHandlerWithResponses(map[string]int{"admin": 200, "user": 200})
-	body, _ := json.Marshal(validTestCase())
-	req := httptest.NewRequest(http.MethodPost, "/tests/execute", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/tests/execute", bytes.NewReader(validTestCaseJSON()))
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
 
@@ -179,8 +194,7 @@ func TestTestsExecute_UnsupportedMethods(t *testing.T) {
 
 func TestTestsExecute_NoFindingsWhenExpectationsMet(t *testing.T) {
 	h := newTestHandlerWithResponses(map[string]int{"admin": 200, "user": 403})
-	body, _ := json.Marshal(validTestCase())
-	req := httptest.NewRequest(http.MethodPost, "/tests/execute", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/tests/execute", bytes.NewReader(validTestCaseJSON()))
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
 
@@ -207,8 +221,7 @@ func TestTestsExecute_RequestBodyTooLarge_Returns413(t *testing.T) {
 
 // Issue 5: a body containing more than one JSON value must be rejected.
 func TestTestsExecute_TrailingJSON_Returns400(t *testing.T) {
-	tc, _ := json.Marshal(validTestCase())
-	body := string(tc) + `{"extra":"trailing"}`
+	body := string(validTestCaseJSON()) + `{"extra":"trailing"}`
 	req := httptest.NewRequest(http.MethodPost, "/tests/execute", strings.NewReader(body))
 	rr := httptest.NewRecorder()
 	newTestHandlerWithResponses(map[string]int{"admin": 200, "user": 403}).ServeHTTP(rr, req)

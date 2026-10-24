@@ -266,12 +266,108 @@ func TestValidate_MissingURL(t *testing.T) {
 	}
 }
 
+func TestValidate_MissingIdentityID(t *testing.T) {
+	tc := baseTC()
+	tc.Identities[0].ID = ""
+	_, err := New(&stubExecutor{}).Run(context.Background(), tc)
+	if err == nil {
+		t.Fatal("expected error for missing identity id")
+	}
+	if !strings.Contains(err.Error(), "identities[0]") {
+		t.Fatalf("expected indexed identity error, got %v", err)
+	}
+}
+
+func TestValidate_DuplicateIdentityID(t *testing.T) {
+	tc := baseTC()
+	tc.Identities[1].ID = tc.Identities[0].ID
+	_, err := New(&stubExecutor{}).Run(context.Background(), tc)
+	if err == nil {
+		t.Fatal("expected error for duplicate identity id")
+	}
+	if !strings.Contains(err.Error(), "duplicate id") {
+		t.Fatalf("expected duplicate id error, got %v", err)
+	}
+}
+
+func TestValidate_ExpectedAccessUnknownIdentity(t *testing.T) {
+	tc := baseTC()
+	tc.ExpectedAccess[1].IdentityID = "missing"
+	_, err := New(&stubExecutor{}).Run(context.Background(), tc)
+	if err == nil {
+		t.Fatal("expected error for unknown expected_access identity")
+	}
+	if !strings.Contains(err.Error(), "unknown identity_id") {
+		t.Fatalf("expected unknown identity error, got %v", err)
+	}
+}
+
+func TestValidate_DuplicateExpectedAccessIdentity(t *testing.T) {
+	tc := baseTC()
+	tc.ExpectedAccess[1].IdentityID = tc.ExpectedAccess[0].IdentityID
+	_, err := New(&stubExecutor{}).Run(context.Background(), tc)
+	if err == nil {
+		t.Fatal("expected error for duplicate expected_access identity")
+	}
+	if !strings.Contains(err.Error(), "duplicates identity_id") {
+		t.Fatalf("expected duplicate expected_access error, got %v", err)
+	}
+}
+
 func TestValidate_InvalidDecision(t *testing.T) {
 	tc := baseTC()
 	tc.ExpectedAccess[0].Decision = "maybe"
 	_, err := New(&stubExecutor{}).Run(context.Background(), tc)
 	if err == nil {
 		t.Fatal("expected error for invalid decision")
+	}
+}
+
+func TestValidate_InvalidCredentialType(t *testing.T) {
+	tc := baseTC()
+	tc.Identities[0].Credential.Type = "oauth_magic"
+	_, err := New(&stubExecutor{}).Run(context.Background(), tc)
+	if err == nil {
+		t.Fatal("expected error for invalid credential type")
+	}
+	if !strings.Contains(err.Error(), "credential.type") {
+		t.Fatalf("expected credential.type error, got %v", err)
+	}
+}
+
+func TestValidate_BearerCredentialRequiresValue(t *testing.T) {
+	tc := baseTC()
+	tc.Identities[0].Credential.Value = ""
+	_, err := New(&stubExecutor{}).Run(context.Background(), tc)
+	if err == nil {
+		t.Fatal("expected error for empty bearer credential value")
+	}
+	if !strings.Contains(err.Error(), "value is required") {
+		t.Fatalf("expected value required error, got %v", err)
+	}
+}
+
+func TestValidate_StaticHeaderAllowsAnonymousNoOp(t *testing.T) {
+	tc := baseTC()
+	tc.Identities[1].Credential = model.Credential{Type: model.CredentialTypeStaticHeader}
+	_, err := New(&stubExecutor{responses: map[string]int{"admin": 200, "user": 403}}).Run(context.Background(), tc)
+	if err != nil {
+		t.Fatalf("expected anonymous static_header no-op to validate, got %v", err)
+	}
+}
+
+func TestValidate_StaticHeaderWithValueRequiresHeader(t *testing.T) {
+	tc := baseTC()
+	tc.Identities[1].Credential = model.Credential{
+		Type:  model.CredentialTypeStaticHeader,
+		Value: "secret",
+	}
+	_, err := New(&stubExecutor{}).Run(context.Background(), tc)
+	if err == nil {
+		t.Fatal("expected error for static_header value without header")
+	}
+	if !strings.Contains(err.Error(), "header is required") {
+		t.Fatalf("expected header required error, got %v", err)
 	}
 }
 
@@ -287,7 +383,7 @@ func TestSanitizeURL_RedactsSensitiveParams(t *testing.T) {
 			"page=2",
 		},
 		{
-			"https://example.com/?token=abc123&limit=10",
+			"https://example.com/?Token=abc123&limit=10",
 			[]string{"abc123"},
 			"limit=10",
 		},
@@ -307,6 +403,18 @@ func TestSanitizeURL_RedactsSensitiveParams(t *testing.T) {
 		if c.safeParam != "" && !strings.Contains(got, c.safeParam) {
 			t.Errorf("sanitizeURL(%q) removed non-sensitive param %q: %s", c.input, c.safeParam, got)
 		}
+	}
+}
+
+func TestSanitizeURL_RedactsUserInfo(t *testing.T) {
+	got := sanitizeURL("https://alice:secret@example.com/users/42?token=abc")
+	for _, bad := range []string{"alice", "secret", "abc"} {
+		if strings.Contains(got, bad) {
+			t.Fatalf("sanitizeURL leaked %q in %s", bad, got)
+		}
+	}
+	if !strings.Contains(got, "REDACTED@example.com") {
+		t.Fatalf("expected redacted userinfo, got %s", got)
 	}
 }
 

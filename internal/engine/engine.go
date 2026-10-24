@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/VardrSec/vardrgate/internal/client"
@@ -33,9 +34,10 @@ func DefaultEngine() *Engine {
 
 // Result is the complete output of a single test case run.
 type Result struct {
-	TestCaseID string                  `json:"test_case_id"`
-	Executions []model.ExecutionResult `json:"executions"`
-	Findings   []model.Finding         `json:"findings"`
+	TestCaseID  string                  `json:"test_case_id"`
+	Executions  []model.ExecutionResult `json:"executions"`
+	Findings    []model.Finding         `json:"findings"`
+	Assessments []model.Assessment      `json:"assessments"`
 }
 
 // Run validates the test case, executes the request for each identity,
@@ -45,9 +47,9 @@ func (e *Engine) Run(ctx context.Context, tc model.AuthorizationTestCase) (Resul
 		return Result{}, err
 	}
 
-	expected := make(map[string]model.AccessDecision, len(tc.ExpectedAccess))
+	expected := make(map[string]model.ExpectedAccess, len(tc.ExpectedAccess))
 	for _, ea := range tc.ExpectedAccess {
-		expected[ea.IdentityID] = ea.Decision
+		expected[ea.IdentityID] = ea
 	}
 
 	result := Result{TestCaseID: tc.ID}
@@ -56,13 +58,28 @@ func (e *Engine) Run(ctx context.Context, tc model.AuthorizationTestCase) (Resul
 		exec := e.exec.Execute(ctx, identity, tc.Request)
 		result.Executions = append(result.Executions, exec)
 
-		decision, hasExpected := expected[identity.ID]
-		if !hasExpected || decision == model.AccessDecisionSkip {
+		ea, hasExpected := expected[identity.ID]
+		assessment := assess(identity.ID, exec, ea, hasExpected)
+		result.Assessments = append(result.Assessments, assessment)
+		if assessment.Decision == model.AssessmentSkipped || assessment.Decision == model.AssessmentInconclusive {
 			continue
 		}
 
-		finding, ok := evaluate(tc, identity, exec, decision)
+		// Retain the raw execution and legacy finding evidence. Only the copy
+		// used for evaluation receives the assertion-derived decision.
+		evaluated := exec
+		if assessment.Decision == model.AssessmentAllowed {
+			evaluated.ObservedOutcome = model.OutcomeAllow
+		} else {
+			evaluated.ObservedOutcome = model.OutcomeDeny
+		}
+		finding, ok := evaluate(tc, identity, evaluated, ea.Decision)
 		if ok {
+			if assessment.Source == "response_assertion" {
+				finding.Confidence = model.ConfidenceHigh
+				finding.Evidence = buildEvidence(tc, identity, exec, exec.ObservedOutcome)
+				finding.Evidence = append(finding.Evidence, "assessment="+string(assessment.Decision), "source=response_assertion", fmt.Sprintf("matched_assertions=%v", assessment.MatchedAssertions))
+			}
 			result.Findings = append(result.Findings, finding)
 		}
 	}
@@ -147,11 +164,16 @@ func sanitizeURL(rawURL string) string {
 	if err != nil {
 		return "[invalid-url]"
 	}
+
+	if u.User != nil {
+		u.User = url.User("REDACTED")
+	}
+
 	q := u.Query()
 	redacted := false
-	for _, p := range sensitiveQueryParams {
-		if q.Has(p) {
-			q.Set(p, "[REDACTED]")
+	for key := range q {
+		if isSensitiveQueryParam(key) {
+			q.Set(key, "[REDACTED]")
 			redacted = true
 		}
 	}
@@ -159,6 +181,15 @@ func sanitizeURL(rawURL string) string {
 		u.RawQuery = q.Encode()
 	}
 	return u.String()
+}
+
+func isSensitiveQueryParam(key string) bool {
+	for _, p := range sensitiveQueryParams {
+		if strings.EqualFold(key, p) {
+			return true
+		}
+	}
+	return false
 }
 
 // validate ensures the test case has the minimum required fields.
@@ -175,15 +206,68 @@ func validate(tc model.AuthorizationTestCase) error {
 	if tc.Request.URL == "" {
 		return errors.New("request template must have a url")
 	}
+
+	identityIDs := make(map[string]struct{}, len(tc.Identities))
+	for i, identity := range tc.Identities {
+		if identity.ID == "" {
+			return fmt.Errorf("identities[%d] must have an id", i)
+		}
+		if _, exists := identityIDs[identity.ID]; exists {
+			return fmt.Errorf("identities[%d] has duplicate id %q", i, identity.ID)
+		}
+		identityIDs[identity.ID] = struct{}{}
+
+		if err := validateCredential(i, identity.Credential); err != nil {
+			return err
+		}
+	}
+
+	expectedIDs := make(map[string]struct{}, len(tc.ExpectedAccess))
 	for i, ea := range tc.ExpectedAccess {
 		if ea.IdentityID == "" {
 			return fmt.Errorf("expected_access[%d] must reference an identity_id", i)
 		}
+		if _, exists := identityIDs[ea.IdentityID]; !exists {
+			return fmt.Errorf("expected_access[%d] references unknown identity_id %q", i, ea.IdentityID)
+		}
+		if _, exists := expectedIDs[ea.IdentityID]; exists {
+			return fmt.Errorf("expected_access[%d] duplicates identity_id %q", i, ea.IdentityID)
+		}
+		expectedIDs[ea.IdentityID] = struct{}{}
 		switch ea.Decision {
 		case model.AccessDecisionAllow, model.AccessDecisionDeny, model.AccessDecisionSkip:
 		default:
 			return fmt.Errorf("expected_access[%d] has invalid decision %q", i, ea.Decision)
 		}
+		if err := validateAssertions(ea.ResponseAssertions); err != nil {
+			return fmt.Errorf("expected_access[%d]: %w", i, err)
+		}
+	}
+	return nil
+}
+
+func validateCredential(identityIndex int, cred model.Credential) error {
+	switch cred.Type {
+	case model.CredentialTypeBearer:
+		if cred.Header != "" {
+			return fmt.Errorf("identities[%d].credential.header must be empty for bearer credentials", identityIndex)
+		}
+		if cred.Value == "" {
+			return fmt.Errorf("identities[%d].credential.value is required for bearer credentials", identityIndex)
+		}
+	case model.CredentialTypeAPIKeyHeader:
+		if cred.Value == "" {
+			return fmt.Errorf("identities[%d].credential.value is required for api_key_header credentials", identityIndex)
+		}
+	case model.CredentialTypeStaticHeader:
+		if cred.Header == "" && cred.Value != "" {
+			return fmt.Errorf("identities[%d].credential.header is required when static_header has a value", identityIndex)
+		}
+		if cred.Header != "" && cred.Value == "" {
+			return fmt.Errorf("identities[%d].credential.value is required when static_header has a header", identityIndex)
+		}
+	default:
+		return fmt.Errorf("identities[%d].credential.type has invalid value %q", identityIndex, cred.Type)
 	}
 	return nil
 }

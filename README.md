@@ -6,12 +6,18 @@ API authorization test runner. Send a single HTTP request as multiple identities
 
 VardrGate accepts a test case describing a request, a set of identities with credentials, and the expected authorization outcome for each identity. It executes the request once per identity, classifies the observed HTTP response, compares it against the expectation, and returns structured findings.
 
+Optional [response assertions](docs/response-assertions.md) use explicit JSON
+evidence to recognize protected data in error responses and denials returned
+with HTTP 200. Every identity now receives an `assessments` entry: `allowed`,
+`denied`, `inconclusive`, or `skipped`, with its evidence source and reason.
+Requests without assertions retain their existing status-based findings.
+
 **Current finding categories**
 
 | Category | Meaning |
 |---|---|
-| `unexpected_access` | Identity received a 2xx when it should have been denied |
-| `authorization_mismatch` | Identity received a 401/403 when it should have been allowed |
+| `unexpected_access` | Identity was assessed as allowed when it should have been denied |
+| `authorization_mismatch` | Identity was assessed as denied when it should have been allowed |
 
 ## Quickstart
 
@@ -151,6 +157,14 @@ examples/            — example test case JSON files
 ```
 
 ## Development
+
+For a reproducible local authorization benchmark with deliberately vulnerable
+APIs, protected controls, and scored results, see
+[`benchmarks/README.md`](benchmarks/README.md). Run it from this directory:
+
+```sh
+go run ./cmd/authbench -assertions -repeat 3 -out benchmarks/authz-latest.json
+```
 
 ```sh
 go test ./...

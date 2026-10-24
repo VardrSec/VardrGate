@@ -89,16 +89,17 @@ Key behaviors:
 Coordinates execution. Validates the test case, iterates identities, calls the `Executor` interface, and evaluates findings.
 
 Finding rules:
-- `unexpected_access` (severity: high): expected `deny`, observed `allow` (2xx).
-- `authorization_mismatch` (severity: low): expected `allow`, observed `deny` (401/403).
+- `unexpected_access` (severity: high): expected `deny`, assessed `allowed`.
+- `authorization_mismatch` (severity: low): expected `allow`, assessed `denied`.
+- Optional per-identity JSON response assertions determine semantic access. Without assertions, the existing 2xx/401/403 finding behavior remains. See `docs/response-assertions.md` for matching rules and limits.
 - `potential_bola` is **not emitted yet** — it requires resource-ownership context (owner identity, target tenant, object ID) that is not yet modelled. `TenantID` alone is insufficient.
 - Execution errors suppress findings for that identity (single weak signal).
 - `decision: skip` records execution but emits no finding.
-- Ambiguous outcomes (404, 5xx, 3xx) when expected `deny` produce no finding.
+- Ambiguous HTTP outcomes without matching assertions produce an inconclusive assessment and no finding. Assertion matches can establish access despite an error status; unmatched or conflicting assertions remain inconclusive.
 
 The `Executor` interface is defined in the engine package and satisfied by `*client.Client`. Tests use a `stubExecutor`.
 
-`engine.Result` has JSON tags (`test_case_id`, `executions`, `findings`).
+`engine.Result` has JSON tags (`test_case_id`, `executions`, `findings`, `assessments`). Raw execution outcomes are preserved separately from semantic assessments. Findings and assessments never include assertion values or response bodies.
 
 ### `internal/compare`
 
