@@ -41,7 +41,7 @@ func main() {
 	args := os.Args[1:]
 
 	// A bare invocation serves, which is the documented default. Anything else
-	// must name a known subcommand: falling through to serve on an unrecognised
+	// must name a known subcommand: falling through to serve on an unrecognized
 	// argument is why `vardrgate --help` used to start a web server.
 	if len(args) == 0 {
 		serve()

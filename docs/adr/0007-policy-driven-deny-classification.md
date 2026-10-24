@@ -60,7 +60,7 @@ the engine never guesses a higher-severity category from a weak signal.
   `authorization_mismatch` — previously silence.
 - Two fields that a reader could reasonably assume were doing something now do
   it. The alternative considered was deleting both from the policy struct and
-  the example; wiring them was preferred because the behaviours are ones the
+  the example; wiring them was preferred because the behaviors are ones the
   tool needs, not merely ones the format happened to name.
 - `compare.FieldValue` is new: a recursive, case-insensitive scalar lookup in a
   JSON body. Field order is not preserved by decoding, so a field appearing at

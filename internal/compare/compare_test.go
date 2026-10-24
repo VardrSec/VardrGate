@@ -48,7 +48,7 @@ func TestResults_BodyMatch_JSONWhitespace(t *testing.T) {
 	b := result("b", 200, []byte(`{ "name": "alice", "id": 1 }`))
 	cr := Results(a, b, nil)
 	if !cr.BodyMatch {
-		t.Fatal("expected body match after JSON normalisation")
+		t.Fatal("expected body match after JSON normalization")
 	}
 	if !containsNote(cr, "whitespace/key order") {
 		t.Errorf("expected whitespace note, got %v", cr.Notes)
@@ -300,6 +300,8 @@ func TestFieldValue(t *testing.T) {
 	}{
 		{"top level string", `{"tenant_id":"tenant-a"}`, "tenant_id", "tenant-a", true},
 		{"case insensitive", `{"Tenant_ID":"tenant-a"}`, "tenant_id", "tenant-a", true},
+		{"separator insensitive camelCase", `{"tenantId":"tenant-a"}`, "tenant_id", "tenant-a", true},
+		{"separator insensitive kebab-case", `{"tenant-id":"tenant-a"}`, "tenant_id", "tenant-a", true},
 		{"nested", `{"data":{"meta":{"tenant_id":"tenant-b"}}}`, "tenant_id", "tenant-b", true},
 		{"inside array", `{"items":[{"tenant_id":"tenant-c"}]}`, "tenant_id", "tenant-c", true},
 		{"integral number keeps no decimal point", `{"tenant_id":42}`, "tenant_id", "42", true},

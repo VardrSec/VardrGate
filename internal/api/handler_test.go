@@ -87,7 +87,7 @@ func TestHealthUnsupportedMethods(t *testing.T) {
 // --- POST /tests/execute ---
 
 // validTestCaseJSON is raw request JSON including credential "value" fields.
-// Marshalling a model.AuthorizationTestCase drops credential values (json:"-"),
+// Marshaling a model.AuthorizationTestCase drops credential values (json:"-"),
 // so requests that must pass validation are built as raw JSON instead.
 func validTestCaseJSON() string {
 	return `{

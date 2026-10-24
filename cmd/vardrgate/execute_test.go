@@ -130,7 +130,7 @@ func TestGate_MessageNamesTheCategories(t *testing.T) {
 		t.Errorf("message did not name both categories: %s", msg)
 	}
 	if strings.Index(msg, "cross_tenant_access") > strings.Index(msg, "potential_bola") {
-		t.Errorf("critical must be summarised before high: %s", msg)
+		t.Errorf("critical must be summarized before high: %s", msg)
 	}
 }
 

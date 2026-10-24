@@ -22,7 +22,7 @@ project does). It implements the exact same `Store` interface as `Memory`, so it
 is a drop-in selected at startup:
 
 - `VARDRGATE_DB=<path>` opens/creates a durable SQLite database at that path.
-- Unset keeps the in-memory store (existing behaviour), with a startup warning.
+- Unset keeps the in-memory store (existing behavior), with a startup warning.
 
 Jobs and runners are stored as JSON documents keyed by id/hostname, with `status`
 and `created_at` promoted to columns for filtering and ordering. A single mutex

@@ -1,6 +1,6 @@
 # Declarative authorization control for a user-profile endpoint.
 #
-# A policy describes expected behaviour independent of environment. Bind it to a
+# A policy describes expected behavior independent of environment. Bind it to a
 # base URL, path parameters, and concrete identities (each identity's `role`
 # must match a key under `expect`) to produce a runnable test case.
 api:

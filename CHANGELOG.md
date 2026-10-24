@@ -46,6 +46,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - A `policy run` engine error is now prefixed with the case id, as `run --cases`
   errors already were.
 
+### Fixed
+
+- `tenant_field` now matches the response field regardless of separators, as
+  sensitive-field matching already did: `tenant_id` finds `tenantId` and
+  `tenant-id`. A tenant-isolation break against a camelCase API was previously
+  reported as `potential_bola` or `unexpected_access` instead of
+  `cross_tenant_access`. `vardrgate discover` drafts `tenant_field: tenant_id`
+  for such APIs.
+
 ## [0.1.0] — 2026-10-14
 
 First packaged release: reviewed API authorization testing, identity/session
@@ -84,7 +93,7 @@ include SHA-256 checksums and GitHub build provenance. See
   with a success status.** An API answering `200 OK` with `{"error":"forbidden"}`
   was classified as an allow, so an anonymous caller the server had *correctly
   refused* produced a critical finding. Declare the convention with
-  `response.deny_when` and the refusal is recognised; the condition outranks the
+  `response.deny_when` and the refusal is recognized; the condition outranks the
   status line. This is a correctness fix — the tool was manufacturing criticals
   against correctly-behaving software. See ADR 0008.
 
@@ -97,7 +106,7 @@ include SHA-256 checksums and GitHub build provenance. See
   identities receive the same object shape with identity-specific values.
   Profiles are bounded to 2,048 paths and 64 levels; truncation is explicit.
 
-- **`response.deny_when`**: recognise a denial expressed in the response body
+- **`response.deny_when`**: recognize a denial expressed in the response body
   rather than the status line, via `body_contains` or a dotted-path
   `json_field` match. Authored, never inferred. Findings carry
   `deny_when_matched:` evidence so a reader can see why a 2xx was read as a
@@ -182,13 +191,13 @@ include SHA-256 checksums and GitHub build provenance. See
   field was left empty while every other category filled it.
 - `compare.Results` takes the sensitive-field set as a parameter. It previously
   always used the package default, so a test case that overrode
-  `sensitive_fields` had its override honoured by the sensitive-data check and
+  `sensitive_fields` had its override honored by the sensitive-data check and
   ignored by the comparison evidence.
 
 ### Fixed
 
 - **`vardrgate --help` started a web server.** Subcommand dispatch fell through
-  to `serve` for any unrecognised argument. Unknown commands now exit 1 with
+  to `serve` for any unrecognized argument. Unknown commands now exit 1 with
   usage; a bare `vardrgate` still serves, as documented.
 - Dead link to `enterprise-platform.md` in the README and CLAUDE.md — the file
   has never existed in this repository.
@@ -203,7 +212,7 @@ include SHA-256 checksums and GitHub build provenance. See
   (`SSN`) rather than as it appears in the search list (`ssn`). The engine now
   uses `compare.ScanSensitive`, which returns paths and tiers.
 - `vardrgate run` against an unreachable target now exits **3** where it
-  previously exited **0**. A pipeline relying on the old behaviour was reporting
+  previously exited **0**. A pipeline relying on the old behavior was reporting
   success without testing anything.
 - `vardrgate gen` output now contains a `"value"` key holding a
   `${VARDRGATE_<IDENTITY>_TOKEN}` placeholder. Previously the key was absent

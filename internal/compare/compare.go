@@ -106,7 +106,7 @@ func walkProfile(value interface{}, path string, depth int, seen map[string]stru
 // authorization or value (role, is_admin, balance) reaching a caller who must
 // not see it is broken object property level authorization, OWASP API3:2023.
 //
-// Matching is on the whole field name, case-insensitively, after normalising
+// Matching is on the whole field name, case-insensitively, after normalizing
 // separators — "isAdmin", "is_admin", and "IS-ADMIN" are the same field.
 // Substring matching is deliberately not used: it classifies "username" as an
 // identifier because it contains "user", which is acceptable noise in a prober
@@ -239,8 +239,14 @@ func normalizeField(name string) string {
 }
 
 // FieldValue returns the first value found for the named field anywhere in a
-// JSON body (case-insensitive, at any nesting depth), rendered as a string.
-// Only scalar values are returned; objects and arrays report false.
+// JSON body (at any nesting depth), rendered as a string. Only scalar values
+// are returned; objects and arrays report false.
+//
+// Matching uses the same normalization as ScanSensitive: case-insensitive and
+// separator-insensitive, so a policy naming "tenant_id" matches a response that
+// spells it "tenantId" or "tenant-id". Without this, a tenant-isolation break
+// against a camelCase API would be reported as potential_bola or unexpected_access
+// rather than the more specific (and more severe) cross_tenant_access.
 //
 // Field order within a JSON object is not preserved by decoding, so a body with
 // the same key at several depths has no defined winner. Callers use this for
@@ -253,7 +259,7 @@ func FieldValue(body []byte, field string) (string, bool) {
 	if err := json.Unmarshal(body, &v); err != nil {
 		return "", false
 	}
-	return findScalar(v, strings.ToLower(field))
+	return findScalar(v, normalizeField(field))
 }
 
 // ValueAtPath resolves a dotted path against a JSON body and returns the scalar
@@ -339,7 +345,7 @@ func findScalar(v interface{}, want string) (string, bool) {
 	switch t := v.(type) {
 	case map[string]interface{}:
 		for k, child := range t {
-			if strings.ToLower(k) == want {
+			if normalizeField(k) == want {
 				if s, ok := scalarString(child); ok {
 					return s, true
 				}
@@ -435,7 +441,7 @@ func Results(a, b model.ExecutionResult, fields []string) model.ComparisonResult
 		}
 	}
 
-	// Normalised JSON equality (order-independent key comparison).
+	// Normalized JSON equality (order-independent key comparison).
 	if !cr.BodyMatch && looksLikeJSON(a.Body) && looksLikeJSON(b.Body) {
 		if normalizedEqual(a.Body, b.Body) {
 			cr.BodyMatch = true
@@ -514,7 +520,7 @@ func sensitiveFieldSet(body []byte, fields []string) map[string]struct{} {
 }
 
 // Evidence returns a slice of strings that can be attached to a Finding,
-// summarising the most security-relevant differences.
+// summarizing the most security-relevant differences.
 func Evidence(a, b model.ExecutionResult, cr model.ComparisonResult) []string {
 	var ev []string
 	if !cr.StatusCodeMatch {

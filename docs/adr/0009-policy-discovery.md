@@ -41,13 +41,13 @@ means a draft *physically cannot execute* until a person has typed a decision.
 The invariant is enforced by the compiler, not promised by documentation, and
 `discover_test.go` asserts that every generated draft fails to parse.
 
-The rule generalises: **inference may inform authoring, never assertion.** Any
+The rule generalizes: **inference may inform authoring, never assertion.** Any
 future heuristic must land on the side of proposing a policy a human signs, and
 never on the side of emitting a finding.
 
 Two consequences for what was borrowed from prior work on heuristic scanning:
 
-- Identifier recognition matches whole normalised names, never substrings.
+- Identifier recognition matches whole normalized names, never substrings.
   Substring matching classifies `username` as an identifier because it contains
   `user`. That noise is free in a prober generating probes and unacceptable in
   a document someone will sign off on.

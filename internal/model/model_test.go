@@ -162,7 +162,7 @@ func TestSeverityRank_Ordering(t *testing.T) {
 			t.Errorf("%q does not rank below %q", ordered[i-1], ordered[i])
 		}
 	}
-	// An unrecognised severity must never trip a threshold.
+	// An unrecognized severity must never trip a threshold.
 	if Severity("bogus").Rank() != 0 {
 		t.Errorf("unknown severity ranked %d, want 0", Severity("bogus").Rank())
 	}
