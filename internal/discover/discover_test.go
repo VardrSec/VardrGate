@@ -125,6 +125,25 @@ func TestFromSpec_SampleSuppliesTenantFieldAndSensitiveFields(t *testing.T) {
 	}
 }
 
+func TestFromSpec_CamelCaseSampleKeepsSampleSpelling(t *testing.T) {
+	// The draft must name the key the reviewer can find in the sample, not the
+	// snake_case candidate that matched it.
+	sample := []byte(`{"userId":"1","tenantId":"t-a"}`)
+	d := FromSpec(parseSpec(t), Options{Sample: sample})[0]
+	if !strings.Contains(d.YAML, "tenant_field: tenantId\n") {
+		t.Errorf("tenant_field not inferred with the sample's spelling:\n%s", d.YAML)
+	}
+	var noted bool
+	for _, n := range d.Notes {
+		if n == `tenant_field="tenantId" found in the sample response` {
+			noted = true
+		}
+	}
+	if !noted {
+		t.Errorf("note does not name the key found in the sample: %v", d.Notes)
+	}
+}
+
 func TestFromSpec_WithoutSampleLeavesTenantFieldCommented(t *testing.T) {
 	d := FromSpec(parseSpec(t), Options{})[0]
 	if strings.Contains(d.YAML, "\n    tenant_field:") {

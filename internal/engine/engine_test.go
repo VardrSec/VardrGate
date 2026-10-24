@@ -830,6 +830,32 @@ func TestRun_TenantFieldReadFromOffendingResponse(t *testing.T) {
 	}
 }
 
+func TestRun_TenantFieldMatchesCamelCaseResponse(t *testing.T) {
+	// A policy written as tenant_id against an API that answers tenantId must
+	// still prove the isolation break. With an owner set, a missed match would
+	// silently report potential_bola instead.
+	tc := baseTC()
+	tc.Identities[0].TenantID = "tenant-a"
+	tc.Identities[1].TenantID = "tenant-b"
+	tc.Resource = &model.Resource{Type: "user_profile", ObjectID: "1", OwnerIdentity: "admin", TenantField: "tenant_id"}
+
+	body := []byte(`{"userId":"1","tenantId":"tenant-a"}`)
+	eng := New(&stubExecutor{
+		responses: map[string]int{"admin": http.StatusOK, "user": http.StatusOK},
+		body:      map[string][]byte{"admin": body, "user": body},
+	})
+	res, err := eng.Run(context.Background(), tc)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(res.Findings) != 1 {
+		t.Fatalf("expected 1 finding, got %d: %+v", len(res.Findings), res.Findings)
+	}
+	if f := res.Findings[0]; f.Category != model.CategoryCrossTenantAccess || !hasEvidence(f, "resource_tenant=tenant-a") {
+		t.Errorf("finding = %q %v, want %q naming resource_tenant=tenant-a", f.Category, f.Evidence, model.CategoryCrossTenantAccess)
+	}
+}
+
 func TestRun_TenantFieldAbsentFromBodyDoesNotElevate(t *testing.T) {
 	tc := baseTC()
 	tc.Identities[1].TenantID = "tenant-b"

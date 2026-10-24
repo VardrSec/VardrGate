@@ -311,14 +311,50 @@ func TestFieldValue(t *testing.T) {
 		{"not json", `plain text`, "tenant_id", "", false},
 		{"empty body", ``, "tenant_id", "", false},
 		{"empty field name", `{"tenant_id":"a"}`, "", "", false},
+		{"own key beats nested key", `{"tenant_id":"a","requester":{"tenant_id":"b"}}`, "tenant_id", "a", true},
+		{"own normalized key beats nested exact key", `{"tenantId":"a","requester":{"tenant_id":"b"}}`, "tenant_id", "a", true},
+		{"exact spelling beats normalized sibling", `{"tenantId":"b","tenant_id":"a"}`, "tenant_id", "a", true},
+		{"agreeing normalized siblings", `{"tenantId":"a","tenant-id":"a"}`, "tenant_id", "a", true},
+		{"disagreeing normalized siblings are ambiguous", `{"tenantId":"a","tenant-id":"b"}`, "tenant_id", "", false},
+		{"disagreeing exact siblings are ambiguous", `{"Tenant_ID":"a","tenant_id":"b"}`, "tenant_id", "", false},
+		{"ambiguity is not resolved from deeper levels", `{"tenantId":"a","tenantid":"b","x":{"tenant_id":"c"}}`, "tenant_id", "", false},
+		{"children searched in sorted key order", `{"b":{"tenant_id":"from-b"},"a":{"tenant_id":"from-a"}}`, "tenant_id", "from-a", true},
+		{"first array element wins", `{"items":[{"tenant_id":"first"},{"tenant_id":"second"}]}`, "tenant_id", "first", true},
+		{"non-scalar exact key does not shadow scalar sibling", `{"tenant_id":{"x":1},"tenantId":"a"}`, "tenant_id", "a", true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, ok := FieldValue([]byte(tt.body), tt.field)
-			if got != tt.want || ok != tt.ok {
-				t.Errorf("FieldValue() = %q, %v; want %q, %v", got, ok, tt.want, tt.ok)
+			// Map iteration order is randomized; repeat so a nondeterministic
+			// resolution shows up as a failure rather than a flake.
+			for i := 0; i < 50; i++ {
+				got, ok := FieldValue([]byte(tt.body), tt.field)
+				if got != tt.want || ok != tt.ok {
+					t.Fatalf("FieldValue() = %q, %v; want %q, %v", got, ok, tt.want, tt.ok)
+				}
 			}
 		})
+	}
+}
+
+func TestFindField_ReturnsKeyAsSpelled(t *testing.T) {
+	key, value, ok := FindField([]byte(`{"data":{"tenantId":"t-a"}}`), "tenant_id")
+	if !ok || key != "tenantId" || value != "t-a" {
+		t.Errorf("FindField() = %q, %q, %v; want \"tenantId\", \"t-a\", true", key, value, ok)
+	}
+}
+
+func TestMatchesNormalized_AgreesWithNormalizeField(t *testing.T) {
+	names := []string{
+		"tenant_id", "tenantId", "TENANT-ID", "tenant id", "tenant__id", "_tenant_id_",
+		"tenant", "tenant_idx", "", "_", "tenantİd", "Key", "key", "tënant_id",
+	}
+	wants := []string{"tenantid", "key", "tenant", "", "tënantid"}
+	for _, name := range names {
+		for _, want := range wants {
+			if got, exp := matchesNormalized(name, want), normalizeField(name) == want; got != exp {
+				t.Errorf("matchesNormalized(%q, %q) = %v; normalizeField says %v", name, want, got, exp)
+			}
+		}
 	}
 }
 

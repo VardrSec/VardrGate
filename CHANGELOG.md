@@ -52,8 +52,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   sensitive-field matching already did: `tenant_id` finds `tenantId` and
   `tenant-id`. A tenant-isolation break against a camelCase API was previously
   reported as `potential_bola` or `unexpected_access` instead of
-  `cross_tenant_access`. `vardrgate discover` drafts `tenant_field: tenant_id`
-  for such APIs.
+  `cross_tenant_access`.
+- `tenant_field` resolution is deterministic. An object's own keys win over
+  nested ones and an exact spelling wins over a normalized one; sibling keys
+  that match equally well but disagree resolve to no tenant rather than a
+  random one, so the finding is not elevated on a guess.
+- `vardrgate discover --sample` names the tenant field as the sample spells it
+  (`tenantId`), so the draft's note matches the response.
 
 ## [0.1.0] — 2026-10-14
 

@@ -100,8 +100,10 @@ func analyzeSample(body []byte) *sampleFacts {
 	facts := &sampleFacts{}
 
 	for _, candidate := range []string{"tenant_id", "org_id", "organization_id", "account_id", "workspace_id"} {
-		if _, ok := compare.FieldValue(body, candidate); ok {
-			facts.tenantField = candidate
+		// Record the key as the sample spells it, so the draft names a field the
+		// reviewer can find in the response.
+		if key, _, ok := compare.FindField(body, candidate); ok {
+			facts.tenantField = key
 			break
 		}
 	}
