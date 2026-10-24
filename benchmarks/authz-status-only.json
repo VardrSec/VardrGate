@@ -1,11 +1,11 @@
 {
   "schema_version": 2,
-  "generated_at": "2026-10-24T15:19:05.7966117Z",
+  "generated_at": "2026-10-24T15:58:34.9612173Z",
   "go_version": "go1.26.3",
   "platform": "windows/amd64",
-  "git_revision": "17cf541768177a8fe2e580ba84aaf9f1b6f1bb85",
-  "working_tree_status": "M CLAUDE.md\n M README.md\n M internal/api/handler_test.go\n M internal/engine/engine.go\n M internal/engine/engine_test.go\n M internal/model/model.go\n?? .github/\n?? benchmarks/\n?? cmd/authbench/\n?? docs/enterprise-platform.md\n?? docs/response-assertions.md\n?? internal/api/assertions_test.go\n?? internal/engine/assertion_json.go\n?? internal/engine/assertions.go\n?? internal/engine/assertions_test.go",
-  "source_sha256": "cc772c847f7a5d59b051bdc9ee5e6cb3abac5eadd4cb4cf6d55e025fa166b1e5",
+  "git_revision": "adc0e7b10cf4a5522ae8b8b3d33cff262eeb8fa9",
+  "working_tree_status": "",
+  "source_sha256": "39743d2c6686b2fcad3e7aa20d737c1b18e6b960cf20fd2935bb1c2719bef79c",
   "repeat_count": 3,
   "stable_classifications": true,
   "metrics": {
@@ -92,10 +92,19 @@
             "headers": {
               "Content-Type": "application/json"
             },
-            "duration_ms": 0
+            "duration_ms": 0,
+            "response_profile": {
+              "kind": "json",
+              "schema_hash": "67cdb6c9e9245c992dba8d6a0ad41ad72407d6dd4c648da010a7dce7e64fc82e",
+              "fields": [
+                "$",
+                "$.document_id",
+                "$.secret"
+              ]
+            }
           }
         ],
-        "findings": null,
+        "findings": [],
         "assessments": [
           {
             "identity_id": "alice",
@@ -135,7 +144,16 @@
             "headers": {
               "Content-Type": "application/json"
             },
-            "duration_ms": 0
+            "duration_ms": 0,
+            "response_profile": {
+              "kind": "json",
+              "schema_hash": "67cdb6c9e9245c992dba8d6a0ad41ad72407d6dd4c648da010a7dce7e64fc82e",
+              "fields": [
+                "$",
+                "$.document_id",
+                "$.secret"
+              ]
+            }
           }
         ],
         "findings": [
@@ -149,9 +167,9 @@
               "observed_outcome=allow",
               "status_code=200",
               "identity_id=bob",
-              "url=GET http://127.0.0.1:63253/vulnerable/documents/1"
+              "url=GET http://127.0.0.1:58007/vulnerable/documents/1"
             ],
-            "detected_at": "2026-10-24T15:19:05.8670555Z"
+            "detected_at": "2026-10-24T15:58:35.0035686Z"
           }
         ],
         "assessments": [
@@ -193,7 +211,16 @@
             "headers": {
               "Content-Type": "application/json"
             },
-            "duration_ms": 0
+            "duration_ms": 0,
+            "response_profile": {
+              "kind": "json",
+              "schema_hash": "67cdb6c9e9245c992dba8d6a0ad41ad72407d6dd4c648da010a7dce7e64fc82e",
+              "fields": [
+                "$",
+                "$.document_id",
+                "$.secret"
+              ]
+            }
           }
         ],
         "findings": [
@@ -207,9 +234,9 @@
               "observed_outcome=allow",
               "status_code=200",
               "identity_id=mallory",
-              "url=GET http://127.0.0.1:63253/vulnerable/documents/1"
+              "url=GET http://127.0.0.1:58007/vulnerable/documents/1"
             ],
-            "detected_at": "2026-10-24T15:19:05.8675817Z"
+            "detected_at": "2026-10-24T15:58:35.0040895Z"
           }
         ],
         "assessments": [
@@ -251,23 +278,33 @@
             "headers": {
               "Content-Type": "application/json"
             },
-            "duration_ms": 0
+            "duration_ms": 0,
+            "response_profile": {
+              "kind": "json",
+              "schema_hash": "67cdb6c9e9245c992dba8d6a0ad41ad72407d6dd4c648da010a7dce7e64fc82e",
+              "fields": [
+                "$",
+                "$.document_id",
+                "$.secret"
+              ]
+            }
           }
         ],
         "findings": [
           {
-            "category": "unexpected_access",
-            "severity": "high",
-            "confidence": "medium",
+            "category": "missing_authentication",
+            "severity": "critical",
+            "confidence": "high",
             "identity_id": "anonymous",
             "message": "identity \"anonymous\" received access that should have been denied",
             "evidence": [
               "observed_outcome=allow",
               "status_code=200",
               "identity_id=anonymous",
-              "url=GET http://127.0.0.1:63253/vulnerable/documents/1"
+              "url=GET http://127.0.0.1:58007/vulnerable/documents/1",
+              "unauthenticated_access: request carried no credentials"
             ],
-            "detected_at": "2026-10-24T15:19:05.8675817Z"
+            "detected_at": "2026-10-24T15:58:35.0040895Z"
           }
         ],
         "assessments": [
@@ -309,10 +346,19 @@
             "headers": {
               "Content-Type": "application/json"
             },
-            "duration_ms": 0
+            "duration_ms": 0,
+            "response_profile": {
+              "kind": "json",
+              "schema_hash": "67cdb6c9e9245c992dba8d6a0ad41ad72407d6dd4c648da010a7dce7e64fc82e",
+              "fields": [
+                "$",
+                "$.document_id",
+                "$.secret"
+              ]
+            }
           }
         ],
-        "findings": null,
+        "findings": [],
         "assessments": [
           {
             "identity_id": "alice",
@@ -352,10 +398,18 @@
             "headers": {
               "Content-Type": "application/json"
             },
-            "duration_ms": 0
+            "duration_ms": 0,
+            "response_profile": {
+              "kind": "json",
+              "schema_hash": "4ef4f60c6e7b227f87734dde18d93dcc0169dc4cd29bcaabfbfd8560053945a5",
+              "fields": [
+                "$",
+                "$.error"
+              ]
+            }
           }
         ],
-        "findings": null,
+        "findings": [],
         "assessments": [
           {
             "identity_id": "bob",
@@ -395,10 +449,18 @@
             "headers": {
               "Content-Type": "application/json"
             },
-            "duration_ms": 0
+            "duration_ms": 0,
+            "response_profile": {
+              "kind": "json",
+              "schema_hash": "4ef4f60c6e7b227f87734dde18d93dcc0169dc4cd29bcaabfbfd8560053945a5",
+              "fields": [
+                "$",
+                "$.error"
+              ]
+            }
           }
         ],
-        "findings": null,
+        "findings": [],
         "assessments": [
           {
             "identity_id": "anonymous",
@@ -438,7 +500,16 @@
             "headers": {
               "Content-Type": "application/json"
             },
-            "duration_ms": 0
+            "duration_ms": 0,
+            "response_profile": {
+              "kind": "json",
+              "schema_hash": "67cdb6c9e9245c992dba8d6a0ad41ad72407d6dd4c648da010a7dce7e64fc82e",
+              "fields": [
+                "$",
+                "$.document_id",
+                "$.secret"
+              ]
+            }
           }
         ],
         "findings": [
@@ -452,9 +523,9 @@
               "observed_outcome=allow",
               "status_code=200",
               "identity_id=bob",
-              "url=GET http://127.0.0.1:63253/vulnerable/admin/export"
+              "url=GET http://127.0.0.1:58007/vulnerable/admin/export"
             ],
-            "detected_at": "2026-10-24T15:19:05.8686118Z"
+            "detected_at": "2026-10-24T15:58:35.006228Z"
           }
         ],
         "assessments": [
@@ -496,10 +567,19 @@
             "headers": {
               "Content-Type": "application/json"
             },
-            "duration_ms": 0
+            "duration_ms": 0,
+            "response_profile": {
+              "kind": "json",
+              "schema_hash": "67cdb6c9e9245c992dba8d6a0ad41ad72407d6dd4c648da010a7dce7e64fc82e",
+              "fields": [
+                "$",
+                "$.document_id",
+                "$.secret"
+              ]
+            }
           }
         ],
-        "findings": null,
+        "findings": [],
         "assessments": [
           {
             "identity_id": "admin",
@@ -554,9 +634,9 @@
               "observed_outcome=allow",
               "status_code=204",
               "identity_id=bob",
-              "url=POST http://127.0.0.1:63253/vulnerable/documents/1/update"
+              "url=POST http://127.0.0.1:58007/vulnerable/documents/1/update"
             ],
-            "detected_at": "2026-10-24T15:19:05.8691307Z"
+            "detected_at": "2026-10-24T15:58:35.0067491Z"
           }
         ],
         "assessments": [
@@ -598,10 +678,18 @@
             "headers": {
               "Content-Type": "application/json"
             },
-            "duration_ms": 0
+            "duration_ms": 0,
+            "response_profile": {
+              "kind": "json",
+              "schema_hash": "4ef4f60c6e7b227f87734dde18d93dcc0169dc4cd29bcaabfbfd8560053945a5",
+              "fields": [
+                "$",
+                "$.error"
+              ]
+            }
           }
         ],
-        "findings": null,
+        "findings": [],
         "assessments": [
           {
             "identity_id": "bob",
@@ -641,7 +729,15 @@
             "headers": {
               "Content-Type": "application/json"
             },
-            "duration_ms": 0
+            "duration_ms": 0,
+            "response_profile": {
+              "kind": "json",
+              "schema_hash": "4ef4f60c6e7b227f87734dde18d93dcc0169dc4cd29bcaabfbfd8560053945a5",
+              "fields": [
+                "$",
+                "$.error"
+              ]
+            }
           }
         ],
         "findings": [
@@ -655,9 +751,9 @@
               "observed_outcome=allow",
               "status_code=200",
               "identity_id=bob",
-              "url=GET http://127.0.0.1:63253/edge/soft-denial"
+              "url=GET http://127.0.0.1:58007/edge/soft-denial"
             ],
-            "detected_at": "2026-10-24T15:19:05.8691307Z"
+            "detected_at": "2026-10-24T15:58:35.0067491Z"
           }
         ],
         "assessments": [
@@ -699,7 +795,15 @@
             "headers": {
               "Content-Type": "application/json"
             },
-            "duration_ms": 0
+            "duration_ms": 0,
+            "response_profile": {
+              "kind": "json",
+              "schema_hash": "8a7b3d41e928a2541980873bb06e58cc1f6421c67e1f6cca4ceadcc12faf29c6",
+              "fields": [
+                "$",
+                "$.data"
+              ]
+            }
           }
         ],
         "findings": [
@@ -713,9 +817,9 @@
               "observed_outcome=allow",
               "status_code=200",
               "identity_id=bob",
-              "url=GET http://127.0.0.1:63253/edge/empty"
+              "url=GET http://127.0.0.1:58007/edge/empty"
             ],
-            "detected_at": "2026-10-24T15:19:05.8696506Z"
+            "detected_at": "2026-10-24T15:58:35.0072656Z"
           }
         ],
         "assessments": [
@@ -757,10 +861,19 @@
             "headers": {
               "Content-Type": "application/json"
             },
-            "duration_ms": 0
+            "duration_ms": 0,
+            "response_profile": {
+              "kind": "json",
+              "schema_hash": "67cdb6c9e9245c992dba8d6a0ad41ad72407d6dd4c648da010a7dce7e64fc82e",
+              "fields": [
+                "$",
+                "$.document_id",
+                "$.secret"
+              ]
+            }
           }
         ],
-        "findings": null,
+        "findings": [],
         "assessments": [
           {
             "identity_id": "bob",
@@ -800,10 +913,19 @@
             "headers": {
               "Content-Type": "application/json"
             },
-            "duration_ms": 0
+            "duration_ms": 0,
+            "response_profile": {
+              "kind": "json",
+              "schema_hash": "67cdb6c9e9245c992dba8d6a0ad41ad72407d6dd4c648da010a7dce7e64fc82e",
+              "fields": [
+                "$",
+                "$.document_id",
+                "$.secret"
+              ]
+            }
           }
         ],
-        "findings": null,
+        "findings": [],
         "assessments": [
           {
             "identity_id": "bob",
@@ -845,10 +967,18 @@
             "headers": {
               "Content-Type": "application/json"
             },
-            "duration_ms": 0
+            "duration_ms": 0,
+            "response_profile": {
+              "kind": "json",
+              "schema_hash": "4ef4f60c6e7b227f87734dde18d93dcc0169dc4cd29bcaabfbfd8560053945a5",
+              "fields": [
+                "$",
+                "$.error"
+              ]
+            }
           }
         ],
-        "findings": null,
+        "findings": [],
         "assessments": [
           {
             "identity_id": "bob",
@@ -888,10 +1018,18 @@
             "headers": {
               "Content-Type": "application/json"
             },
-            "duration_ms": 0
+            "duration_ms": 0,
+            "response_profile": {
+              "kind": "json",
+              "schema_hash": "4ef4f60c6e7b227f87734dde18d93dcc0169dc4cd29bcaabfbfd8560053945a5",
+              "fields": [
+                "$",
+                "$.error"
+              ]
+            }
           }
         ],
-        "findings": null,
+        "findings": [],
         "assessments": [
           {
             "identity_id": "bob",
@@ -931,10 +1069,18 @@
             "headers": {
               "Content-Type": "application/json"
             },
-            "duration_ms": 0
+            "duration_ms": 0,
+            "response_profile": {
+              "kind": "json",
+              "schema_hash": "4ef4f60c6e7b227f87734dde18d93dcc0169dc4cd29bcaabfbfd8560053945a5",
+              "fields": [
+                "$",
+                "$.error"
+              ]
+            }
           }
         ],
-        "findings": null,
+        "findings": [],
         "assessments": [
           {
             "identity_id": "bob",
@@ -974,10 +1120,18 @@
             "headers": {
               "Content-Type": "application/json"
             },
-            "duration_ms": 0
+            "duration_ms": 0,
+            "response_profile": {
+              "kind": "json",
+              "schema_hash": "4ef4f60c6e7b227f87734dde18d93dcc0169dc4cd29bcaabfbfd8560053945a5",
+              "fields": [
+                "$",
+                "$.error"
+              ]
+            }
           }
         ],
-        "findings": null,
+        "findings": [],
         "assessments": [
           {
             "identity_id": "bob",
@@ -1017,10 +1171,18 @@
             "headers": {
               "Content-Type": "application/json"
             },
-            "duration_ms": 0
+            "duration_ms": 0,
+            "response_profile": {
+              "kind": "json",
+              "schema_hash": "4ef4f60c6e7b227f87734dde18d93dcc0169dc4cd29bcaabfbfd8560053945a5",
+              "fields": [
+                "$",
+                "$.error"
+              ]
+            }
           }
         ],
-        "findings": null,
+        "findings": [],
         "assessments": [
           {
             "identity_id": "bob",
@@ -1058,11 +1220,11 @@
             "status_code": 0,
             "observed_outcome": "error",
             "duration_ms": 0,
-            "error": "execute request: Post \"http://127.0.0.1:63253/edge/disconnect\": EOF",
+            "error": "execute request: Post \"http://127.0.0.1:58007/edge/disconnect\": EOF",
             "error_kind": "network"
           }
         ],
-        "findings": null,
+        "findings": [],
         "assessments": [
           {
             "identity_id": "bob",
@@ -1102,7 +1264,15 @@
             "headers": {
               "Content-Type": "application/json"
             },
-            "duration_ms": 0
+            "duration_ms": 0,
+            "response_profile": {
+              "kind": "json",
+              "schema_hash": "4ef4f60c6e7b227f87734dde18d93dcc0169dc4cd29bcaabfbfd8560053945a5",
+              "fields": [
+                "$",
+                "$.error"
+              ]
+            }
           }
         ],
         "findings": [
@@ -1116,9 +1286,9 @@
               "observed_outcome=deny",
               "status_code=403",
               "identity_id=alice",
-              "url=GET http://127.0.0.1:63253/edge/over-denial"
+              "url=GET http://127.0.0.1:58007/edge/over-denial"
             ],
-            "detected_at": "2026-10-24T15:19:05.8722852Z"
+            "detected_at": "2026-10-24T15:58:35.0093373Z"
           }
         ],
         "assessments": [
