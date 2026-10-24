@@ -101,6 +101,7 @@ var inconclusiveReasons = map[string]string{
 	"verifier_value_unavailable":   "the write verifier's response has no value at its json_pointer; the pointer may be stale",
 	"state_changing_concurrently":  "the target state changed between two reads before the request; something else is writing to it",
 	"target_value_already_present": "the target already holds the value the write would set, so a change cannot be observed; reset the fixture",
+	"verifier_baseline_missing":    "the write verifier's first read was not a success; check its path, or the resource does not exist",
 	"state_changed_unexpectedly":   "the target state changed, but not to the value this write attempts",
 }
 

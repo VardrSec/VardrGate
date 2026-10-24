@@ -24,6 +24,7 @@ const (
 	reasonVerifierReadFailed   = "verifier_read_failed"
 	reasonVerifierDenied       = "verifier_denied"
 	reasonVerifierValueMissing = "verifier_value_unavailable"
+	reasonBaselineMissing      = "verifier_baseline_missing"
 	reasonConcurrentChange     = "state_changing_concurrently"
 	reasonTargetAlreadyPresent = "target_value_already_present"
 	reasonChangedUnexpectedly  = "state_changed_unexpectedly"
@@ -57,6 +58,17 @@ func validateVerification(tc model.AuthorizationTestCase, ids map[string]struct{
 	}
 	if _, err := pointerTokens(wv.JSONPointer); err != nil || len(wv.JSONPointer) > 1024 {
 		return fmt.Errorf("write_verification: invalid JSON pointer")
+	}
+	verified := 0
+	for _, ea := range tc.ExpectedAccess {
+		if ea.Decision != model.AccessDecisionSkip {
+			verified++
+		}
+	}
+	if verified > 1 && len(wv.ChangedTo) == 0 {
+		// Gate does not reset state between identities: without the target
+		// value, a second writer of the same value would read as unchanged.
+		return fmt.Errorf("write_verification of more than one identity requires changed_to")
 	}
 	if len(wv.ChangedTo) > 0 {
 		if len(wv.ChangedTo) > 8192 {
@@ -134,6 +146,11 @@ func (e *Engine) verifiedExecute(ctx context.Context, wv *model.WriteVerificatio
 		Decision: model.AssessmentInconclusive, Source: sourceWriteVerification}
 
 	before, reason := e.observe(ctx, wv)
+	if reason == "" && (before.status < 200 || before.status >= 300) {
+		// A missing resource is not a baseline: a mistyped verifier path would
+		// read 404 before and after and look like a refused write.
+		reason = reasonBaselineMissing
+	}
 	if reason == "" {
 		var again observedState
 		if again, reason = e.observe(ctx, wv); reason == "" && !again.equal(before) {
@@ -169,4 +186,23 @@ func (e *Engine) verifiedExecute(ctx context.Context, wv *model.WriteVerificatio
 		a.Decision, a.Reason = model.AssessmentAllowed, reasonStateChanged
 	}
 	return exec, a
+}
+
+// executionOrder runs deny-expected identities first when writes are verified,
+// so an unauthorized write is observed against an untouched before-state
+// rather than hidden behind a legitimate write of the same value. Results keep
+// the declared order.
+func executionOrder(tc model.AuthorizationTestCase) []model.Identity {
+	if tc.WriteVerification == nil {
+		return tc.Identities
+	}
+	var deny, rest []model.Identity
+	for _, id := range tc.Identities {
+		if ea, ok := expectedFor(tc, id.ID); ok && ea.Decision == model.AccessDecisionDeny {
+			deny = append(deny, id)
+		} else {
+			rest = append(rest, id)
+		}
+	}
+	return append(deny, rest...)
 }

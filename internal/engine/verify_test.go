@@ -246,3 +246,68 @@ func TestWriteVerificationValidation(t *testing.T) {
 		t.Fatalf("acknowledged POST verifier rejected: %v", err)
 	}
 }
+
+// A shared body across identities: the owner is listed first, as in a typical
+// identities file. A vulnerable target lets the peer write too. The peer's
+// write must not be hidden by the owner's earlier write of the same value.
+func TestWriteVerificationMultipleIdentitiesSharedBody(t *testing.T) {
+	tc := verifiedCase(model.AccessDecisionDeny)
+	tc.Identities = []model.Identity{
+		{ID: "owner", Credential: model.Credential{Type: model.CredentialTypeBearer, Value: "tok-o"}},
+		{ID: "peer", Credential: model.Credential{Type: model.CredentialTypeBearer, Value: "tok-p"}},
+	}
+	tc.ExpectedAccess = []model.ExpectedAccess{
+		{IdentityID: "owner", Decision: model.AccessDecisionAllow},
+		{IdentityID: "peer", Decision: model.AccessDecisionDeny},
+	}
+	tc.WriteVerification.ChangedTo = json.RawMessage(`"p@x.io"`)
+	target := &stateTarget{value: "a@x.io", writeStatus: 204, writes: true, writeTo: "p@x.io"}
+	res, err := New(target).Run(context.Background(), tc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	byID := map[string]model.Assessment{}
+	for _, a := range res.Assessments {
+		byID[a.IdentityID] = a
+	}
+	if a := byID["peer"]; a.Decision != model.AssessmentAllowed {
+		t.Fatalf("peer's unauthorized write was hidden: %+v", a)
+	}
+	if a := byID["owner"]; a.Decision != model.AssessmentInconclusive || a.Reason != "target_value_already_present" {
+		t.Fatalf("owner after the peer's write must be inconclusive, got %+v", a)
+	}
+	if len(res.Findings) != 1 || res.Findings[0].IdentityID != "peer" {
+		t.Fatalf("findings = %+v", res.Findings)
+	}
+	if res.Executions[0].IdentityID != "owner" || res.Executions[1].IdentityID != "peer" {
+		t.Fatal("executions must keep the declared identity order")
+	}
+}
+
+// Without changed_to, a second writer of the same value would read as
+// unchanged. Verifying more than one identity therefore requires it.
+func TestWriteVerificationMultipleIdentitiesRequireChangedTo(t *testing.T) {
+	tc := verifiedCase(model.AccessDecisionDeny)
+	tc.Identities = append(tc.Identities, model.Identity{ID: "owner", Credential: model.Credential{Type: model.CredentialTypeBearer, Value: "tok-o"}})
+	tc.ExpectedAccess = append(tc.ExpectedAccess, model.ExpectedAccess{IdentityID: "owner", Decision: model.AccessDecisionAllow})
+	if _, err := New(&stateTarget{value: "a", writeStatus: 204}).Run(context.Background(), tc); err == nil {
+		t.Fatal("expected a validation error")
+	}
+}
+
+// A before-read that is not 2xx is not a baseline: a mistyped verifier path
+// would otherwise read 404 twice and look like a refused write.
+func TestWriteVerificationRequiresSuccessfulBaseline(t *testing.T) {
+	tc := verifiedCase(model.AccessDecisionDeny)
+	target := &stateTarget{value: "a@x.io", writeStatus: 204, writes: true, writeTo: "p@x.io", readStatus: []int{404}}
+	res, err := New(target).Run(context.Background(), tc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a := res.Assessments[0]; a.Decision != model.AssessmentInconclusive || a.Reason != "verifier_baseline_missing" {
+		t.Fatalf("assessment = %+v", a)
+	}
+	if target.sent != 0 {
+		t.Fatal("the request must be withheld without a baseline")
+	}
+}

@@ -33,6 +33,7 @@ benchmarks showed both failure directions:
    | Unchanged | `denied` / `state_unchanged` |
    | Changed (to `changed_to`, when declared) | `allowed` / `state_changed` |
    | Changed to another value | `inconclusive` / `state_changed_unexpectedly` |
+   | First before-read not 2xx | `inconclusive` / `verifier_baseline_missing` |
    | Read failed or 5xx | `inconclusive` / `verifier_read_failed` |
    | Verifier got 401/403 | `inconclusive` / `verifier_denied` |
    | No value at the pointer | `inconclusive` / `verifier_value_unavailable` |
@@ -52,13 +53,27 @@ benchmarks showed both failure directions:
    the reason code. `${VAR}` in the verifier credential and in string values
    of its JSON body is resolved from the environment and JSON-escaped.
 
+7. The before-state must be a 2xx. A 404 baseline is rejected, so a mistyped
+   verifier path cannot read 404 twice and pass as a refused write.
+8. Gate does not reset fixtures between identities, so a later identity's
+   before-state includes earlier identities' writes. Verifying more than one
+   identity therefore requires `changed_to`. A second writer of the same
+   value is then `target_value_already_present` (inconclusive) rather than a
+   false "unchanged". Deny-expected identities run first, so an unauthorized
+   write is judged against an untouched state. Results keep the declared
+   identity order.
+
 ## Consequences
 
-- Gate does not reset fixtures between identities. With several identities
-  in one case, an earlier identity's write is the later identity's
-  before-state. `changed_to` turns a value that is already present into
-  inconclusive rather than a false "unchanged". For clean evidence, use one
-  identity per case or a target that can be reset.
+- With several identities, only the first writer of the target value is
+  conclusive. When a peer's unauthorized write succeeds, the owner's later
+  legitimate write is inconclusive. Use one identity per case, or a target
+  that can be reset, for fully conclusive results.
+- Creating a resource (404 before, 2xx after) cannot be verified.
+- With only deny-expected identities, a verifier that reads the wrong field
+  or uses a wrong password reads "unchanged" and passes. Include an
+  allow-expected identity as a positive control: its own legitimate write
+  must read as changed, or Gate reports `authorization_mismatch`.
 - Each verified identity costs three extra requests.
 - The verifier must be able to read the state. A refused verifier is
   inconclusive, never a pass.

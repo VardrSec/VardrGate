@@ -62,6 +62,7 @@ password never appears in results.
 | State unchanged | `denied` / `state_unchanged` |
 | State changed, to `changed_to` when declared | `allowed` / `state_changed` |
 | Changed to some other value | `inconclusive` / `state_changed_unexpectedly` |
+| First read before the request was not 2xx | `inconclusive` / `verifier_baseline_missing` |
 | Verifier read failed, or the target returned 5xx | `inconclusive` / `verifier_read_failed` |
 | Verifier refused (401/403) | `inconclusive` / `verifier_denied` |
 | No value at `json_pointer` | `inconclusive` / `verifier_value_unavailable` |
@@ -77,8 +78,17 @@ and `deny_when`.
 - Read the victim's record, not the caller's own.
 - Prefer a GET that any reviewed reader can make. Avoid oracles that depend
   on a vulnerability, such as a debug endpoint that exposes passwords.
-- Gate does not reset state between identities. With several identities in
-  one case, an earlier identity's write becomes the next one's before-state.
-  Declare `changed_to`, or run one identity per case against a resettable
+- Gate does not reset state between identities. Verifying more than one
+  identity requires `changed_to`. Deny-expected identities run first, so an
+  unauthorized write is observed against the untouched state. A later
+  identity that would write the same value is then inconclusive. For fully
+  conclusive results, run one identity per case against a resettable
   fixture.
+- **Add an allow-expected identity as a positive control.** If the oracle
+  reads the wrong field or logs in with the wrong password, every
+  deny-expected identity reads "unchanged" and appears to pass. The owner's
+  own write must read as changed; if it does not, Gate reports
+  `authorization_mismatch`, which exposes the broken oracle.
+- The baseline read must succeed (2xx). Verifying a create, where the
+  resource is absent beforehand, is not supported.
 - Only reason codes are reported. Observed values never leave memory.

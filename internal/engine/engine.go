@@ -134,7 +134,7 @@ func (e *Engine) Run(ctx context.Context, tc model.AuthorizationTestCase) (Resul
 	// evaluation can compare an offending response against a legitimate baseline.
 	execByID := make(map[string]model.ExecutionResult, len(tc.Identities))
 	verified := make(map[string]model.Assessment)
-	for _, identity := range tc.Identities {
+	for _, identity := range executionOrder(tc) {
 		var exec model.ExecutionResult
 		if ea, ok := expectedFor(tc, identity.ID); ok && tc.WriteVerification != nil && ea.Decision != model.AccessDecisionSkip {
 			var a model.Assessment
@@ -151,8 +151,10 @@ func (e *Engine) Run(ctx context.Context, tc model.AuthorizationTestCase) (Resul
 		if exec.Error == "" {
 			exec.ObservedOutcome, _ = classify(tc, exec)
 		}
-		result.Executions = append(result.Executions, exec)
 		execByID[identity.ID] = exec
+	}
+	for _, identity := range tc.Identities {
+		result.Executions = append(result.Executions, execByID[identity.ID])
 	}
 
 	// CORS policy is endpoint-level, so evaluate it once from the first usable
