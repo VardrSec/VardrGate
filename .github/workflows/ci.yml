@@ -38,11 +38,12 @@ jobs:
         run: go build ./...
 
       # Regression budgets are enforced by go test above (cmd/authbench). This
-      # step records both modes so each run retains a reproducible report.
+      # step records each mode so every run retains a reproducible report.
       - name: Authorization benchmark
         run: |
           go run ./cmd/authbench -repeat 3 -out "$RUNNER_TEMP/authz-status-only.json"
           go run ./cmd/authbench -assertions -repeat 3 -out "$RUNNER_TEMP/authz-assertions.json"
+          go run ./cmd/authbench -assertions -verify -repeat 3 -out "$RUNNER_TEMP/authz-verified.json"
 
       - name: Retain benchmark reports
         uses: actions/upload-artifact@v4

@@ -155,6 +155,15 @@ See [response assertion semantics](../docs/response-assertions.md) for configura
 limits, and evidence handling. Write postconditions and independent third-party
 app validation remain future work.
 
+## Write verification
+
+`-verify` adds a write verifier to the three write cases. It reads the owner's
+view of the document through a lab endpoint (`/secure/documents/1/content`),
+never through the scorer's audit. With `-assertions -verify`, the
+write-before-500 case becomes a true positive: TP=9 FP=0 missed=0 TN=8
+inconclusive=5. Without `-verify`, every count is unchanged. A regression test
+keeps this budget.
+
 ## Port to the current engine
 
 When the feature was ported from `17cf541` to the current `main`, which added

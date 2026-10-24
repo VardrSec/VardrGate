@@ -67,33 +67,35 @@ type metrics struct {
 }
 
 type report struct {
-	SchemaVersion     int                `json:"schema_version"`
-	GeneratedAt       time.Time          `json:"generated_at"`
-	GoVersion         string             `json:"go_version"`
-	Platform          string             `json:"platform"`
-	Revision          string             `json:"git_revision"`
-	WorkingTree       string             `json:"working_tree_status"`
-	SourceSHA256      string             `json:"source_sha256"`
-	RepeatCount       int                `json:"repeat_count"`
-	Stable            bool               `json:"stable_classifications"`
-	Metrics           metrics            `json:"metrics"`
-	AssertionsEnabled bool               `json:"assertions_enabled"`
-	ByExpectation     map[string]metrics `json:"by_expectation"`
-	Assessments       []assessment       `json:"assessments"`
+	SchemaVersion       int                `json:"schema_version"`
+	GeneratedAt         time.Time          `json:"generated_at"`
+	GoVersion           string             `json:"go_version"`
+	Platform            string             `json:"platform"`
+	Revision            string             `json:"git_revision"`
+	WorkingTree         string             `json:"working_tree_status"`
+	SourceSHA256        string             `json:"source_sha256"`
+	RepeatCount         int                `json:"repeat_count"`
+	Stable              bool               `json:"stable_classifications"`
+	Metrics             metrics            `json:"metrics"`
+	AssertionsEnabled   bool               `json:"assertions_enabled"`
+	VerificationEnabled bool               `json:"verification_enabled"`
+	ByExpectation       map[string]metrics `json:"by_expectation"`
+	Assessments         []assessment       `json:"assessments"`
 }
 
 func main() {
 	out := flag.String("out", "benchmarks/authz-latest.json", "JSON report path (run from repository root)")
 	repeat := flag.Int("repeat", 3, "fresh lab runs; fail if classifications or oracle observations differ")
 	assertions := flag.Bool("assertions", false, "apply the versioned response assertion profiles")
+	verify := flag.Bool("verify", false, "verify write effects through the owner's view of the document")
 	flag.Parse()
-	if err := execute(*out, *repeat, *assertions); err != nil {
+	if err := execute(*out, *repeat, *assertions, *verify); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
 
-func execute(out string, repeat int, assertions bool) error {
+func execute(out string, repeat int, assertions, verify bool) error {
 	if repeat < 1 {
 		return fmt.Errorf("repeat must be positive")
 	}
@@ -101,9 +103,9 @@ func execute(out string, repeat int, assertions bool) error {
 	if err != nil {
 		return err
 	}
-	r := report{SchemaVersion: 2, GeneratedAt: time.Now().UTC(), GoVersion: runtime.Version(), Platform: runtime.GOOS + "/" + runtime.GOARCH, Revision: git("rev-parse", "HEAD"), WorkingTree: git("status", "--short"), SourceSHA256: hash, RepeatCount: repeat, Stable: true, AssertionsEnabled: assertions}
+	r := report{SchemaVersion: 2, GeneratedAt: time.Now().UTC(), GoVersion: runtime.Version(), Platform: runtime.GOOS + "/" + runtime.GOARCH, Revision: git("rev-parse", "HEAD"), WorkingTree: git("status", "--short"), SourceSHA256: hash, RepeatCount: repeat, Stable: true, AssertionsEnabled: assertions, VerificationEnabled: verify}
 	for i := 0; i < repeat; i++ {
-		rows, err := runSuiteWithAssertions(assertions)
+		rows, err := runSuiteWith(assertions, verify)
 		if err != nil {
 			return fmt.Errorf("run %d: %w", i+1, err)
 		}
@@ -135,6 +137,15 @@ func runSuite() ([]assessment, error) {
 }
 
 func runSuiteWithAssertions(enabled bool) ([]assessment, error) {
+	return runSuiteWith(enabled, false)
+}
+
+// verifiedWrites are the write scenarios that receive write verification when
+// it is enabled. The verifier reads the owner's view of the document and is
+// never one of the identities under test.
+var verifiedWrites = map[string]bool{"write-bypass": true, "write-protected": true, "write-before-500": true}
+
+func runSuiteWith(enabled, verify bool) ([]assessment, error) {
 	var cases []scenario
 	if err := json.Unmarshal(manifest, &cases); err != nil {
 		return nil, err
@@ -179,6 +190,13 @@ func runSuiteWithAssertions(enabled bool) ([]assessment, error) {
 			"expected_access": []any{map[string]any{"identity_id": s.Actor, "decision": s.Decision}},
 			// Each case sends one identity once, against fresh fixture state.
 			"mutating": model.IsUnsafeMethod(s.Method),
+		}
+		if verify && verifiedWrites[s.ID] {
+			payload["write_verification"] = map[string]any{
+				"identity":     map[string]any{"id": "verifier", "credential": map[string]string{"type": "bearer", "value": "lab-alice"}},
+				"request":      map[string]any{"method": http.MethodGet, "url": target.URL + "/secure/documents/1/content"},
+				"json_pointer": "/content",
+			}
 		}
 		if rules := profiles[s.Path]; len(rules) > 0 {
 			payload["expected_access"] = []model.ExpectedAccess{{IdentityID: s.Actor, Decision: s.Decision, ResponseAssertions: rules}}

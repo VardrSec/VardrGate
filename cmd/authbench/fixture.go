@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -68,6 +69,15 @@ func (l *lab) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			o.Status = 405
 		} else if actor == "alice" {
 			write()
+		}
+	case "/secure/documents/1/content":
+		// The owner's view of the document's current state, used by write
+		// verification. It reads through the lab API, never the audit.
+		if actor == "alice" {
+			l.mu.Lock()
+			content, _ := json.Marshal(map[string]string{"content": l.document})
+			l.mu.Unlock()
+			o.Status, o.Body = 200, string(content)
 		}
 	case "/edge/soft-denial":
 		o.Status = 200
