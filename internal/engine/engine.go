@@ -156,6 +156,7 @@ func (e *Engine) Run(ctx context.Context, tc model.AuthorizationTestCase) (Resul
 	for _, identity := range tc.Identities {
 		result.Executions = append(result.Executions, execByID[identity.ID])
 	}
+	guardVerifiedDenials(tc, verified)
 
 	// CORS policy is endpoint-level, so evaluate it once from the first usable
 	// response.

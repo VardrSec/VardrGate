@@ -19,15 +19,19 @@ import (
 const (
 	sourceWriteVerification = "write_verification"
 
-	reasonStateChanged         = "state_changed"
-	reasonStateUnchanged       = "state_unchanged"
-	reasonVerifierReadFailed   = "verifier_read_failed"
-	reasonVerifierDenied       = "verifier_denied"
-	reasonVerifierValueMissing = "verifier_value_unavailable"
-	reasonBaselineMissing      = "verifier_baseline_missing"
-	reasonConcurrentChange     = "state_changing_concurrently"
-	reasonTargetAlreadyPresent = "target_value_already_present"
-	reasonChangedUnexpectedly  = "state_changed_unexpectedly"
+	reasonStateChanged          = "state_changed"
+	reasonStateUnchanged        = "state_unchanged"
+	reasonVerifierReadFailed    = "verifier_read_failed"
+	reasonVerifierDenied        = "verifier_denied"
+	reasonVerifierValueMissing  = "verifier_value_unavailable"
+	reasonBaselineMissing       = "verifier_baseline_missing"
+	reasonConcurrentChange      = "state_changing_concurrently"
+	reasonTargetAlreadyPresent  = "target_value_already_present"
+	reasonChangedUnexpectedly   = "state_changed_unexpectedly"
+	reasonVerifierStatus        = "verifier_unexpected_status"
+	reasonWriteFailed           = "write_execution_error"
+	reasonNoPositiveControl     = "no_positive_control"
+	reasonPositiveControlFailed = "positive_control_failed"
 )
 
 func validateVerification(tc model.AuthorizationTestCase, ids map[string]struct{}) error {
@@ -106,7 +110,9 @@ type observedState struct {
 }
 
 func (s observedState) equal(o observedState) bool {
-	return s.status == o.status && s.hasValue == o.hasValue && reflect.DeepEqual(s.value, o.value)
+	// A different successful status alone does not prove a state change.
+	sameStatus := s.status == o.status || (s.status >= 200 && s.status < 300 && o.status >= 200 && o.status < 300)
+	return sameStatus && s.hasValue == o.hasValue && reflect.DeepEqual(s.value, o.value)
 }
 
 // observe performs one verifier read. A failed or refused read returns a
@@ -120,6 +126,10 @@ func (e *Engine) observe(ctx context.Context, wv *model.WriteVerification) (obse
 		return observedState{}, reasonVerifierReadFailed
 	case ex.StatusCode == 401 || ex.StatusCode == 403:
 		return observedState{}, reasonVerifierDenied
+	case ex.StatusCode != 404 && (ex.StatusCode < 200 || ex.StatusCode >= 300):
+		// Only 404 is supported as an absent-resource observation for deletes.
+		// Redirects, rate limits and other client errors are unreadable state.
+		return observedState{}, reasonVerifierStatus
 	}
 	st := observedState{status: ex.StatusCode}
 	if wv.JSONPointer == "" || ex.StatusCode < 200 || ex.StatusCode >= 300 {
@@ -179,13 +189,44 @@ func (e *Engine) verifiedExecute(ctx context.Context, wv *model.WriteVerificatio
 	case reason != "":
 		a.Reason = reason
 	case after.equal(before):
-		a.Decision, a.Reason = model.AssessmentDenied, reasonStateUnchanged
+		if exec.Error != "" || exec.ErrorKind != "" {
+			a.Reason = reasonWriteFailed
+		} else {
+			a.Decision, a.Reason = model.AssessmentDenied, reasonStateUnchanged
+		}
 	case hasTarget && !(after.hasValue && reflect.DeepEqual(after.value, target)):
 		a.Reason = reasonChangedUnexpectedly
 	default:
 		a.Decision, a.Reason = model.AssessmentAllowed, reasonStateChanged
 	}
 	return exec, a
+}
+
+// A constant or wrong oracle must not make deny-only tests look protected.
+// Wait until all identities have run so the positive control must actually
+// demonstrate a write using this oracle, rather than merely being declared.
+func guardVerifiedDenials(tc model.AuthorizationTestCase, verified map[string]model.Assessment) {
+	declared, passed := false, false
+	for _, ea := range tc.ExpectedAccess {
+		if ea.Decision == model.AccessDecisionAllow {
+			declared = true
+			a, ok := verified[ea.IdentityID]
+			passed = passed || (ok && a.Decision == model.AssessmentAllowed)
+		}
+	}
+	if passed {
+		return
+	}
+	reason := reasonNoPositiveControl
+	if declared {
+		reason = reasonPositiveControlFailed
+	}
+	for id, a := range verified {
+		if a.ExpectedAccess == model.AccessDecisionDeny && a.Decision == model.AssessmentDenied {
+			a.Decision, a.Reason = model.AssessmentInconclusive, reason
+			verified[id] = a
+		}
+	}
 }
 
 // executionOrder runs deny-expected identities first when writes are verified,

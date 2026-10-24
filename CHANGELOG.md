@@ -84,6 +84,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Write verification no longer treats verifier redirects or unsupported client
+  errors as changed state, or a successful status change alone as a mutation.
+- An errored write with no observed effect is inconclusive. Independently
+  observed effects still prove access even when the write reports an error.
+- Unchanged deny-expected writes require a demonstrated allow-expected positive
+  control; missing or failed controls are explicit inconclusive assessments.
+  See [ADR 0018](docs/adr/0018-verifier-confidence.md).
+
 - Sensitive query parameters (`token`, `api_key`, ...) are now redacted from
   finding evidence regardless of case; `?Token=` or `?API_KEY=` previously
   passed through.
