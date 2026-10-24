@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/VardrSec/vardrgate/internal/model"
 )
@@ -238,9 +239,15 @@ func normalizeField(name string) string {
 	return b.String()
 }
 
-// FieldValue returns the first value found for the named field anywhere in a
-// JSON body (at any nesting depth), rendered as a string. Only scalar values
-// are returned; objects and arrays report false.
+// FieldValue returns the value FindField resolves for the named field.
+func FieldValue(body []byte, field string) (string, bool) {
+	_, value, ok := FindField(body, field)
+	return value, ok
+}
+
+// FindField locates the named field anywhere in a JSON body and returns the
+// key as the body spells it together with its scalar value rendered as a
+// string. Objects and arrays never match.
 //
 // Matching uses the same normalization as ScanSensitive: case-insensitive and
 // separator-insensitive, so a policy naming "tenant_id" matches a response that
@@ -248,18 +255,29 @@ func normalizeField(name string) string {
 // against a camelCase API would be reported as potential_bola or unexpected_access
 // rather than the more specific (and more severe) cross_tenant_access.
 //
-// Field order within a JSON object is not preserved by decoding, so a body with
-// the same key at several depths has no defined winner. Callers use this for
-// identifiers that appear once, such as a tenant field.
-func FieldValue(body []byte, field string) (string, bool) {
+// Resolution is deterministic, because a tenant read here decides a finding's
+// category:
+//   - An object's own keys are checked before its children, so a top-level
+//     tenant wins over one in a nested object such as "requester".
+//   - Among sibling keys, a case-insensitive exact spelling wins over one that
+//     matches only after normalization.
+//   - Siblings that match equally well but disagree are ambiguous and resolve
+//     to nothing; the engine does not guess which one is the resource's tenant.
+//   - Children are searched in sorted key order, array elements in index order.
+//
+// A nested object carrying another party's tenant, with none at a shallower
+// level, is still read as the resource's tenant. Callers use this for
+// identifiers that appear once.
+func FindField(body []byte, field string) (key, value string, ok bool) {
 	if len(body) == 0 || field == "" {
-		return "", false
+		return "", "", false
 	}
 	var v interface{}
 	if err := json.Unmarshal(body, &v); err != nil {
-		return "", false
+		return "", "", false
 	}
-	return findScalar(v, normalizeField(field))
+	key, value, res := findScalar(v, field, normalizeField(field))
+	return key, value, res == fieldFound
 }
 
 // ValueAtPath resolves a dotted path against a JSON body and returns the scalar
@@ -341,29 +359,87 @@ func MatchesDeny(body []byte, cond *model.DenyCondition) (string, bool) {
 	return "", false
 }
 
-func findScalar(v interface{}, want string) (string, bool) {
+type fieldResult int
+
+const (
+	fieldMissing fieldResult = iota
+	fieldFound
+	fieldAmbiguous
+)
+
+// findScalar implements FindField's resolution rules. An ambiguous level stops
+// the search: a deeper match would be a weaker guess, not a better one.
+func findScalar(v interface{}, field, want string) (string, string, fieldResult) {
 	switch t := v.(type) {
 	case map[string]interface{}:
-		for k, child := range t {
-			if normalizeField(k) == want {
-				if s, ok := scalarString(child); ok {
-					return s, true
-				}
+		keys := make([]string, 0, len(t))
+		for k := range t {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+
+		var exact, normalized []string
+		for _, k := range keys {
+			if _, ok := scalarString(t[k]); !ok || !matchesNormalized(k, want) {
+				continue
+			}
+			if strings.EqualFold(k, field) {
+				exact = append(exact, k)
+			} else {
+				normalized = append(normalized, k)
 			}
 		}
-		for _, child := range t {
-			if s, ok := findScalar(child, want); ok {
-				return s, true
+		for _, tier := range [][]string{exact, normalized} {
+			if len(tier) == 0 {
+				continue
+			}
+			value, _ := scalarString(t[tier[0]])
+			for _, k := range tier[1:] {
+				if other, _ := scalarString(t[k]); other != value {
+					return "", "", fieldAmbiguous
+				}
+			}
+			return tier[0], value, fieldFound
+		}
+
+		for _, k := range keys {
+			if key, value, res := findScalar(t[k], field, want); res != fieldMissing {
+				return key, value, res
 			}
 		}
 	case []interface{}:
 		for _, child := range t {
-			if s, ok := findScalar(child, want); ok {
-				return s, true
+			if key, value, res := findScalar(child, field, want); res != fieldMissing {
+				return key, value, res
 			}
 		}
 	}
-	return "", false
+	return "", "", fieldMissing
+}
+
+// matchesNormalized reports whether normalizeField(name) == want, where want is
+// already normalized. ASCII names, which is nearly every JSON key, compare
+// without allocating; anything else falls back to normalizeField so the two can
+// never disagree.
+func matchesNormalized(name, want string) bool {
+	j := 0
+	for i := 0; i < len(name); i++ {
+		c := name[i]
+		if c >= utf8.RuneSelf {
+			return normalizeField(name) == want
+		}
+		if c == '_' || c == '-' || c == ' ' {
+			continue
+		}
+		if 'A' <= c && c <= 'Z' {
+			c += 'a' - 'A'
+		}
+		if j >= len(want) || want[j] != c {
+			return false
+		}
+		j++
+	}
+	return j == len(want)
 }
 
 // scalarString renders a JSON scalar as a string. Numbers decode as float64;

@@ -212,7 +212,7 @@ kind and deliberately receive no body hash.
 
 `Evidence(a, b, cr)` extracts comparison output into evidence strings ready to attach to a `Finding`.
 
-`FieldValue(body, field)` is a recursive scalar lookup, case- and separator-insensitive like `ScanSensitive`, used to read a resource's tenant out of a response body (see ADR 0007). `ValueAtPath(body, "error.code")` navigates a dotted path exactly rather than searching, for callers that know the response shape.
+`FieldValue(body, field)` (built on `FindField`, which also returns the key as spelled) is a recursive scalar lookup, case- and separator-insensitive like `ScanSensitive`, with deterministic resolution: own keys before children, exact spelling before normalized, disagreeing siblings resolve to nothing. It is used to read a resource's tenant out of a response body (see ADR 0007). `ValueAtPath(body, "error.code")` navigates a dotted path exactly rather than searching, for callers that know the response shape.
 
 `SensitiveTiers` groups field names into `critical`/`elevated`/`pii`/`internal`; `ScanSensitive(body, declared)` returns `SensitiveHit{Path, Field, Tier}` so evidence locates a leak (`user.profile.ssn`) instead of merely naming it, and arrays collapse to one representative path. Matching is on whole normalized names — **never substrings**, which would classify `username` as `user`. A non-empty `declared` list replaces the tiers entirely and reports at `TierDeclared`. `MatchesDeny(body, cond)` evaluates a declared deny condition and describes what matched.
 
