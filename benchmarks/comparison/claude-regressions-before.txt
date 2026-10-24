@@ -1,0 +1,15 @@
+=== RUN   TestReviewMixedCaseHidesUnreachedPeer
+    verification_regression_test.go:33: failed peer hidden even with positive control: unreached=false inconclusive=0 findings=0 assessments=[{IdentityID:peer ExpectedAccess:deny Decision:denied Source:write_verification Reason:state_unchanged MatchedAssertions:[]} {IdentityID:owner ExpectedAccess:allow Decision:allowed Source:write_verification Reason:state_changed MatchedAssertions:[]}]
+--- FAIL: TestReviewMixedCaseHidesUnreachedPeer (0.00s)
+=== RUN   TestReviewVerifierRedirectIsNotAWrite
+    verification_regression_test.go:46: verifier redirect wrongly proves a write: assessment={IdentityID:peer ExpectedAccess:deny Decision:allowed Source:write_verification Reason:state_changed MatchedAssertions:[]} findings=[{Category:unexpected_access Severity:high Confidence:high IdentityID:peer Message:identity "peer" received access that should have been denied Evidence:[observed_outcome=allow status_code=403 identity_id=peer url=PUT https://api.example.com/users/alice/email assessment=allowed source=write_verification verification=state_changed] DetectedAt:2026-10-24 19:22:59.2472173 +0000 UTC}]
+--- FAIL: TestReviewVerifierRedirectIsNotAWrite (0.00s)
+=== RUN   TestReviewUnsentWriteIsNotVerifiedDenial
+    verification_regression_test.go:63: unreached write called a verified denial: {IdentityID:peer ExpectedAccess:deny Decision:denied Source:write_verification Reason:state_unchanged MatchedAssertions:[]}
+--- FAIL: TestReviewUnsentWriteIsNotVerifiedDenial (0.00s)
+=== RUN   TestReviewWrongOracleDenyOnlyCannotPass
+    verification_regression_test.go:75: real unauthorized write is silently clean: actual=compromised assessment={IdentityID:peer ExpectedAccess:deny Decision:denied Source:write_verification Reason:state_unchanged MatchedAssertions:[]} findings=0
+--- FAIL: TestReviewWrongOracleDenyOnlyCannotPass (0.00s)
+FAIL
+FAIL	github.com/VardrSec/vardrgate/internal/engine	0.811s
+FAIL

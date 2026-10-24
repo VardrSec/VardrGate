@@ -1,0 +1,21 @@
+{
+  "claude-before.json": "5c99cbb89a33bcb1321c5f55b32d6ed4f34b84288e958e3941d775219b7879f9",
+  "claude-regressions-before.txt": "a52440d83a28416174b61d50419ae1e52f917b16ee2333e653301285a215c411",
+  "claude-suite-before.txt": "b832a4f9bae13dae8d060635e5fa1bfa6c65108b20fd9a6024b3f392091bb1b3",
+  "compare.py": "370d711877944878d5098112e882a52ae7e24861edc4c2d75e11482eb2131e9c",
+  "compare_vampi.py": "5a9bad97a2054d136ca5a9dcee7ac81be102aad2d4fd765cdb7e6d2e39b8b5de",
+  "fixed-after.json": "c5ccf110a17627839504fe4246b671e8ec8afff5da732b3d410e7a9dad66e578",
+  "fixed-regressions-after.txt": "be4a7afe23eb27cd45eb415d2ff13278365f4e5459ac86c839399964b16e0667",
+  "fixed-suite-after.txt": "df09eabd59f9aa9129d32f09314f3c5250fc2a0df3f4ec9ef4ee345a5e44e210",
+  "four-versions.json": "aeee32b30ba25430d8633287db15d7f309c1b5db7531b80bd36f15e213ae64c2",
+  "linux-validation.txt": "65195cfdf43331e8f285fb5aca18936a466356e9afbb7efe21df24ba11601f48",
+  "oracle-mistakes-claude.json": "f31d97d3326e535cb230f1d909d43e68f7c5819b863fef9d8eccf69e8816c906",
+  "oracle-mistakes-fixed.json": "0292ad823ce2ecaaf360d0f002d2bdf81d48b97c681b53e4704cbd482312d879",
+  "original-suite.txt": "3c7ba620ad8c6e84e95079110bf407afbf24a6d2f824f8a63fd8e3dcca6ba9c0",
+  "pre-claude-suite.txt": "c788f91eb53e482360f52d13da2707b71e03cf4af6e31d25f7bb0563d65a7c5c",
+  "README.md": "621e7c60332465070574415928214e41a68afb8b16f2d9993a90e35d6841b3fa",
+  "seal_results.py": "5eb591317cf5cac4ca6471bb4e2e3b599db261b76b12c95679eaba27c968c49c",
+  "vampi-before_claude.json": "0e57c2b6da075c59fedc1affa03b1a7d2c77e8e36a811ac20b32da3b09033b97",
+  "vampi-claude.json": "5c1702ede4a872fffb2d7813efd47cb599ff36c5cb352c7ff6013887c18f1e72",
+  "vampi-fixed.json": "d53bab8a0da582b8a179108792006e52b1796b29edeedcb8be11a66b39e566bb"
+}

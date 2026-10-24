@@ -1,0 +1,10 @@
+=== RUN   TestReviewMixedCaseHidesUnreachedPeer
+--- PASS: TestReviewMixedCaseHidesUnreachedPeer (0.00s)
+=== RUN   TestReviewVerifierRedirectIsNotAWrite
+--- PASS: TestReviewVerifierRedirectIsNotAWrite (0.00s)
+=== RUN   TestReviewUnsentWriteIsNotVerifiedDenial
+--- PASS: TestReviewUnsentWriteIsNotVerifiedDenial (0.00s)
+=== RUN   TestReviewWrongOracleDenyOnlyCannotPass
+--- PASS: TestReviewWrongOracleDenyOnlyCannotPass (0.00s)
+PASS
+ok  	github.com/VardrSec/vardrgate/internal/engine	0.863s
