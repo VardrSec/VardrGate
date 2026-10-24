@@ -99,7 +99,7 @@ type sampleFacts struct {
 func analyzeSample(body []byte) *sampleFacts {
 	facts := &sampleFacts{}
 
-	for _, candidate := range []string{"tenant_id", "tenantId", "org_id", "organization_id", "account_id", "workspace_id"} {
+	for _, candidate := range []string{"tenant_id", "org_id", "organization_id", "account_id", "workspace_id"} {
 		if _, ok := compare.FieldValue(body, candidate); ok {
 			facts.tenantField = candidate
 			break

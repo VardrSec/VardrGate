@@ -46,6 +46,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - A `policy run` engine error is now prefixed with the case id, as `run --cases`
   errors already were.
 
+### Fixed
+
+- `tenant_field` now matches the response field regardless of separators, as
+  sensitive-field matching already did: `tenant_id` finds `tenantId` and
+  `tenant-id`. A tenant-isolation break against a camelCase API was previously
+  reported as `potential_bola` or `unexpected_access` instead of
+  `cross_tenant_access`. `vardrgate discover` drafts `tenant_field: tenant_id`
+  for such APIs.
+
 ## [0.1.0] — 2026-10-14
 
 First packaged release: reviewed API authorization testing, identity/session

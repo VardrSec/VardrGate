@@ -300,6 +300,8 @@ func TestFieldValue(t *testing.T) {
 	}{
 		{"top level string", `{"tenant_id":"tenant-a"}`, "tenant_id", "tenant-a", true},
 		{"case insensitive", `{"Tenant_ID":"tenant-a"}`, "tenant_id", "tenant-a", true},
+		{"separator insensitive camelCase", `{"tenantId":"tenant-a"}`, "tenant_id", "tenant-a", true},
+		{"separator insensitive kebab-case", `{"tenant-id":"tenant-a"}`, "tenant_id", "tenant-a", true},
 		{"nested", `{"data":{"meta":{"tenant_id":"tenant-b"}}}`, "tenant_id", "tenant-b", true},
 		{"inside array", `{"items":[{"tenant_id":"tenant-c"}]}`, "tenant_id", "tenant-c", true},
 		{"integral number keeps no decimal point", `{"tenant_id":42}`, "tenant_id", "42", true},
