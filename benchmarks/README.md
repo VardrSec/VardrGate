@@ -76,7 +76,7 @@ Go/platform metadata, Git revision and working-tree status, and a SHA-256 source
 fingerprint. The fingerprint covers `go.mod`, the manifest, and all Go files
 under `cmd/` and `internal/`, with line endings normalized. The measured checkout
 included uncommitted edits on top of `17cf541`. That exact source is preserved as
-commit `b9a6f88` on branch `bench/measured-17cf541`, which reproduces these counts.
+commit `f09687c` on branch `bench/measured-17cf541`, which reproduces these counts.
 
 Three fresh runs (66 assessments) produced identical classifications:
 
