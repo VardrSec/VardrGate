@@ -232,6 +232,42 @@ type ExpectedAccess struct {
 	// ForbidSensitiveData marks an identity that must never receive sensitive
 	// fields in the response body, even when it is allowed to call the endpoint.
 	ForbidSensitiveData bool `json:"forbid_sensitive_data,omitempty"`
+	// ResponseAssertions supply explicit JSON evidence for the access decision,
+	// so a denial returned with HTTP 200 or protected data leaked in an error
+	// body is judged by content rather than status alone. When empty, the
+	// status-based evaluation is used unchanged.
+	ResponseAssertions []ResponseAssertion `json:"response_assertions,omitempty"`
+}
+
+// ResponseAssertion supplies explicit evidence for an access decision. Equals
+// must be present (JSON null is valid). JSONPointer uses /-separated JSON keys
+// or array indices; an empty pointer selects the complete document.
+type ResponseAssertion struct {
+	JSONPointer string          `json:"json_pointer"`
+	Equals      json.RawMessage `json:"equals"`
+	Decision    AccessDecision  `json:"decision"`
+}
+
+// AssessmentDecision is the semantic access conclusion for one identity,
+// separate from the raw HTTP outcome.
+type AssessmentDecision string
+
+const (
+	AssessmentAllowed      AssessmentDecision = "allowed"
+	AssessmentDenied       AssessmentDecision = "denied"
+	AssessmentInconclusive AssessmentDecision = "inconclusive"
+	AssessmentSkipped      AssessmentDecision = "skipped"
+)
+
+// Assessment separates semantic access evidence from the raw HTTP outcome.
+// Assertion indices are safe to return; response data and asserted values are not.
+type Assessment struct {
+	IdentityID        string             `json:"identity_id"`
+	ExpectedAccess    AccessDecision     `json:"expected_access,omitempty"`
+	Decision          AssessmentDecision `json:"decision"`
+	Source            string             `json:"source"`
+	Reason            string             `json:"reason"`
+	MatchedAssertions []int              `json:"matched_assertions,omitempty"`
 }
 
 // ExecutionResult captures the HTTP response for one identity.

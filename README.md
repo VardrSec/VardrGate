@@ -121,12 +121,17 @@ may also set `tenant`, `id` and its own `identities` file. See
 | `1` | Usage or input error |
 | `2` | Findings at or above `--fail-on` |
 | `3` | A case tested nothing: every identity failed to connect, or an identity preflight failed |
+| `4` | With `--fail-on-inconclusive`: an identity with an allow or deny expectation could not be judged |
 
 Exit 3 is separate on purpose: a run where nothing connected reports zero
 findings, and treating that as a pass is worse than having no check. It is
 evaluated per case, so a target that dies partway through a suite still fails the
 build. Without `--fail-on` (default `none`), findings never affect the exit code,
 but exit 3 still applies.
+
+An inconclusive assessment, such as an assertion that no longer matches or an
+undeclared 404, produces no finding. Every report format lists it and never shows
+it as a pass. Add `--fail-on-inconclusive` to fail the build on it.
 
 ### GitHub Actions
 
@@ -245,6 +250,28 @@ response:
 A body matching any populated field is a denial, and the condition outranks the
 status line. Findings carry `deny_when_matched:` evidence so it is clear why a
 200 was read as a refusal. See [`docs/adr/0008-body-aware-deny-and-mutation-safety.md`](docs/adr/0008-body-aware-deny-and-mutation-safety.md).
+
+### Judging access by response content
+
+The status line can be wrong in both directions: an API can leak a private record
+in a 403 or 404, or refuse with a 200. Response assertions name JSON values that
+prove access was granted or refused:
+
+```yaml
+response:
+  assertions:
+    - json_pointer: /secret
+      equals: seeded-secret-for-this-book
+      decision: allow
+    - json_pointer: /status
+      equals: fail
+      decision: deny
+```
+
+When assertions are configured, they decide the result. If none match, the
+identity is reported as inconclusive rather than falling back to status. Every
+result also has an `assessments` array (`allowed`, `denied`, `inconclusive` or
+`skipped`, with a reason). See [`docs/response-assertions.md`](docs/response-assertions.md).
 
 ### Endpoints that change state
 

@@ -72,6 +72,20 @@ type ResponseSpec struct {
 	DenyStatus      []int         `yaml:"deny_status"`
 	DenyWhen        *DenyWhenSpec `yaml:"deny_when"`
 	SensitiveFields SensitiveSpec `yaml:"sensitive_fields"`
+	// Assertions recognize access from response content rather than status.
+	Assertions []AssertionSpec `yaml:"assertions"`
+}
+
+// AssertionSpec declares one JSON value that proves an access decision, such as
+// a private field only an authorized caller should receive, or an error code
+// the API returns with HTTP 200 when it refuses. It describes the endpoint's
+// response format, so it applies to every role with an allow or deny
+// expectation unless Roles narrows it.
+type AssertionSpec struct {
+	JSONPointer string    `yaml:"json_pointer"`
+	Equals      yaml.Node `yaml:"equals"`
+	Decision    string    `yaml:"decision"`
+	Roles       []string  `yaml:"roles"`
 }
 
 // DenyWhenSpec declares a refusal expressed in the response body rather than
@@ -204,6 +218,11 @@ func (p Policy) Compile(b Bindings) (model.AuthorizationTestCase, error) {
 		forbidden[role] = struct{}{}
 	}
 
+	compiledAssertions, err := p.compileAssertions()
+	if err != nil {
+		return model.AuthorizationTestCase{}, err
+	}
+
 	expected := make([]model.ExpectedAccess, 0, len(b.Identities))
 	ownerRole := p.ownerRole()
 	var ownerIdentity string
@@ -221,6 +240,7 @@ func (p Policy) Compile(b Bindings) (model.AuthorizationTestCase, error) {
 			IdentityID:          id.ID,
 			Decision:            decision,
 			ForbidSensitiveData: forbidSensitive,
+			ResponseAssertions:  assertionsFor(compiledAssertions, id.Role),
 		})
 		if ownerRole != "" && id.Role == ownerRole {
 			ownerIdentity = id.ID
@@ -398,4 +418,105 @@ func defaultID(explicit, method, path string) string {
 	slug := strings.ToLower(method + path)
 	slug = strings.NewReplacer("/", "-", "{", "", "}", "", " ", "-").Replace(slug)
 	return strings.Trim(slug, "-")
+}
+
+// roleAssertion is a compiled assertion with the roles it applies to; an empty
+// role set means every role.
+type roleAssertion struct {
+	rule  model.ResponseAssertion
+	roles map[string]struct{}
+}
+
+// compileAssertions converts response.assertions to the engine's form. Pointer
+// syntax and value limits are checked by engine validation before any request.
+func (p Policy) compileAssertions() ([]roleAssertion, error) {
+	out := make([]roleAssertion, 0, len(p.Response.Assertions))
+	for i, a := range p.Response.Assertions {
+		decision := model.AccessDecision(strings.ToLower(strings.TrimSpace(a.Decision)))
+		if decision != model.AccessDecisionAllow && decision != model.AccessDecisionDeny {
+			return nil, fmt.Errorf("response.assertions[%d]: decision must be allow or deny, got %q", i, a.Decision)
+		}
+		if a.Equals.Kind == 0 {
+			return nil, fmt.Errorf("response.assertions[%d]: equals is required (use null to match JSON null)", i)
+		}
+		raw, err := nodeJSON(&a.Equals)
+		if err != nil {
+			return nil, fmt.Errorf("response.assertions[%d].equals: %w", i, err)
+		}
+		roles := make(map[string]struct{}, len(a.Roles))
+		for _, role := range a.Roles {
+			if _, ok := p.Expect[role]; !ok {
+				return nil, fmt.Errorf("response.assertions[%d]: role %q is not in the policy's expect map", i, role)
+			}
+			roles[role] = struct{}{}
+		}
+		out = append(out, roleAssertion{
+			rule:  model.ResponseAssertion{JSONPointer: a.JSONPointer, Equals: raw, Decision: decision},
+			roles: roles,
+		})
+	}
+	return out, nil
+}
+
+func assertionsFor(all []roleAssertion, role string) []model.ResponseAssertion {
+	var out []model.ResponseAssertion
+	for _, a := range all {
+		if _, ok := a.roles[role]; len(a.roles) == 0 || ok {
+			out = append(out, a.rule)
+		}
+	}
+	return out
+}
+
+// nodeJSON renders a YAML value as JSON. Numbers keep their literal text so an
+// object id beyond float64 precision is compared exactly.
+func nodeJSON(n *yaml.Node) (json.RawMessage, error) {
+	switch n.Kind {
+	case yaml.ScalarNode:
+		switch n.Tag {
+		case "!!null":
+			return json.RawMessage("null"), nil
+		case "!!bool":
+			var v bool
+			if err := n.Decode(&v); err != nil {
+				return nil, err
+			}
+			return json.Marshal(v)
+		case "!!int", "!!float":
+			if !json.Valid([]byte(n.Value)) {
+				return nil, fmt.Errorf("number %q is not valid JSON; quote it to compare a string", n.Value)
+			}
+			return json.RawMessage(n.Value), nil
+		default:
+			return json.Marshal(n.Value)
+		}
+	case yaml.SequenceNode:
+		parts := make([]string, 0, len(n.Content))
+		for _, c := range n.Content {
+			v, err := nodeJSON(c)
+			if err != nil {
+				return nil, err
+			}
+			parts = append(parts, string(v))
+		}
+		return json.RawMessage("[" + strings.Join(parts, ",") + "]"), nil
+	case yaml.MappingNode:
+		parts := make([]string, 0, len(n.Content)/2)
+		for i := 0; i+1 < len(n.Content); i += 2 {
+			k, err := json.Marshal(n.Content[i].Value)
+			if err != nil {
+				return nil, err
+			}
+			v, err := nodeJSON(n.Content[i+1])
+			if err != nil {
+				return nil, err
+			}
+			parts = append(parts, string(k)+":"+string(v))
+		}
+		return json.RawMessage("{" + strings.Join(parts, ",") + "}"), nil
+	case yaml.AliasNode:
+		return nodeJSON(n.Alias)
+	default:
+		return nil, fmt.Errorf("unsupported YAML value")
+	}
 }
