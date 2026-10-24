@@ -59,7 +59,11 @@ password never appears in results.
 
 | Observation | `decision` / `reason` |
 |---|---|
-| State unchanged | `denied` / `state_unchanged` |
+| State unchanged, with a demonstrated allow-expected write control | `denied` / `state_unchanged` |
+| State unchanged with no allow-expected control | `inconclusive` / `no_positive_control` |
+| State unchanged but the allow-expected control did not demonstrate a write | `inconclusive` / `positive_control_failed` |
+| Write execution failed and no effect was observed | `inconclusive` / `write_execution_error` |
+| Verifier redirected or returned an unsupported client error | `inconclusive` / `verifier_unexpected_status` |
 | State changed, to `changed_to` when declared | `allowed` / `state_changed` |
 | Changed to some other value | `inconclusive` / `state_changed_unexpectedly` |
 | First read before the request was not 2xx | `inconclusive` / `verifier_baseline_missing` |
@@ -84,11 +88,16 @@ and `deny_when`.
   identity that would write the same value is then inconclusive. For fully
   conclusive results, run one identity per case against a resettable
   fixture.
-- **Add an allow-expected identity as a positive control.** If the oracle
-  reads the wrong field or logs in with the wrong password, every
-  deny-expected identity reads "unchanged" and appears to pass. The owner's
-  own write must read as changed; if it does not, Gate reports
-  `authorization_mismatch`, which exposes the broken oracle.
+- **Add an allow-expected identity as a positive control.** The owner's own
+  verified write must actually change state. If no control is supplied or it
+  fails, unchanged deny-expected assessments are inconclusive. A control whose
+  write is conclusively denied retains its `authorization_mismatch` finding.
+  Observed unauthorized mutations retain their findings even without a control.
 - The baseline read must succeed (2xx). Verifying a create, where the
   resource is absent beforehand, is not supported.
 - Only reason codes are reported. Observed values never leave memory.
+
+Successful HTTP statuses with the same selected value are equivalent; a 200
+becoming 201 alone does not prove a write. After a successful baseline, 404
+continues to represent absent state for deletion checks. Other 3xx/4xx verifier
+responses do not establish state. See [ADR 0018](adr/0018-verifier-confidence.md).

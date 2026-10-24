@@ -24,6 +24,11 @@ identity preflight, which is opt-in.
 - Tests: a live-token case passes preflight; a garbage-token case is not tested.
 
 ### P0.2 Broken verifier oracle passes when every identity is deny-expected — S
+
+Resolved by ADR 0018: unchanged deny-expected results require a demonstrated
+allow-expected positive control, otherwise they are inconclusive. The owner
+control must actually succeed, not merely appear in the expectation list.
+
 If a write verifier reads the wrong field or uses a wrong secret, it reads
 "unchanged" and every deny-expected identity passes. An allow-expected positive
 control exposes it, but nothing requires one.

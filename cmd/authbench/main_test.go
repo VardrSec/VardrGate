@@ -110,19 +110,23 @@ func TestAssertionBenchmarkRegressionBudget(t *testing.T) {
 }
 
 // Write verification closes the write-before-500 miss and must not cost
-// precision or raise inconclusive assessments.
+// precision. The deny-only protected-write control now needs a demonstrated
+// positive control, so its prior uncalibrated denial is inconclusive.
 func TestWriteVerificationBenchmarkBudget(t *testing.T) {
 	rows, err := runSuiteWith(true, true)
 	if err != nil {
 		t.Fatal(err)
 	}
 	m := summarize(rows)
-	if m.Total != 22 || m.KnownFailures != 9 || m.TP < 9 || m.FP != 0 || m.FN != 0 || m.Inconclusive > 5 {
+	if m.Total != 22 || m.KnownFailures != 9 || m.TP < 9 || m.FP != 0 || m.FN != 0 || m.Inconclusive != 6 {
 		t.Fatalf("accuracy regression: %+v", m)
 	}
 	for _, row := range rows {
-		if verifiedWrites[row.Scenario.ID] && row.Inconclusive {
+		if verifiedWrites[row.Scenario.ID] && row.Scenario.ID != "write-protected" && row.Inconclusive {
 			t.Errorf("%s is inconclusive with verification", row.Scenario.ID)
+		}
+		if row.Scenario.ID == "write-protected" && (!row.Inconclusive || row.Verdict != "inconclusive") {
+			t.Error("deny-only write control must not appear calibrated")
 		}
 		if row.Scenario.ID == "write-before-500" && row.Verdict != "true_positive" {
 			t.Errorf("write-before-500 = %s", row.Verdict)

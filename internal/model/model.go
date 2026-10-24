@@ -508,8 +508,8 @@ type WriteVerification struct {
 	// AllowUnsafeMethod acknowledges a verifier that uses POST or similar,
 	// such as logging in as the victim, and asserts it changes no state.
 	AllowUnsafeMethod bool `json:"allow_unsafe_method,omitempty"`
-	// JSONPointer selects the observed value in a 2xx response; the status is
-	// always part of the observed state, so a 404 after a delete is a change.
+	// JSONPointer selects the observed value in a 2xx response. Successful
+	// statuses are equivalent; a 404 after a delete represents absent state.
 	JSONPointer string `json:"json_pointer,omitempty"`
 	// ChangedTo is the value the attempted write would set, when known. A
 	// change to anything else is inconclusive, and a state that already holds

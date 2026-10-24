@@ -31,6 +31,9 @@ go.work.sum
 # env file
 .env
 
+# Disposable source exports and binaries for the four-version comparison.
+.comparison-work/
+
 # Editor/IDE
 # .idea/
 # .vscode/
