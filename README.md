@@ -287,6 +287,16 @@ api:
 
 or pass `--allow-mutating`. Setup steps are held to the same rule.
 
+A write endpoint usually needs a JSON body. `api.body` is sent by every identity,
+with `Content-Type: application/json` unless `api.headers` sets one:
+
+```yaml
+api:
+  endpoint: PUT /users/{username}/email
+  mutating: true
+  body: '{"email": "changed@example.com"}'
+```
+
 ### Logging in, and creating the object under test
 
 Some authorization tests need a request to run first — to exchange credentials

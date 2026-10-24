@@ -37,6 +37,12 @@ type APISpec struct {
 	// Mutating acknowledges that this endpoint changes state and that replaying
 	// it once per identity is intended.
 	Mutating bool `yaml:"mutating"`
+	// Body is the JSON request body sent by every identity. Without it a policy
+	// cannot exercise a write endpoint that reads JSON.
+	Body string `yaml:"body"`
+	// Headers are sent by every identity; Content-Type defaults to
+	// application/json when Body is set.
+	Headers map[string]string `yaml:"headers"`
 }
 
 // SetupSpec is a request run before the one under test, whose response can
@@ -252,10 +258,15 @@ func (p Policy) Compile(b Bindings) (model.AuthorizationTestCase, error) {
 		return model.AuthorizationTestCase{}, err
 	}
 
+	request, err := p.request(method, url)
+	if err != nil {
+		return model.AuthorizationTestCase{}, err
+	}
+
 	tc := model.AuthorizationTestCase{
 		ID:             defaultID(b.TestCaseID, method, path),
 		Identities:     b.Identities,
-		Request:        model.RequestTemplate{Method: method, URL: url},
+		Request:        request,
 		ExpectedAccess: expected,
 		DenyStatuses:   p.Response.DenyStatus,
 		DenyWhen:       p.Response.DenyWhen.condition(),
@@ -519,4 +530,39 @@ func nodeJSON(n *yaml.Node) (json.RawMessage, error) {
 	default:
 		return nil, fmt.Errorf("unsupported YAML value")
 	}
+}
+
+// request builds the request under test, carrying api.body and api.headers.
+func (p Policy) request(method, url string) (model.RequestTemplate, error) {
+	req := model.RequestTemplate{Method: method, URL: url}
+	if len(p.API.Headers) > 0 {
+		req.Headers = make(map[string]string, len(p.API.Headers))
+		for k, v := range p.API.Headers {
+			req.Headers[k] = v
+		}
+	}
+	body := strings.TrimSpace(p.API.Body)
+	if body == "" {
+		return req, nil
+	}
+	if !json.Valid([]byte(body)) {
+		return model.RequestTemplate{}, fmt.Errorf("compile: api.body is not valid JSON")
+	}
+	req.Body = json.RawMessage(body)
+	if !hasHeader(req.Headers, "Content-Type") {
+		if req.Headers == nil {
+			req.Headers = map[string]string{}
+		}
+		req.Headers["Content-Type"] = "application/json"
+	}
+	return req, nil
+}
+
+func hasHeader(h map[string]string, name string) bool {
+	for k := range h {
+		if strings.EqualFold(k, name) {
+			return true
+		}
+	}
+	return false
 }

@@ -17,6 +17,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   inconclusive. Evidence carries assertion indices only. See
   [ADR 0016](docs/adr/0016-response-assertions.md) and
   `docs/response-assertions.md`.
+- **Request body in policies.** `api.body` (JSON) and `api.headers` are sent
+  by every identity, so a policy can test a write endpoint that reads JSON.
+  Content-Type defaults to `application/json` when a body is set.
 - **Assessments.** Every result has an `assessments` array: `allowed`,
   `denied`, `inconclusive` or `skipped` per identity, with a source and a reason
   code. The field is additive.

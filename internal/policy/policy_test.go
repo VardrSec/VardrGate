@@ -558,3 +558,32 @@ func TestCompile_RejectsBadAssertions(t *testing.T) {
 		})
 	}
 }
+
+func TestCompile_RequestBodyAndHeaders(t *testing.T) {
+	doc := "api:\n  endpoint: PUT /users/{user_id}/email\n  mutating: true\n  body: '{\"email\": \"new@example.com\"}'\n  headers:\n    X-Trace: gate\nexpect:\n  owner: allow\n"
+	p, err := Parse([]byte(doc))
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := bindings()
+	b.Identities = b.Identities[:1]
+	tc, err := p.Compile(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(tc.Request.Body) != `{"email": "new@example.com"}` {
+		t.Errorf("body = %s", tc.Request.Body)
+	}
+	if tc.Request.Headers["Content-Type"] != "application/json" || tc.Request.Headers["X-Trace"] != "gate" {
+		t.Errorf("headers = %v", tc.Request.Headers)
+	}
+
+	bad := strings.Replace(doc, `'{"email": "new@example.com"}'`, "not json", 1)
+	p, err = Parse([]byte(bad))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.Compile(b); err == nil || strings.Contains(err.Error(), "not json") {
+		t.Fatalf("want an error that does not echo the body, got %v", err)
+	}
+}
