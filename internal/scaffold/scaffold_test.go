@@ -70,6 +70,7 @@ func TestMarshalCases_RoundTripsBackIntoTestCases(t *testing.T) {
 	cases := []model.AuthorizationTestCase{
 		StarterCase("getProfile", "Read a profile", "get", "https://api.example.com/users/1"),
 	}
+	cases[0].RequireIdentityPreflight = true
 	out, err := MarshalCases(cases)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -80,6 +81,9 @@ func TestMarshalCases_RoundTripsBackIntoTestCases(t *testing.T) {
 	}
 	if len(back) != 1 || back[0].ID != "getProfile" {
 		t.Fatalf("round trip lost the case: %+v", back)
+	}
+	if !back[0].RequireIdentityPreflight {
+		t.Fatal("strict assurance lost in scaffold round trip")
 	}
 	if back[0].Identities[0].Credential.Value != "${VARDRGATE_AUTHENTICATED_TOKEN}" {
 		t.Errorf("placeholder did not survive the round trip: %q", back[0].Identities[0].Credential.Value)

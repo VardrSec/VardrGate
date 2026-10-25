@@ -56,21 +56,22 @@ func MarshalCases(cases []model.AuthorizationTestCase) ([]byte, error) {
 // test asserts the two structs have identical JSON field sets, so a field added
 // to the model cannot be silently dropped here.
 type wireCase struct {
-	ID              string                 `json:"id"`
-	Description     string                 `json:"description,omitempty"`
-	Identities      []wireIdentity         `json:"identities"`
-	Request         model.RequestTemplate  `json:"request"`
-	Resource        *model.Resource        `json:"resource,omitempty"`
-	RoleHierarchy   []string               `json:"role_hierarchy,omitempty"`
-	SensitiveFields []string               `json:"sensitive_fields,omitempty"`
-	DenyStatuses    []int                  `json:"deny_status,omitempty"`
-	Unauthorized    bool                   `json:"unauthorized_is_denial,omitempty"`
-	DenyWhen        *model.DenyCondition   `json:"deny_when,omitempty"`
-	Mutating        bool                   `json:"mutating,omitempty"`
-	Verification    *wireVerification      `json:"write_verification,omitempty"`
-	Setup           []model.SetupStep      `json:"setup,omitempty"`
-	CORS            *model.CORSCheck       `json:"cors,omitempty"`
-	ExpectedAccess  []model.ExpectedAccess `json:"expected_access"`
+	RequireIdentityPreflight bool                   `json:"require_identity_preflight,omitempty"`
+	ID                       string                 `json:"id"`
+	Description              string                 `json:"description,omitempty"`
+	Identities               []wireIdentity         `json:"identities"`
+	Request                  model.RequestTemplate  `json:"request"`
+	Resource                 *model.Resource        `json:"resource,omitempty"`
+	RoleHierarchy            []string               `json:"role_hierarchy,omitempty"`
+	SensitiveFields          []string               `json:"sensitive_fields,omitempty"`
+	DenyStatuses             []int                  `json:"deny_status,omitempty"`
+	Unauthorized             bool                   `json:"unauthorized_is_denial,omitempty"`
+	DenyWhen                 *model.DenyCondition   `json:"deny_when,omitempty"`
+	Mutating                 bool                   `json:"mutating,omitempty"`
+	Verification             *wireVerification      `json:"write_verification,omitempty"`
+	Setup                    []model.SetupStep      `json:"setup,omitempty"`
+	CORS                     *model.CORSCheck       `json:"cors,omitempty"`
+	ExpectedAccess           []model.ExpectedAccess `json:"expected_access"`
 }
 
 type wireIdentity struct {
@@ -115,21 +116,22 @@ func toWire(tc model.AuthorizationTestCase) wireCase {
 		}
 	}
 	return wireCase{
-		ID:              tc.ID,
-		Description:     tc.Description,
-		Identities:      ids,
-		Request:         tc.Request,
-		Resource:        tc.Resource,
-		RoleHierarchy:   tc.RoleHierarchy,
-		SensitiveFields: tc.SensitiveFields,
-		DenyStatuses:    tc.DenyStatuses,
-		Unauthorized:    tc.UnauthorizedIsDenial,
-		DenyWhen:        tc.DenyWhen,
-		Mutating:        tc.Mutating,
-		Verification:    verification,
-		Setup:           tc.Setup,
-		CORS:            tc.CORS,
-		ExpectedAccess:  tc.ExpectedAccess,
+		ID:                       tc.ID,
+		Description:              tc.Description,
+		RequireIdentityPreflight: tc.RequireIdentityPreflight,
+		Identities:               ids,
+		Request:                  tc.Request,
+		Resource:                 tc.Resource,
+		RoleHierarchy:            tc.RoleHierarchy,
+		SensitiveFields:          tc.SensitiveFields,
+		DenyStatuses:             tc.DenyStatuses,
+		Unauthorized:             tc.UnauthorizedIsDenial,
+		DenyWhen:                 tc.DenyWhen,
+		Mutating:                 tc.Mutating,
+		Verification:             verification,
+		Setup:                    tc.Setup,
+		CORS:                     tc.CORS,
+		ExpectedAccess:           tc.ExpectedAccess,
 	}
 }
 

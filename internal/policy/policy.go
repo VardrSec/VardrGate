@@ -156,11 +156,12 @@ type SensitiveSpec struct {
 // test case: the environment base URL, path parameter values, and the actual
 // identities (each Role set to a logical name that appears in Policy.Expect).
 type Bindings struct {
-	TestCaseID       string
-	BaseURL          string
-	PathParams       map[string]string
-	Identities       []model.Identity
-	ResourceTenantID string // optional; enables cross_tenant_access classification
+	RequireIdentityPreflight bool
+	TestCaseID               string
+	BaseURL                  string
+	PathParams               map[string]string
+	Identities               []model.Identity
+	ResourceTenantID         string // optional; enables cross_tenant_access classification
 	// AllowMutating confirms at run time that replaying an unsafe method once
 	// per identity is intended, for a caller that did not want to edit the
 	// policy to say so.
@@ -295,16 +296,17 @@ func (p Policy) Compile(b Bindings) (model.AuthorizationTestCase, error) {
 	}
 
 	tc := model.AuthorizationTestCase{
-		ID:                   defaultID(b.TestCaseID, method, path),
-		Identities:           b.Identities,
-		Request:              request,
-		ExpectedAccess:       expected,
-		DenyStatuses:         p.Response.DenyStatus,
-		UnauthorizedIsDenial: p.Response.UnauthorizedIsDenial,
-		DenyWhen:             p.Response.DenyWhen.condition(),
-		Mutating:             p.API.Mutating || b.AllowMutating,
-		WriteVerification:    verification,
-		Setup:                setup,
+		RequireIdentityPreflight: b.RequireIdentityPreflight,
+		ID:                       defaultID(b.TestCaseID, method, path),
+		Identities:               b.Identities,
+		Request:                  request,
+		ExpectedAccess:           expected,
+		DenyStatuses:             p.Response.DenyStatus,
+		UnauthorizedIsDenial:     p.Response.UnauthorizedIsDenial,
+		DenyWhen:                 p.Response.DenyWhen.condition(),
+		Mutating:                 p.API.Mutating || b.AllowMutating,
+		WriteVerification:        verification,
+		Setup:                    setup,
 	}
 
 	if res := p.resource(b, ownerIdentity); res != nil {

@@ -1,5 +1,9 @@
 # VardrGate
 
+For CI that requires complete principal checks and fails incomplete assessments,
+see [strict identity assurance](docs/strict-ci.md). Existing configurations keep
+their compatibility defaults unless strict settings are supplied.
+
 Scanners cannot find broken access control, because the rules an API is meant
 to enforce are not written down anywhere a tool can read. VardrGate has you write
 them down: a short policy per endpoint stating which callers should be allowed.
