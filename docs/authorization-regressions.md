@@ -4,6 +4,15 @@ Keep the unresolved reviewed input and the Gate result from reproducing a
 defect. Confirm the actual authorization violation and the result's binding to
 that input; scanner findings alone do not establish that confirmation.
 
+Run the portable source through `run --cases reviewed.json --out result.json`
+first. The CLI digests each original case before environment/setup expansion.
+Saving requires exactly one matching result, a matching `input_digest`, and a
+finding relevant to a reviewed identity and expectation with execution evidence.
+Changing the request, permissions, setup or other source content requires a new
+execution, even if the case ID stays the same. External JSON whitespace is ignored;
+key ordering, escape spellings and numeric spellings are preserved, so reformatting
+that changes those details also requires a new run.
+
 ```sh
 vardrgate regression save --cases reviewed.json --result result.json \
   --case password-peer --out regressions/password-peer --confirmed
@@ -14,10 +23,22 @@ vardrgate run --cases regressions/password-peer/cases.json \
 The new directory contains an unresolved case and an operator-confirmation
 record with its SHA-256. An existing directory is never overwritten. The
 confirmation is not a Runner `case_hash` or automatic finding verification.
+`confirmation.json` records `result_binding: exact_input_digest` and the source
+digest as well as the saved-template hash. These are source correlation, not an
+authenticated execution attestation. Runtime flag overrides and the values of
+environment variables are not bound; review them with the result. Anyone editing
+the result can also edit its digest. Operator confirmation remains required.
 No scanner response values, evidence strings or resolved credentials are copied.
 Use environment references for credentials and password/token/secret request
 fields. Review fixture values and any other application-specific secrets before
 committing the template. This guard is not a universal secret detector.
+
+Legacy results and resolved Runner `--job` results have no CLI source digest.
+Prefer rerunning the unresolved portable case. If that is impossible, an operator
+may explicitly add `--allow-unbound-result` alongside `--confirmed`; the manifest
+records `operator_confirmed_unbound`. This does not bypass a present, mismatching
+digest, a failed preflight, or the relevant-finding check. Existing execution of
+local cases with literal credentials is supported, but emits no source digest.
 
 The retained case uses the existing engine, setup captures, principal preflights,
 resource declarations, response assertions and write verifier. `${VARIABLE}`

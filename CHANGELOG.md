@@ -8,6 +8,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Bind saved CLI regressions to the unresolved input digest and a relevant
+  finding; legacy unbound results require explicit manual opt-in. Bound offline
+  HAR size, correlation and response-analysis work. Withhold verified writes
+  after cancellation or a reset baseline mismatch. See ADR 0027.
+
 - Per-identity credential checks, raw execution indices and value-free write
   readback provenance in JSON/text/Markdown. Failed preflights explain every
   caller's untested outcome; optional verifier principal checks are honored.

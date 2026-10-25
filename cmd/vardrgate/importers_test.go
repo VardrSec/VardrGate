@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/VardrSec/vardrgate/internal/discover"
 	"github.com/VardrSec/vardrgate/internal/model"
 )
 
@@ -27,6 +28,23 @@ func writeTemp(t *testing.T, name, content string) string {
 		t.Fatal(err)
 	}
 	return path
+}
+
+func TestGenRejectsInvalidHARBeforeWritingOutputs(t *testing.T) {
+	for _, data := range []string{`{`, `{}`, `{"log":{}}`, `{"log":{"entries":null}}`, `{"log":{"entries":[]},"padding":"` + strings.Repeat("x", discover.MaxHARBytes) + `"}`} {
+		spec := writeTemp(t, "spec.json", miniSpec)
+		har := writeTemp(t, "capture.har", data)
+		dir := t.TempDir()
+		out, hypotheses := filepath.Join(dir, "cases.json"), filepath.Join(dir, "hypotheses.json")
+		if err := genTestCases([]string{"--spec", spec, "--base", "https://api.example.com", "--har", har, "--hypotheses", hypotheses, "--out", out}); err == nil {
+			t.Fatal("accepted invalid/oversized HAR")
+		}
+		for _, path := range []string{out, hypotheses} {
+			if _, err := os.Stat(path); !os.IsNotExist(err) {
+				t.Fatal("rejected HAR wrote an output")
+			}
+		}
+	}
 }
 
 // The whole point of the gen → run loop: what gen writes must be something run

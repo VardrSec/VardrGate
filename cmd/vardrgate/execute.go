@@ -203,7 +203,7 @@ Flags:
 		// VardrRunner already uploads.
 		payload = res
 	} else {
-		cases, err := loadCases(*casesPath)
+		cases, digests, err := loadCasesWithDigests(*casesPath)
 		if err != nil {
 			return err
 		}
@@ -234,6 +234,7 @@ Flags:
 			if err != nil {
 				return runError(fmt.Errorf("case %q: %w", tc.ID, err))
 			}
+			res.InputDigest = digests[tc.ID]
 			results = append(results, res)
 		}
 		payload = results
@@ -678,29 +679,27 @@ const genScaffoldHint = "Cases from `vardrgate gen` require review — confirm e
 // loadCases reads a JSON array of test cases, also accepting a single object so
 // a hand-written case does not have to be wrapped in brackets.
 func loadCases(path string) ([]model.AuthorizationTestCase, error) {
+	cases, _, err := loadCasesWithDigests(path)
+	return cases, err
+}
+
+func loadCasesWithDigests(path string) ([]model.AuthorizationTestCase, map[string]string, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("read cases: %w", err)
+		return nil, nil, fmt.Errorf("read cases: %w", err)
 	}
-	var cases []model.AuthorizationTestCase
-	if err := json.Unmarshal(data, &cases); err != nil {
-		var single model.AuthorizationTestCase
-		if err := json.Unmarshal(data, &single); err != nil {
-			return nil, fmt.Errorf("parse cases: %w", err)
-		}
-		cases = []model.AuthorizationTestCase{single}
-	}
-	if len(cases) == 0 {
-		return nil, errors.New("cases file contains no test cases")
+	cases, digests, err := caseTemplates(data)
+	if err != nil {
+		return nil, nil, err
 	}
 	// `gen` writes ${VAR} placeholders into credential values; resolve them here
 	// so a generated suite runs straight from the repository it lives in.
 	for i := range cases {
 		if err := secretref.ExpandCase(&cases[i]); err != nil {
-			return nil, fmt.Errorf("case %q: %w", cases[i].ID, err)
+			return nil, nil, fmt.Errorf("case %q: %w", cases[i].ID, err)
 		}
 	}
-	return cases, nil
+	return cases, digests, nil
 }
 
 // writeJSON writes v as indented JSON to path, or to stdout when path is empty.

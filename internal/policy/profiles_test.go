@@ -22,7 +22,7 @@ func TestScopedDenialProfile(t *testing.T) {
   endpoint: GET /books/{id}
 expect: {peer: deny}
 denial_profiles:
-  concealed:
+  concealed: &concealed
     confirmed: true
     endpoints: ["GET /books/{id}", "GET /notes/{id}"]
     rules:
@@ -32,8 +32,9 @@ denial_profiles:
       - status_codes: [200]
         json_pointer: /error/code
         equals: REFUSED
+  overlapping: *concealed
 response:
-  denial_profiles: [concealed]
+  denial_profiles: [concealed, overlapping]
   assertions:
     - json_pointer: /secret
       equals: private-value

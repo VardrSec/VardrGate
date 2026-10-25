@@ -130,7 +130,7 @@ See [ADR 0021](adr/0021-write-environment-assurance.md).
 - Read the victim's record, not the caller's own.
 - Prefer a GET that any reviewed reader can make. Avoid oracles that depend
   on a vulnerability, such as a debug endpoint that exposes passwords.
-- Gate does not reset state between identities. Verifying more than one
+- Without a reviewed reset, verifying more than one change-based
   identity requires `changed_to`. Deny-expected identities run first, so an
   unauthorized write is observed against the untouched state. A later
   identity that would write the same value is then inconclusive. For fully
@@ -141,11 +141,25 @@ See [ADR 0021](adr/0021-write-environment-assurance.md).
   fails, unchanged deny-expected assessments are inconclusive. A control whose
   write is conclusively denied retains its `authorization_mismatch` finding.
   Observed unauthorized mutations retain their findings even without a control.
-- The baseline read must succeed (2xx). Verifying a create, where the
-  resource is absent beforehand, is not supported.
+- The baseline read must succeed (2xx), except that the explicit `created`
+  strategy requires an absent-resource (404) baseline.
 - Only reason codes are reported. Observed values never leave memory.
 
 Successful HTTP statuses with the same selected value are equivalent; a 200
 becoming 201 alone does not prove a write. After a successful baseline, 404
 continues to represent absent state for deletion checks. Other 3xx/4xx verifier
 responses do not establish state. See [ADR 0018](adr/0018-verifier-confidence.md).
+
+For reviewed resets, each identity must observe the same selected baseline as
+the first stable reset baseline in this run. A successful reset response with a
+different baseline yields `reset_baseline_mismatch` and withholds that identity's
+write; an unusable allow control cannot establish protection for other callers.
+The first baseline is a reference, not proof that the reset restored an intended
+fixture. Keep fixture ownership, isolation and the selected oracle under review.
+
+Cancellation stops subsequent reset/read/write traffic and leaves the affected
+verification inconclusive (`execution_cancelled`). An interrupted write can still
+be proved only through independent readback while the parent context is live.
+Failed readback or a partial change outside `changed_to` remains inconclusive.
+No automatic cleanup, rollback or reset retry is attempted after interruption:
+the target may already have committed state. Restore the fixture before a rerun.
