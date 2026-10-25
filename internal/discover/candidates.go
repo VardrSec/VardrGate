@@ -5,13 +5,42 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/url"
+	"os"
 	"strings"
 
 	"github.com/VardrSec/vardrgate/internal/compare"
 	"github.com/VardrSec/vardrgate/internal/model"
 	"github.com/VardrSec/vardrgate/internal/openapi"
 )
+
+const (
+	MaxHARBytes         = 32 << 20
+	MaxHAREntries       = 5000
+	MaxHARResponseBytes = 1 << 20
+	maxHARResponseTotal = 8 << 20
+	maxHARComparisons   = 2000000
+	maxHARAnalyzedBytes = 64 << 20
+	maxHARHypotheses    = 50000
+)
+
+// ReadHAR bounds memory before reading or parsing a local capture file.
+func ReadHAR(path string) ([]byte, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	data, err := io.ReadAll(io.LimitReader(f, MaxHARBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(data) > MaxHARBytes {
+		return nil, fmt.Errorf("HAR exceeds 32 MiB; split the capture")
+	}
+	return data, nil
+}
 
 // Hypothesis is authoring guidance, never an executable permission or finding.
 // Capture numbers refer to one-based HAR entries; observed values stay in memory.
@@ -50,6 +79,9 @@ type capture struct {
 // matching a method, path template and declared server origin contribute facts.
 // No URLs, cookies, tokens, object IDs or response values are copied from traffic.
 func Candidates(spec openapi.Spec, base string, har []byte) ([]Candidate, error) {
+	if len(har) > MaxHARBytes {
+		return nil, fmt.Errorf("HAR exceeds 32 MiB; split the capture")
+	}
 	var entries []capture
 	if len(har) > 0 {
 		var doc struct {
@@ -57,10 +89,32 @@ func Candidates(spec openapi.Spec, base string, har []byte) ([]Candidate, error)
 				Entries []capture `json:"entries"`
 			} `json:"log"`
 		}
-		if err := json.Unmarshal(har, &doc); err != nil || doc.Log == nil {
+		if err := json.Unmarshal(har, &doc); err != nil || doc.Log == nil || doc.Log.Entries == nil {
 			return nil, fmt.Errorf("parse HAR: expected log.entries")
 		}
 		entries = doc.Log.Entries
+	}
+	if len(entries) > MaxHAREntries {
+		return nil, fmt.Errorf("HAR exceeds 5000 entries; split the capture")
+	}
+	total := 0
+	for _, entry := range entries {
+		text := entry.Response.Content.Text
+		limit := MaxHARResponseBytes
+		if entry.Response.Content.Encoding == "base64" {
+			limit = base64.StdEncoding.EncodedLen(MaxHARResponseBytes)
+		}
+		if len(text) > limit || len(entry.Request.Headers) > 128 {
+			return nil, fmt.Errorf("HAR entry exceeds response/header budget; split or trim the capture")
+		}
+		total += len(text)
+		if total > maxHARResponseTotal {
+			return nil, fmt.Errorf("HAR response content exceeds 8 MiB; split the capture")
+		}
+	}
+	operations := spec.Operations()
+	if len(entries) > 0 && len(operations) > maxHARComparisons/len(entries) {
+		return nil, fmt.Errorf("HAR/spec correlation exceeds 2000000 comparisons; split the inputs")
 	}
 	if base == "" && len(spec.Servers) > 0 {
 		base = spec.Servers[0].URL
@@ -70,9 +124,15 @@ func Candidates(spec openapi.Spec, base string, har []byte) ([]Candidate, error)
 		return nil, fmt.Errorf("HAR correlation requires --base or an HTTP(S) spec server")
 	}
 	result := make([]Candidate, 0)
-	for _, op := range spec.Operations() {
+	analyzed := 0
+	hypotheses := 0
+	for _, op := range operations {
 		c := Candidate{Endpoint: op.Method + " " + op.Path, Hypotheses: []Hypothesis{}}
 		add := func(kind, field, reason string, captures ...int) {
+			hypotheses++
+			if hypotheses > maxHARHypotheses {
+				return
+			}
 			c.Hypotheses = append(c.Hypotheses, Hypothesis{Kind: kind, State: "unconfirmed", Field: field, Captures: captures, Reason: reason})
 		}
 		for _, param := range pathParams(op.Path) {
@@ -105,11 +165,22 @@ func Candidates(spec openapi.Spec, base string, har []byte) ([]Candidate, error)
 			} else if entry.Response.Content.Encoding != "" {
 				continue
 			}
+			if len(body) > MaxHARResponseBytes {
+				return nil, fmt.Errorf("HAR decoded response exceeds 1 MiB; trim the capture")
+			}
+			analyzed += len(body)
+			if analyzed > maxHARAnalyzedBytes {
+				return nil, fmt.Errorf("HAR matched response analysis exceeds 64 MiB; split the inputs")
+			}
 			var auth strings.Builder
 			for _, h := range entry.Request.Headers {
+				analyzed += len(h.Name) + len(h.Value)
 				if strings.EqualFold(h.Name, "authorization") || strings.EqualFold(h.Name, "cookie") {
 					fmt.Fprintf(&auth, "%s:%s\n", strings.ToLower(h.Name), h.Value)
 				}
+			}
+			if analyzed > maxHARAnalyzedBytes {
+				return nil, fmt.Errorf("HAR matched body/header analysis exceeds 64 MiB; split the inputs")
 			}
 			if auth.Len() == 0 {
 				continue
@@ -136,6 +207,12 @@ func Candidates(spec openapi.Spec, base string, har []byte) ([]Candidate, error)
 				}
 			}
 			previous, previousAuth, previousTenant = i+1, fingerprint, tenant
+			if hypotheses > maxHARHypotheses {
+				return nil, fmt.Errorf("HAR/spec exceeds 50000 hypotheses; split the inputs")
+			}
+		}
+		if hypotheses > maxHARHypotheses {
+			return nil, fmt.Errorf("HAR/spec exceeds 50000 hypotheses; split the inputs")
 		}
 		result = append(result, c)
 	}

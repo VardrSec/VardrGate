@@ -35,7 +35,13 @@ const (
 	reasonWritePending          = "write_completion_unconfirmed"
 	reasonWriteEnvironment      = "write_environment_unverified"
 	reasonResetFailed           = "verifier_reset_failed"
+	reasonResetBaseline         = "reset_baseline_mismatch"
+	reasonCancelled             = "execution_cancelled"
 )
+
+// Each reviewed reset must restore the same selected state before an identity
+// is tested. Keep that reference in memory only, scoped to this single run.
+type verificationSession struct{ baseline *observedState }
 
 func validateVerification(tc model.AuthorizationTestCase, ids map[string]struct{}) error {
 	wv := tc.WriteVerification
@@ -159,9 +165,15 @@ func (s observedState) equal(o observedState) bool {
 // observe performs one verifier read. A failed or refused read returns a
 // reason instead of a state.
 func (e *Engine) observe(ctx context.Context, wv *model.WriteVerification, after bool) (observedState, string) {
+	if ctx.Err() != nil {
+		return observedState{}, reasonCancelled
+	}
 	req := wv.Request
 	req.Method = verifierMethod(wv)
 	ex := e.exec.Execute(ctx, wv.Identity, req)
+	if ctx.Err() != nil {
+		return observedState{}, reasonCancelled
+	}
 	statusOnly := observedState{status: ex.StatusCode}
 	if after && ex.Error == "" && ex.ErrorKind == "" {
 		for _, status := range wv.AfterStatus {
@@ -203,7 +215,7 @@ func (e *Engine) observe(ctx context.Context, wv *model.WriteVerification, after
 // verifiedExecute wraps one identity's request in verifier reads: two before
 // (to detect concurrent change) and one after. It returns the identity's raw
 // execution and the verification assessment.
-func (e *Engine) verifiedExecute(ctx context.Context, tc model.AuthorizationTestCase, identity model.Identity, req model.RequestTemplate, ea model.ExpectedAccess) (model.ExecutionResult, model.Assessment) {
+func (e *Engine) verifiedExecute(ctx context.Context, tc model.AuthorizationTestCase, identity model.Identity, req model.RequestTemplate, ea model.ExpectedAccess, session *verificationSession) (model.ExecutionResult, model.Assessment) {
 	wv := tc.WriteVerification
 	a := model.Assessment{IdentityID: identity.ID, ExpectedAccess: ea.Decision,
 		Decision: model.AssessmentInconclusive, Source: sourceWriteVerification}
@@ -215,6 +227,10 @@ func (e *Engine) verifiedExecute(ctx context.Context, tc model.AuthorizationTest
 		environment = "legacy"
 	}
 	a.Verification = &model.VerificationEvidence{Strategy: strategy, Environment: environment, ReaderIdentityID: wv.Identity.ID, BeforeStatuses: []int{}}
+	if ctx.Err() != nil {
+		a.Reason = reasonCancelled
+		return model.ExecutionResult{IdentityID: identity.ID, Error: "write verification canceled before the request", ErrorKind: model.ErrorKindVerification}, a
+	}
 
 	if wv.Reset != nil {
 		actor := model.Identity{ID: "verification-reset", Credential: model.Credential{Type: model.CredentialTypeStaticHeader}}
@@ -257,6 +273,17 @@ func (e *Engine) verifiedExecute(ctx context.Context, tc model.AuthorizationTest
 		if before.hasValue && reflect.DeepEqual(before.value, target) {
 			reason = reasonTargetAlreadyPresent
 		}
+	}
+	if reason == "" && wv.Reset != nil {
+		if session.baseline != nil && !session.baseline.equal(before) {
+			reason = reasonResetBaseline
+		} else if session.baseline == nil {
+			reference := before
+			session.baseline = &reference
+		}
+	}
+	if reason == "" && ctx.Err() != nil {
+		reason = reasonCancelled
 	}
 	if reason != "" {
 		// The request is not sent: without a usable before-state its effect

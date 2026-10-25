@@ -72,7 +72,7 @@ Flags:
 		cases = spec.GenerateTestCases(*baseURL)
 		var har []byte
 		if *harPath != "" {
-			har, err = os.ReadFile(*harPath)
+			har, err = discover.ReadHAR(*harPath)
 			if err != nil {
 				return fmt.Errorf("read HAR: %w", err)
 			}

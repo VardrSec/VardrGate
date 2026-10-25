@@ -30,6 +30,23 @@ Set each decision to `allow`, `deny` or `skip`; replace request path parameters;
 declare resource ownership/tenancy only after confirmation. Unsafe operations
 still require explicit mutation opt-in.
 
+## Migrating existing scripts and bounded captures
+
+Existing `gen` scripts must add a review step before `run`: providing credential
+variables alone now leaves every generated permission at `TODO`, and execution
+validation fails before sending requests. Keep the reviewed case separately;
+regenerating the scaffold must not overwrite confirmed permissions. This applies
+to both OpenAPI and Postman generation. There is no flag to infer permissions
+from captured HTTP success.
+
+HAR input is limited to 32 MiB and 5,000 entries. Each response may contain at
+most 1 MiB decoded content (with a corresponding base64 text limit); stored
+response text totals at most 8 MiB. Each request may declare at most 128 headers.
+Correlation permits at most 2,000,000 operation/entry comparisons, 50,000 output
+hypotheses and 64 MiB of matched decoded body/header analysis across operations. Split the spec/capture or trim
+irrelevant bodies when a limit is reached. Invalid HAR structure and exceeded
+budgets fail before cases or hypotheses are written; existing outputs remain.
+
 ## Measuring authoring effort
 
 No human time baseline has yet been measured. Use the same frozen endpoints and

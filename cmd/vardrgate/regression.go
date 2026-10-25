@@ -30,6 +30,7 @@ func saveRegression(args []string) error {
 	caseID := fs.String("case", "", "case ID to retain")
 	outDir := fs.String("out", "", "new directory for the regression")
 	confirmed := fs.Bool("confirmed", false, "operator confirms the finding and its binding to this reviewed template")
+	allowUnbound := fs.Bool("allow-unbound-result", false, "explicit manual confirmation for legacy/job results without a CLI input digest")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
@@ -40,13 +41,9 @@ func saveRegression(args []string) error {
 	if err != nil {
 		return fmt.Errorf("read cases: %w", err)
 	}
-	var cases []model.AuthorizationTestCase
-	if err := json.Unmarshal(data, &cases); err != nil {
-		var single model.AuthorizationTestCase
-		if err := json.Unmarshal(data, &single); err != nil {
-			return errors.New("parse regression cases: invalid JSON")
-		}
-		cases = []model.AuthorizationTestCase{single}
+	cases, digests, err := caseTemplates(data)
+	if err != nil {
+		return err
 	}
 	var selected *model.AuthorizationTestCase
 	for i := range cases {
@@ -83,14 +80,34 @@ func saveRegression(args []string) error {
 		}
 		results = []engine.Result{single}
 	}
-	found := false
+	var matched *engine.Result
 	for _, r := range results {
-		if r.TestCaseID == *caseID && len(r.Findings) > 0 {
-			found = true
+		if r.TestCaseID == *caseID {
+			if matched != nil {
+				return errors.New("selected result is not unique")
+			}
+			copy := r
+			matched = &copy
 		}
 	}
+	if matched == nil || matched.Error != "" || matched.PreflightFailed() {
+		return errors.New("selected case has no usable execution result")
+	}
+	binding := "exact_input_digest"
+	if matched.InputDigest == "" {
+		if !*allowUnbound {
+			return errors.New("result has no input digest; rerun the portable --cases template, or explicitly use --allow-unbound-result with manual confirmation")
+		}
+		binding = "operator_confirmed_unbound"
+	} else if matched.InputDigest != digests[*caseID] {
+		return errors.New("result input digest does not match the selected unresolved template; rerun the reviewed case")
+	}
+	found := false
+	for _, f := range matched.Findings {
+		found = found || relevantRegressionFinding(*selected, *matched, f)
+	}
 	if !found {
-		return errors.New("the selected result contains no finding; no vulnerability was confirmed")
+		return errors.New("selected result contains no finding relevant to a reviewed identity and expectation")
 	}
 	out, err := scaffold.MarshalCases([]model.AuthorizationTestCase{*selected})
 	if err != nil {
@@ -98,11 +115,13 @@ func saveRegression(args []string) error {
 	}
 	hash := sha256.Sum256(out)
 	manifest, err := json.MarshalIndent(struct {
-		Version      int    `json:"schema_version"`
-		CaseID       string `json:"case_id"`
-		Confirmation string `json:"confirmation"`
-		SpecSHA256   string `json:"spec_sha256"`
-	}{1, *caseID, "operator_confirmed_template_binding", hex.EncodeToString(hash[:])}, "", "  ")
+		Version           int    `json:"schema_version"`
+		CaseID            string `json:"case_id"`
+		Confirmation      string `json:"confirmation"`
+		SpecSHA256        string `json:"spec_sha256"`
+		ResultBinding     string `json:"result_binding"`
+		SourceInputDigest string `json:"source_input_digest"`
+	}{1, *caseID, "operator_confirmed_template_binding", hex.EncodeToString(hash[:]), binding, digests[*caseID]}, "", "  ")
 	if err != nil {
 		return err
 	}
@@ -114,6 +133,56 @@ func saveRegression(args []string) error {
 		return err
 	}
 	return os.WriteFile(filepath.Join(*outDir, "confirmation.json"), append(manifest, '\n'), 0o600)
+}
+
+func relevantRegressionFinding(tc model.AuthorizationTestCase, result engine.Result, finding model.Finding) bool {
+	var identity *model.Identity
+	for i := range tc.Identities {
+		if tc.Identities[i].ID == finding.IdentityID {
+			identity = &tc.Identities[i]
+		}
+	}
+	if identity == nil {
+		return false
+	}
+	executed := false
+	for _, ex := range result.Executions {
+		executed = executed || ex.IdentityID == finding.IdentityID
+	}
+	if !executed {
+		return false
+	}
+	var expected *model.ExpectedAccess
+	for i := range tc.ExpectedAccess {
+		if tc.ExpectedAccess[i].IdentityID == finding.IdentityID {
+			if expected != nil {
+				return false
+			}
+			expected = &tc.ExpectedAccess[i]
+		}
+	}
+	if expected == nil || expected.Decision == model.AccessDecisionSkip {
+		return false
+	}
+	switch finding.Category {
+	case model.CategoryAuthorizationMismatch:
+		return expected.Decision == model.AccessDecisionAllow
+	case model.CategoryUnexpectedAccess:
+		return expected.Decision == model.AccessDecisionDeny
+	case model.CategoryMissingAuthentication:
+		return expected.Decision == model.AccessDecisionDeny && identity.Credential.SendsNoAuth()
+	case model.CategoryPotentialBOLA:
+		return expected.Decision == model.AccessDecisionDeny && tc.Resource != nil && tc.Resource.OwnerIdentity != "" && tc.Resource.OwnerIdentity != identity.ID
+	case model.CategoryCrossTenantAccess:
+		return expected.Decision == model.AccessDecisionDeny && tc.Resource != nil && (tc.Resource.TenantID != "" || tc.Resource.TenantField != "")
+	case model.CategoryPrivilegeEscalation:
+		return expected.Decision == model.AccessDecisionDeny && tc.Resource != nil && tc.Resource.RequiredRole != "" && len(tc.RoleHierarchy) > 0
+	case model.CategorySensitiveDataExposure, model.CategoryObjectPropertyExposure:
+		return expected.ForbidSensitiveData
+	case model.CategoryCORSMisconfiguration:
+		return tc.CORS != nil && tc.CORS.ProbeOrigin != ""
+	}
+	return false
 }
 
 var secretReference = regexp.MustCompile(`^(?:(?:Bearer|Basic) )?(?:\$\{[A-Za-z_][A-Za-z0-9_]*\}|\{\{[A-Za-z_][A-Za-z0-9_]*\}\})$`)

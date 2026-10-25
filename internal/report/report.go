@@ -91,6 +91,8 @@ func (s summary) headline() string {
 // inconclusiveReasons explains each assessment reason in terms an operator can
 // act on. Reasons are fixed codes from the engine, never response content.
 var inconclusiveReasons = map[string]string{
+	"reset_baseline_mismatch":      "the reset did not restore the selected initial state; this identity's write was withheld to avoid cross-identity contamination",
+	"execution_cancelled":          "execution was canceled; no further verifier/reset/write requests were started and any unobserved effect remains unknown",
 	"identity_preflight_failed":    "a declared principal check failed; resource authorization requests were withheld",
 	"verifier_reset_failed":        "the fixture reset did not complete successfully; this identity's write was withheld",
 	"write_completion_unconfirmed": "the write returned 202 and no effect was observed; completion is unknown, so unchanged state cannot prove denial",

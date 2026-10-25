@@ -37,9 +37,12 @@ func DefaultEngine() *Engine {
 
 // Result is the complete output of a single test case run.
 type Result struct {
-	TestCaseID string                  `json:"test_case_id"`
-	Executions []model.ExecutionResult `json:"executions"`
-	Findings   []model.Finding         `json:"findings"`
+	// InputDigest is supplied by the CLI only for portable unresolved --cases
+	// input. It is not Runner's claim-time case_hash or a verified finding.
+	InputDigest string                  `json:"input_digest,omitempty"`
+	TestCaseID  string                  `json:"test_case_id"`
+	Executions  []model.ExecutionResult `json:"executions"`
+	Findings    []model.Finding         `json:"findings"`
 	// Assessments records the semantic access conclusion per evaluated identity,
 	// separate from the raw HTTP outcome. An inconclusive entry is how a
 	// stale assertion or a dead token surfaces instead of passing silently.
@@ -104,6 +107,7 @@ func InconclusiveReasons() []string {
 		reasonChangedUnexpectedly, reasonVerifierStatus, reasonWriteFailed,
 		reasonNoPositiveControl, reasonPositiveControlFailed, reasonCredentialRejected,
 		reasonWritePending, reasonWriteEnvironment,
+		reasonResetFailed, reasonResetBaseline, reasonCancelled, "identity_preflight_failed",
 	}
 }
 
@@ -163,11 +167,12 @@ func (e *Engine) Run(ctx context.Context, tc model.AuthorizationTestCase) (Resul
 	// evaluation can compare an offending response against a legitimate baseline.
 	execByID := make(map[string]model.ExecutionResult, len(tc.Identities))
 	verified := make(map[string]model.Assessment)
+	verification := verificationSession{}
 	for _, identity := range executionOrder(tc) {
 		var exec model.ExecutionResult
 		if ea, ok := expectedFor(tc, identity.ID); ok && tc.WriteVerification != nil && ea.Decision != model.AccessDecisionSkip {
 			var a model.Assessment
-			exec, a = e.verifiedExecute(ctx, tc, identity, req, ea)
+			exec, a = e.verifiedExecute(ctx, tc, identity, req, ea, &verification)
 			// Before the positive-control guard, so a dead peer token is
 			// reported as such rather than as a verifier problem.
 			verified[identity.ID] = demoteRejectedCredential(tc, identity, exec, a)

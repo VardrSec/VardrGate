@@ -2,5 +2,7 @@
   "schema_version": 1,
   "case_id": "password-peer",
   "confirmation": "operator_confirmed_template_binding",
-  "spec_sha256": "fb54ca00850664ec29261f29f25eb65af7f3dc5671061daf37923db68ec212b6"
+  "spec_sha256": "fb54ca00850664ec29261f29f25eb65af7f3dc5671061daf37923db68ec212b6",
+  "result_binding": "exact_input_digest",
+  "source_input_digest": "sha256-json-compact-v1:0a09b3629e93bf5891345c76c41a6b7c7e9ceac3f8426d5ba6ccbb649057afea"
 }
