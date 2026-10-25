@@ -324,8 +324,7 @@ authorization; merging a feature PR alone is not permission to publish.
 ## Communication
 
 Report major results, blockers and required decisions; omit routine command-by-command
-updates to conserve tokens. Use dated, inspected evidence when comparing the platform
-with ars0n after platform changes; no weekly polling is requested.
+updates to conserve tokens.
 
 ## Code quality standards
 
