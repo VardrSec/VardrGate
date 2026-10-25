@@ -250,6 +250,29 @@ func TestCompile_CarriesDenyStatusesAndTenantField(t *testing.T) {
 	if tc.Resource == nil || tc.Resource.TenantField != "tenant_id" {
 		t.Errorf("tenant_field not compiled: %+v", tc.Resource)
 	}
+	if tc.UnauthorizedIsDenial {
+		t.Error("listing 401 in deny_status must not imply unauthorized_is_denial")
+	}
+}
+
+func TestCompile_CarriesUnauthorizedIsDenial(t *testing.T) {
+	p, err := Parse([]byte(strings.Replace(samplePolicy, "  deny_status: [401, 403, 404]\n", "  deny_status: [401, 403, 404]\n  unauthorized_is_denial: true\n", 1)))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	tc, err := p.Compile(Bindings{
+		BaseURL:    "https://api.example.com",
+		PathParams: map[string]string{"user_id": "42"},
+		Identities: []model.Identity{
+			{ID: "o", Role: "owner", Credential: model.Credential{Type: model.CredentialTypeBearer, Value: "t"}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	if !tc.UnauthorizedIsDenial {
+		t.Error("unauthorized_is_denial not compiled")
+	}
 }
 
 func TestParseIdentities_ExpandsEnvReferences(t *testing.T) {

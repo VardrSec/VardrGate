@@ -480,6 +480,12 @@ type AuthorizationTestCase struct {
 	// APIs whose deny convention is not the default 401/403 (a 404 that hides
 	// existence is the common case). Empty uses the default mapping.
 	DenyStatuses []int `json:"deny_status,omitempty"`
+	// UnauthorizedIsDenial states that this API refuses authenticated callers
+	// with 401. Without it a 401 to a caller that sent credentials is
+	// indistinguishable from a dead token and is never a verified denial. It is
+	// separate from DenyStatuses because listing 401 there was always redundant
+	// and is copied widely, so it cannot carry intent. See ADR 0019.
+	UnauthorizedIsDenial bool `json:"unauthorized_is_denial,omitempty"`
 	// DenyWhen recognizes a refusal expressed in the response body rather than
 	// the status line. Nil leaves classification to the status code alone.
 	DenyWhen *DenyCondition `json:"deny_when,omitempty"`

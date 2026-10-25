@@ -67,6 +67,11 @@ Every result has an `assessments` array with one entry per identity:
 | Allow and deny assertions both match | `inconclusive` / `conflicting_assertions` |
 | Assertions configured, none match | `inconclusive` / `no_assertion_matched` |
 | Body is not usable JSON | `inconclusive` / `invalid_or_unsupported_json` |
+| Any of the above denials, expected deny, the identity sent credentials and got 401 | `inconclusive` / `credential_rejected` |
+
+The last row applies after every other rule: a 401 to a credentialed caller is
+what a dead or expired token produces, so it never counts as a verified denial
+unless the case sets `unauthorized_is_denial` (ADR 0019).
 
 Any one matching assertion is enough unless an opposing one also matches. To
 require several properties together, compare a whole object at a pointer.

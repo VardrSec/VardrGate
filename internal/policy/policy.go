@@ -97,9 +97,12 @@ type ResourceSpec struct {
 
 // ResponseSpec captures expected response constraints.
 type ResponseSpec struct {
-	DenyStatus      []int         `yaml:"deny_status"`
-	DenyWhen        *DenyWhenSpec `yaml:"deny_when"`
-	SensitiveFields SensitiveSpec `yaml:"sensitive_fields"`
+	DenyStatus []int `yaml:"deny_status"`
+	// UnauthorizedIsDenial: this API answers authorization refusals with 401,
+	// so a credentialed 401 is a denial rather than a possibly dead token.
+	UnauthorizedIsDenial bool          `yaml:"unauthorized_is_denial"`
+	DenyWhen             *DenyWhenSpec `yaml:"deny_when"`
+	SensitiveFields      SensitiveSpec `yaml:"sensitive_fields"`
 	// Assertions recognize access from response content rather than status.
 	Assertions []AssertionSpec `yaml:"assertions"`
 }
@@ -292,15 +295,16 @@ func (p Policy) Compile(b Bindings) (model.AuthorizationTestCase, error) {
 	}
 
 	tc := model.AuthorizationTestCase{
-		ID:                defaultID(b.TestCaseID, method, path),
-		Identities:        b.Identities,
-		Request:           request,
-		ExpectedAccess:    expected,
-		DenyStatuses:      p.Response.DenyStatus,
-		DenyWhen:          p.Response.DenyWhen.condition(),
-		Mutating:          p.API.Mutating || b.AllowMutating,
-		WriteVerification: verification,
-		Setup:             setup,
+		ID:                   defaultID(b.TestCaseID, method, path),
+		Identities:           b.Identities,
+		Request:              request,
+		ExpectedAccess:       expected,
+		DenyStatuses:         p.Response.DenyStatus,
+		UnauthorizedIsDenial: p.Response.UnauthorizedIsDenial,
+		DenyWhen:             p.Response.DenyWhen.condition(),
+		Mutating:             p.API.Mutating || b.AllowMutating,
+		WriteVerification:    verification,
+		Setup:                setup,
 	}
 
 	if res := p.resource(b, ownerIdentity); res != nil {

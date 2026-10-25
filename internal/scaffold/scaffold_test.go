@@ -163,7 +163,9 @@ func TestMarshalCases_PreservesEveryTestCaseField(t *testing.T) {
 		SensitiveFields: []string{"internal_note"},
 		DenyStatuses:    []int{404},
 		CORS:            &model.CORSCheck{ProbeOrigin: "https://evil.example"},
-		ExpectedAccess:  []model.ExpectedAccess{{IdentityID: "owner", Decision: model.AccessDecisionAllow}},
+
+		UnauthorizedIsDenial: true,
+		ExpectedAccess:       []model.ExpectedAccess{{IdentityID: "owner", Decision: model.AccessDecisionAllow}},
 	}
 
 	out, err := MarshalCases([]model.AuthorizationTestCase{original})

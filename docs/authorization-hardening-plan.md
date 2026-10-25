@@ -12,6 +12,17 @@ These are cases where Gate reports clean while a real failure exists. They are
 the most important because they undermine trust in a green result.
 
 ### P0.1 Dead or expired credential reads as a clean denial — S/M, ADR
+
+Partially resolved by ADR 0019, for the 401 path: a deny-expected identity
+that sends credentials and gets 401 is inconclusive (`credential_rejected`)
+unless the case sets `unauthorized_is_denial`. Both recorded VAmPI dead-token
+silent passes are closed. Default-on preflight was not implementable (it needs
+a reviewed endpoint and principal fields Gate cannot infer). Still open: APIs
+that answer an invalid token with 200, and cases that set
+`unauthorized_is_denial`, rely on preflight or resource-specific assertions.
+The result is a per-identity inconclusive, not "not tested", and the default
+exit code stays 0 until P1.1.
+
 A credential that is invalid yields a denial (401, or a 200 soft-denial on some
 apps), so a vulnerable endpoint looks protected. Today the only guard is
 identity preflight, which is opt-in.
