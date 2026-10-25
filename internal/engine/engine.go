@@ -152,7 +152,7 @@ func (e *Engine) Run(ctx context.Context, tc model.AuthorizationTestCase) (Resul
 		var exec model.ExecutionResult
 		if ea, ok := expectedFor(tc, identity.ID); ok && tc.WriteVerification != nil && ea.Decision != model.AccessDecisionSkip {
 			var a model.Assessment
-			exec, a = e.verifiedExecute(ctx, tc.WriteVerification, identity, req, ea)
+			exec, a = e.verifiedExecute(ctx, tc, identity, req, ea)
 			// Before the positive-control guard, so a dead peer token is
 			// reported as such rather than as a verifier problem.
 			verified[identity.ID] = demoteRejectedCredential(tc, identity, exec, a)

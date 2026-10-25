@@ -1,0 +1,476 @@
+{
+  "schema_version": 1,
+  "repeat": 3,
+  "rows": [
+    {
+      "verdict": "true_positive",
+      "inconclusive": false,
+      "not_tested": false,
+      "assessment": {
+        "identity_id": "bob",
+        "expected_access": "deny",
+        "decision": "allowed",
+        "source": "write_verification",
+        "reason": "state_changed"
+      },
+      "findings": [
+        [
+          "unexpected_access",
+          "high"
+        ]
+      ],
+      "case": "password-peer",
+      "mode": "vulnerable",
+      "repeat": 1,
+      "control": {
+        "identity_id": "alice",
+        "expected_access": "allow",
+        "decision": "allowed",
+        "source": "write_verification",
+        "reason": "state_changed"
+      },
+      "ground_truth_status": 204,
+      "ground_truth_violation": true
+    },
+    {
+      "verdict": "true_positive",
+      "inconclusive": false,
+      "not_tested": false,
+      "assessment": {
+        "identity_id": "bob",
+        "expected_access": "deny",
+        "decision": "allowed",
+        "source": "write_verification",
+        "reason": "state_changed"
+      },
+      "findings": [
+        [
+          "unexpected_access",
+          "high"
+        ]
+      ],
+      "case": "password-peer",
+      "mode": "vulnerable",
+      "repeat": 2,
+      "control": {
+        "identity_id": "alice",
+        "expected_access": "allow",
+        "decision": "allowed",
+        "source": "write_verification",
+        "reason": "state_changed"
+      },
+      "ground_truth_status": 204,
+      "ground_truth_violation": true
+    },
+    {
+      "verdict": "true_positive",
+      "inconclusive": false,
+      "not_tested": false,
+      "assessment": {
+        "identity_id": "bob",
+        "expected_access": "deny",
+        "decision": "allowed",
+        "source": "write_verification",
+        "reason": "state_changed"
+      },
+      "findings": [
+        [
+          "unexpected_access",
+          "high"
+        ]
+      ],
+      "case": "password-peer",
+      "mode": "vulnerable",
+      "repeat": 3,
+      "control": {
+        "identity_id": "alice",
+        "expected_access": "allow",
+        "decision": "allowed",
+        "source": "write_verification",
+        "reason": "state_changed"
+      },
+      "ground_truth_status": 204,
+      "ground_truth_violation": true
+    },
+    {
+      "verdict": "true_negative",
+      "inconclusive": false,
+      "not_tested": false,
+      "assessment": {
+        "identity_id": "anonymous",
+        "expected_access": "deny",
+        "decision": "denied",
+        "source": "write_verification",
+        "reason": "state_unchanged"
+      },
+      "findings": [],
+      "case": "password-anonymous",
+      "mode": "vulnerable",
+      "repeat": 1,
+      "control": {
+        "identity_id": "alice",
+        "expected_access": "allow",
+        "decision": "allowed",
+        "source": "write_verification",
+        "reason": "state_changed"
+      },
+      "ground_truth_status": 401,
+      "ground_truth_violation": false
+    },
+    {
+      "verdict": "true_negative",
+      "inconclusive": false,
+      "not_tested": false,
+      "assessment": {
+        "identity_id": "anonymous",
+        "expected_access": "deny",
+        "decision": "denied",
+        "source": "write_verification",
+        "reason": "state_unchanged"
+      },
+      "findings": [],
+      "case": "password-anonymous",
+      "mode": "vulnerable",
+      "repeat": 2,
+      "control": {
+        "identity_id": "alice",
+        "expected_access": "allow",
+        "decision": "allowed",
+        "source": "write_verification",
+        "reason": "state_changed"
+      },
+      "ground_truth_status": 401,
+      "ground_truth_violation": false
+    },
+    {
+      "verdict": "true_negative",
+      "inconclusive": false,
+      "not_tested": false,
+      "assessment": {
+        "identity_id": "anonymous",
+        "expected_access": "deny",
+        "decision": "denied",
+        "source": "write_verification",
+        "reason": "state_unchanged"
+      },
+      "findings": [],
+      "case": "password-anonymous",
+      "mode": "vulnerable",
+      "repeat": 3,
+      "control": {
+        "identity_id": "alice",
+        "expected_access": "allow",
+        "decision": "allowed",
+        "source": "write_verification",
+        "reason": "state_changed"
+      },
+      "ground_truth_status": 401,
+      "ground_truth_violation": false
+    },
+    {
+      "verdict": "inconclusive_control",
+      "inconclusive": true,
+      "not_tested": false,
+      "assessment": {
+        "identity_id": "bob",
+        "expected_access": "deny",
+        "decision": "inconclusive",
+        "source": "write_verification",
+        "reason": "credential_rejected"
+      },
+      "findings": [],
+      "case": "delete-peer",
+      "mode": "vulnerable",
+      "repeat": 1,
+      "control": {
+        "identity_id": "admin",
+        "expected_access": "allow",
+        "decision": "allowed",
+        "source": "write_verification",
+        "reason": "state_changed"
+      },
+      "ground_truth_status": 401,
+      "ground_truth_violation": false
+    },
+    {
+      "verdict": "inconclusive_control",
+      "inconclusive": true,
+      "not_tested": false,
+      "assessment": {
+        "identity_id": "bob",
+        "expected_access": "deny",
+        "decision": "inconclusive",
+        "source": "write_verification",
+        "reason": "credential_rejected"
+      },
+      "findings": [],
+      "case": "delete-peer",
+      "mode": "vulnerable",
+      "repeat": 2,
+      "control": {
+        "identity_id": "admin",
+        "expected_access": "allow",
+        "decision": "allowed",
+        "source": "write_verification",
+        "reason": "state_changed"
+      },
+      "ground_truth_status": 401,
+      "ground_truth_violation": false
+    },
+    {
+      "verdict": "inconclusive_control",
+      "inconclusive": true,
+      "not_tested": false,
+      "assessment": {
+        "identity_id": "bob",
+        "expected_access": "deny",
+        "decision": "inconclusive",
+        "source": "write_verification",
+        "reason": "credential_rejected"
+      },
+      "findings": [],
+      "case": "delete-peer",
+      "mode": "vulnerable",
+      "repeat": 3,
+      "control": {
+        "identity_id": "admin",
+        "expected_access": "allow",
+        "decision": "allowed",
+        "source": "write_verification",
+        "reason": "state_changed"
+      },
+      "ground_truth_status": 401,
+      "ground_truth_violation": false
+    },
+    {
+      "verdict": "true_negative",
+      "inconclusive": false,
+      "not_tested": false,
+      "assessment": {
+        "identity_id": "bob",
+        "expected_access": "deny",
+        "decision": "denied",
+        "source": "write_verification",
+        "reason": "state_unchanged"
+      },
+      "findings": [],
+      "case": "password-peer",
+      "mode": "protected",
+      "repeat": 1,
+      "control": {
+        "identity_id": "alice",
+        "expected_access": "allow",
+        "decision": "allowed",
+        "source": "write_verification",
+        "reason": "state_changed"
+      },
+      "ground_truth_status": 204,
+      "ground_truth_violation": false
+    },
+    {
+      "verdict": "true_negative",
+      "inconclusive": false,
+      "not_tested": false,
+      "assessment": {
+        "identity_id": "bob",
+        "expected_access": "deny",
+        "decision": "denied",
+        "source": "write_verification",
+        "reason": "state_unchanged"
+      },
+      "findings": [],
+      "case": "password-peer",
+      "mode": "protected",
+      "repeat": 2,
+      "control": {
+        "identity_id": "alice",
+        "expected_access": "allow",
+        "decision": "allowed",
+        "source": "write_verification",
+        "reason": "state_changed"
+      },
+      "ground_truth_status": 204,
+      "ground_truth_violation": false
+    },
+    {
+      "verdict": "true_negative",
+      "inconclusive": false,
+      "not_tested": false,
+      "assessment": {
+        "identity_id": "bob",
+        "expected_access": "deny",
+        "decision": "denied",
+        "source": "write_verification",
+        "reason": "state_unchanged"
+      },
+      "findings": [],
+      "case": "password-peer",
+      "mode": "protected",
+      "repeat": 3,
+      "control": {
+        "identity_id": "alice",
+        "expected_access": "allow",
+        "decision": "allowed",
+        "source": "write_verification",
+        "reason": "state_changed"
+      },
+      "ground_truth_status": 204,
+      "ground_truth_violation": false
+    },
+    {
+      "verdict": "true_negative",
+      "inconclusive": false,
+      "not_tested": false,
+      "assessment": {
+        "identity_id": "anonymous",
+        "expected_access": "deny",
+        "decision": "denied",
+        "source": "write_verification",
+        "reason": "state_unchanged"
+      },
+      "findings": [],
+      "case": "password-anonymous",
+      "mode": "protected",
+      "repeat": 1,
+      "control": {
+        "identity_id": "alice",
+        "expected_access": "allow",
+        "decision": "allowed",
+        "source": "write_verification",
+        "reason": "state_changed"
+      },
+      "ground_truth_status": 401,
+      "ground_truth_violation": false
+    },
+    {
+      "verdict": "true_negative",
+      "inconclusive": false,
+      "not_tested": false,
+      "assessment": {
+        "identity_id": "anonymous",
+        "expected_access": "deny",
+        "decision": "denied",
+        "source": "write_verification",
+        "reason": "state_unchanged"
+      },
+      "findings": [],
+      "case": "password-anonymous",
+      "mode": "protected",
+      "repeat": 2,
+      "control": {
+        "identity_id": "alice",
+        "expected_access": "allow",
+        "decision": "allowed",
+        "source": "write_verification",
+        "reason": "state_changed"
+      },
+      "ground_truth_status": 401,
+      "ground_truth_violation": false
+    },
+    {
+      "verdict": "true_negative",
+      "inconclusive": false,
+      "not_tested": false,
+      "assessment": {
+        "identity_id": "anonymous",
+        "expected_access": "deny",
+        "decision": "denied",
+        "source": "write_verification",
+        "reason": "state_unchanged"
+      },
+      "findings": [],
+      "case": "password-anonymous",
+      "mode": "protected",
+      "repeat": 3,
+      "control": {
+        "identity_id": "alice",
+        "expected_access": "allow",
+        "decision": "allowed",
+        "source": "write_verification",
+        "reason": "state_changed"
+      },
+      "ground_truth_status": 401,
+      "ground_truth_violation": false
+    },
+    {
+      "verdict": "inconclusive_control",
+      "inconclusive": true,
+      "not_tested": false,
+      "assessment": {
+        "identity_id": "bob",
+        "expected_access": "deny",
+        "decision": "inconclusive",
+        "source": "write_verification",
+        "reason": "credential_rejected"
+      },
+      "findings": [],
+      "case": "delete-peer",
+      "mode": "protected",
+      "repeat": 1,
+      "control": {
+        "identity_id": "admin",
+        "expected_access": "allow",
+        "decision": "allowed",
+        "source": "write_verification",
+        "reason": "state_changed"
+      },
+      "ground_truth_status": 401,
+      "ground_truth_violation": false
+    },
+    {
+      "verdict": "inconclusive_control",
+      "inconclusive": true,
+      "not_tested": false,
+      "assessment": {
+        "identity_id": "bob",
+        "expected_access": "deny",
+        "decision": "inconclusive",
+        "source": "write_verification",
+        "reason": "credential_rejected"
+      },
+      "findings": [],
+      "case": "delete-peer",
+      "mode": "protected",
+      "repeat": 2,
+      "control": {
+        "identity_id": "admin",
+        "expected_access": "allow",
+        "decision": "allowed",
+        "source": "write_verification",
+        "reason": "state_changed"
+      },
+      "ground_truth_status": 401,
+      "ground_truth_violation": false
+    },
+    {
+      "verdict": "inconclusive_control",
+      "inconclusive": true,
+      "not_tested": false,
+      "assessment": {
+        "identity_id": "bob",
+        "expected_access": "deny",
+        "decision": "inconclusive",
+        "source": "write_verification",
+        "reason": "credential_rejected"
+      },
+      "findings": [],
+      "case": "delete-peer",
+      "mode": "protected",
+      "repeat": 3,
+      "control": {
+        "identity_id": "admin",
+        "expected_access": "allow",
+        "decision": "allowed",
+        "source": "write_verification",
+        "reason": "state_changed"
+      },
+      "ground_truth_status": 401,
+      "ground_truth_violation": false
+    }
+  ],
+  "inputs_sha256": {
+    "corpus.json": "55729e2ba5d5bebb1a4310a72a6fb98c893fc2d8ed548c6b55c70678b1eada47",
+    "verification.json": "1bee46730adbd7dfda04da6d612cc1fe74ae64231288eb857a85bdcf2f90dcfb",
+    "profiles.json": "4f98b0e7785f836fb07578aa74ed8f52f2614aed0ed0a06df41901cdc8baf4bf"
+  }
+}

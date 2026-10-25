@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "note": "Write-verification oracles, written before the verifier existed and before any run with it. Kept separate from the frozen corpus. A verifier is never one of the executed identities; it reads state before and after each identity's request.",
+  "vampi": {
+    "/users/v1/gate_alice/password": {
+      "identity": "anonymous",
+      "request": {"method": "POST", "path": "/users/v1/login",
+                  "body": {"username": "gate_alice", "password": "${VAMPI_ALICE_PASSWORD}"}},
+      "allow_unsafe_method": true,
+      "json_pointer": "/status",
+      "rationale": "Logging in as alice with her original password succeeds until her password changes. Login does not change server state. /users/v1/_debug would expose the password but ties the oracle to a vulnerability, so it is not used."
+    },
+    "/users/v1/gate_alice/email": {
+      "identity": "anonymous",
+      "request": {"method": "GET", "path": "/users/v1/gate_alice"},
+      "json_pointer": "/email",
+      "changed_to_from_body": "/email",
+      "rationale": "Public user lookup returns alice's email."
+    },
+    "/users/v1/gate_carol": {
+      "identity": "anonymous",
+      "request": {"method": "GET", "path": "/users/v1/gate_carol"},
+      "json_pointer": "/username",
+      "rationale": "Public lookup returns 200 while carol exists and 404 after deletion."
+    }
+  },
+  "authbench": {
+    "cases": ["write-bypass", "write-protected", "write-before-500"],
+    "identity": "alice",
+    "request": {"method": "GET", "path": "/secure/documents/1/content"},
+    "json_pointer": "/content",
+    "rationale": "The owner reads the document's current content through the lab API. The scorer's audit is never visible to Gate."
+  }
+}

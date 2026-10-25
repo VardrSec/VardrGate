@@ -511,6 +511,14 @@ type AuthorizationTestCase struct {
 // perform the mutation itself. Only the comparison outcome is reported:
 // observed values stay in memory and never reach results or evidence.
 type WriteVerification struct {
+	// Strategy is changed, created or deleted. Empty preserves legacy behavior.
+	Strategy string `json:"strategy,omitempty"`
+	// AfterStatus explicitly recognizes a non-2xx readback transition, such as
+	// an original-password login oracle returning 401 after a password change.
+	AfterStatus []int `json:"after_status,omitempty"`
+	// Reset restores a disposable fixture before each attempt; no captures or
+	// branching. It must return a completed 2xx and is followed by baseline reads.
+	Reset    *SetupStep      `json:"reset,omitempty"`
 	Identity Identity        `json:"identity"`
 	Request  RequestTemplate `json:"request"`
 	// Environment declares the reviewed write/read contract: "unknown" keeps

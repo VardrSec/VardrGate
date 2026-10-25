@@ -1,5 +1,31 @@
 # Write verification
 
+## Explicit effects
+
+Use `verify.strategy: changed`, `created` or `deleted` with
+`environment: synchronous_isolated` after reviewing the fixture's timing and
+exclusive access. `created` requires an absent 404 baseline and a present 2xx
+readback; `deleted` requires a present baseline and absent 404 readback. These
+strategies do not need `changed_to`. A wrong/unreadable path remains inconclusive
+unless an allow-expected positive control demonstrates the expected effect.
+
+`changed` compares the selected JSON value. For multiple identities without a
+known target value, declare `verify.reset` as a fixed setup-style request (`as`,
+`request.method`, `request.path`, headers/body). It runs before every attempt,
+must be same-origin and return completed 2xx, and cannot capture variables.
+Use disposable resources. A failed reset withholds that identity's write.
+
+Optional `after_status: [401]` explicitly supports an independent login oracle
+where the original password is rejected after a change. Undeclared refused
+readbacks stay inconclusive. Setup captures may supply verifier/reset URLs,
+bodies and the verifier credential; environment references resolve without
+retaining their values. Omitted strategies retain the existing contract.
+
+For example, an original-password login readback can use `strategy: changed`,
+`json_pointer: /status`, and an authorized reset of the victim's password before
+each attempt. Keep the reset password as `${ORIGINAL_PASSWORD}`. The reader is
+still a separate identity from the callers whose writes are assessed.
+
 A write endpoint's response does not show whether it wrote. An API can return
 204 after changing only the caller's own record, or 500 after committing the
 change. Write verification reads the target's state before and after each

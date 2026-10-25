@@ -60,11 +60,38 @@ func ExpandVerification(wv *model.WriteVerification) error {
 		return fmt.Errorf("write_verification: %w", err)
 	}
 	wv.Identity = ids[0]
-	if len(wv.Request.Body) == 0 || !strings.Contains(string(wv.Request.Body), "${") {
+	if err := ExpandRequest(&wv.Request); err != nil {
+		return fmt.Errorf("write_verification: %w", err)
+	}
+	if wv.Reset != nil {
+		if err := ExpandRequest(&wv.Reset.Request); err != nil {
+			return fmt.Errorf("write_verification reset: %w", err)
+		}
+	}
+	return nil
+}
+
+// ExpandRequest resolves environment references without interpolating raw JSON.
+func ExpandRequest(req *model.RequestTemplate) error {
+	var err error
+	if req.URL, err = Expand(req.URL); err != nil {
+		return err
+	}
+	for key, value := range req.Headers {
+		if req.Headers[key], err = Expand(value); err != nil {
+			return err
+		}
+	}
+	for key, value := range req.QueryParams {
+		if req.QueryParams[key], err = Expand(value); err != nil {
+			return err
+		}
+	}
+	if len(req.Body) == 0 || !strings.Contains(string(req.Body), "${") {
 		return nil
 	}
 	var body any
-	if err := json.Unmarshal(wv.Request.Body, &body); err != nil {
+	if err := json.Unmarshal(req.Body, &body); err != nil {
 		return fmt.Errorf("write_verification: request body is not valid JSON")
 	}
 	expanded, err := expandStrings(body)
@@ -75,7 +102,7 @@ func ExpandVerification(wv *model.WriteVerification) error {
 	if err != nil {
 		return fmt.Errorf("write_verification: request body: %w", err)
 	}
-	wv.Request.Body = out
+	req.Body = out
 	return nil
 }
 

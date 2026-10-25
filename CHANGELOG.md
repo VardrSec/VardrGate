@@ -8,6 +8,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Explicit changed/created/deleted verification strategies, reviewed readback
+  status transitions and fixed fixture resets for multiple unknown-value writes.
+  Failed readback/reset and consumed baselines remain inconclusive. See ADR 0024.
+
 - Confirmed denial profiles in policies/suites, scoped to exact endpoints and
   compiled into existing assertions with optional conjunctive status checks.
   Unmatched/conflicting evidence stays inconclusive. See ADR 0023 and

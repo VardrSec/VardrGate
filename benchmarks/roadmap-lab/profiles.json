@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "note": "Assertion profile written from VAmPI's documented and source-visible response shapes, before any Gate run against VAmPI. Keyed by request path; 'roles' narrows a rule to corpus actors. Status-only mode uses no assertions.",
+  "assertions": {
+    "/books/v1/gate-alice-book": [
+      {"json_pointer": "/secret", "equals": "gate-secret-alice-7f3a", "decision": "allow"},
+      {"json_pointer": "/message", "equals": "Book not found!", "decision": "deny"},
+      {"json_pointer": "/message", "equals": "Invalid token. Please log in again.", "decision": "deny", "roles": ["anonymous"]}
+    ],
+    "/users/v1": [
+      {"json_pointer": "/users/0/username", "equals": "name1", "decision": "allow"}
+    ],
+    "/users/v1/_debug": [
+      {"json_pointer": "/users/3/password", "equals": "alice-pass-1", "decision": "allow"}
+    ],
+    "/users/v1/gate_alice/password": [
+      {"json_pointer": "/message", "equals": "Invalid token. Please log in again.", "decision": "deny", "roles": ["anonymous"]}
+    ],
+    "/users/v1/gate_carol": [
+      {"json_pointer": "/message", "equals": "Only Admins may delete users!", "decision": "deny", "roles": ["bob"]}
+    ]
+  }
+}
