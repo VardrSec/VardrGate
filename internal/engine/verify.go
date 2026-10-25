@@ -34,12 +34,46 @@ const (
 	reasonPositiveControlFailed = "positive_control_failed"
 	reasonWritePending          = "write_completion_unconfirmed"
 	reasonWriteEnvironment      = "write_environment_unverified"
+	reasonResetFailed           = "verifier_reset_failed"
 )
 
 func validateVerification(tc model.AuthorizationTestCase, ids map[string]struct{}) error {
 	wv := tc.WriteVerification
 	if wv == nil {
 		return nil
+	}
+	switch wv.Strategy {
+	case "":
+	case "changed", "created", "deleted":
+		if wv.Environment != "synchronous_isolated" {
+			return fmt.Errorf("explicit verification strategy requires environment synchronous_isolated")
+		}
+	default:
+		return fmt.Errorf("write_verification.strategy must be changed, created or deleted")
+	}
+	if len(wv.AfterStatus) > 0 && wv.Strategy != "changed" {
+		return fmt.Errorf("after_status requires strategy changed")
+	}
+	for _, status := range wv.AfterStatus {
+		if status < 400 || status > 499 {
+			return fmt.Errorf("after_status supports only reviewed 4xx readback transitions")
+		}
+	}
+	if (wv.Strategy == "created" || wv.Strategy == "deleted") && len(wv.ChangedTo) > 0 {
+		return fmt.Errorf("existence strategies cannot use changed_to")
+	}
+	if wv.Strategy == "changed" && wv.JSONPointer == "" && len(wv.AfterStatus) == 0 {
+		return fmt.Errorf("strategy changed requires a json_pointer or reviewed after_status")
+	}
+	if wv.Reset != nil {
+		if wv.Strategy == "" || len(wv.Reset.Capture) > 0 || !sameOrigin(wv.Reset.Request.URL, tc.Request.URL) {
+			return fmt.Errorf("verification reset requires an explicit strategy, same-origin request and no captures")
+		}
+		resetCase := tc
+		resetCase.Setup = []model.SetupStep{*wv.Reset}
+		if err := validateSetup(resetCase); err != nil {
+			return fmt.Errorf("verification reset: %w", err)
+		}
 	}
 	switch wv.Environment {
 	case "", "unknown", "synchronous_isolated":
@@ -76,7 +110,7 @@ func validateVerification(tc model.AuthorizationTestCase, ids map[string]struct{
 			verified++
 		}
 	}
-	if verified > 1 && len(wv.ChangedTo) == 0 {
+	if verified > 1 && len(wv.ChangedTo) == 0 && wv.Strategy != "created" && wv.Strategy != "deleted" && !(wv.Strategy == "changed" && wv.Reset != nil) {
 		// Gate does not reset state between identities: without the target
 		// value, a second writer of the same value would read as unchanged.
 		return fmt.Errorf("write_verification of more than one identity requires changed_to")
@@ -124,10 +158,17 @@ func (s observedState) equal(o observedState) bool {
 
 // observe performs one verifier read. A failed or refused read returns a
 // reason instead of a state.
-func (e *Engine) observe(ctx context.Context, wv *model.WriteVerification) (observedState, string) {
+func (e *Engine) observe(ctx context.Context, wv *model.WriteVerification, after bool) (observedState, string) {
 	req := wv.Request
 	req.Method = verifierMethod(wv)
 	ex := e.exec.Execute(ctx, wv.Identity, req)
+	if after && ex.Error == "" && ex.ErrorKind == "" {
+		for _, status := range wv.AfterStatus {
+			if ex.StatusCode == status {
+				return observedState{status: status}, ""
+			}
+		}
+	}
 	switch {
 	case ex.Error != "" || ex.ErrorKind != "" || ex.StatusCode >= 500:
 		return observedState{}, reasonVerifierReadFailed
@@ -136,6 +177,9 @@ func (e *Engine) observe(ctx context.Context, wv *model.WriteVerification) (obse
 	case ex.StatusCode != 404 && (ex.StatusCode < 200 || ex.StatusCode >= 300):
 		// Only 404 is supported as an absent-resource observation for deletes.
 		// Redirects, rate limits and other client errors are unreadable state.
+		return observedState{}, reasonVerifierStatus
+	}
+	if wv.Strategy == "changed" && ex.StatusCode == 404 {
 		return observedState{}, reasonVerifierStatus
 	}
 	st := observedState{status: ex.StatusCode}
@@ -158,24 +202,38 @@ func (e *Engine) observe(ctx context.Context, wv *model.WriteVerification) (obse
 // verifiedExecute wraps one identity's request in verifier reads: two before
 // (to detect concurrent change) and one after. It returns the identity's raw
 // execution and the verification assessment.
-func (e *Engine) verifiedExecute(ctx context.Context, wv *model.WriteVerification, identity model.Identity, req model.RequestTemplate, ea model.ExpectedAccess) (model.ExecutionResult, model.Assessment) {
+func (e *Engine) verifiedExecute(ctx context.Context, tc model.AuthorizationTestCase, identity model.Identity, req model.RequestTemplate, ea model.ExpectedAccess) (model.ExecutionResult, model.Assessment) {
+	wv := tc.WriteVerification
 	a := model.Assessment{IdentityID: identity.ID, ExpectedAccess: ea.Decision,
 		Decision: model.AssessmentInconclusive, Source: sourceWriteVerification}
 
-	before, reason := e.observe(ctx, wv)
+	if wv.Reset != nil {
+		actor := model.Identity{ID: "verification-reset", Credential: model.Credential{Type: model.CredentialTypeStaticHeader}}
+		for _, id := range tc.Identities {
+			if id.ID == wv.Reset.As {
+				actor = id
+			}
+		}
+		reset := e.exec.Execute(ctx, actor, wv.Reset.Request)
+		if reset.Error != "" || reset.ErrorKind != "" || reset.StatusCode < 200 || reset.StatusCode >= 300 || reset.StatusCode == 202 {
+			a.Reason = reasonResetFailed
+			return model.ExecutionResult{IdentityID: identity.ID, Error: "write verification reset failed", ErrorKind: model.ErrorKindVerification}, a
+		}
+	}
+	before, reason := e.observe(ctx, wv, false)
 	if reason == reasonVerifierStatus {
 		// Preserve the baseline diagnostic for an unusable first read; after
 		// reads use the more specific unexpected-status reason.
 		reason = reasonBaselineMissing
 	}
-	if reason == "" && (before.status < 200 || before.status >= 300) {
+	if reason == "" && ((wv.Strategy == "created" && before.status != 404) || (wv.Strategy != "created" && (before.status < 200 || before.status >= 300))) {
 		// A missing resource is not a baseline: a mistyped verifier path would
 		// read 404 before and after and look like a refused write.
 		reason = reasonBaselineMissing
 	}
 	if reason == "" {
 		var again observedState
-		if again, reason = e.observe(ctx, wv); reason == "" && !again.equal(before) {
+		if again, reason = e.observe(ctx, wv, false); reason == "" && !again.equal(before) {
 			reason = reasonConcurrentChange
 		}
 	}
@@ -196,7 +254,7 @@ func (e *Engine) verifiedExecute(ctx context.Context, wv *model.WriteVerificatio
 
 	exec := e.exec.Execute(ctx, identity, req)
 
-	after, reason := e.observe(ctx, wv)
+	after, reason := e.observe(ctx, wv, true)
 	switch {
 	case reason != "":
 		a.Reason = reason
@@ -212,6 +270,10 @@ func (e *Engine) verifiedExecute(ctx context.Context, wv *model.WriteVerificatio
 		// Two stable baseline reads cannot establish completion or exclude an
 		// unrelated writer after the baseline. Do not attribute either outcome.
 		a.Reason = reasonWriteEnvironment
+	case wv.Strategy == "created" && after.status != 404 && (after.status < 200 || after.status >= 300):
+		a.Reason = reasonVerifierStatus
+	case wv.Strategy == "deleted" && after.status != 404 && !after.equal(before):
+		a.Reason = reasonChangedUnexpectedly
 	case after.equal(before):
 		a.Decision, a.Reason = model.AssessmentDenied, reasonStateUnchanged
 	default:

@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "target": {
+    "name": "VAmPI",
+    "repository": "https://github.com/erev0s/VAmPI",
+    "commit": "f16052dce83f05847133ec98f01c5193a41de7d8",
+    "modes": {
+      "vulnerable": {"env": {"vulnerable": "1", "tokentimetolive": "3600"}},
+      "protected": {"env": {"vulnerable": "0", "tokentimetolive": "3600"}}
+    }
+  },
+  "frozen_note": "Labels were derived from VAmPI source and README before Gate was run against VAmPI. Changes after the first Gate run require a separate commit with a written justification.",
+  "authorization_rules": [
+    "Only the owner of a book may view its secret (VAmPI README: 'only the owner of the book should be allowed to view the secret').",
+    "A user's password and email may be changed only by that user (README: 'Unauthorized Password Change' is a listed vulnerability).",
+    "Only admins may delete users (README table; users.py delete_user).",
+    "Full user details, including passwords, must not be exposed (README: 'Excessive Data Exposure through debug endpoint'; app.py notes the debug endpoint stays vulnerable with vulnerable=0).",
+    "Basic user information is public to unregistered users (README: 'an unregistered user can see minimal information about the dummy users')."
+  ],
+  "fixtures": {
+    "reset": "GET /createdb, then register alice, bob and carol and have alice add her book. createdb's own random book titles are not used.",
+    "identities": {
+      "alice": {"username": "gate_alice", "password": "alice-pass-1", "email": "alice@gate.test"},
+      "bob": {"username": "gate_bob", "password": "bob-pass-1", "email": "bob@gate.test"},
+      "carol": {"username": "gate_carol", "password": "carol-pass-1", "email": "carol@gate.test"},
+      "admin": {"username": "admin", "password": "pass1", "seeded_by": "createdb"},
+      "anonymous": {"credential": "none"}
+    },
+    "resources": {
+      "alice_book": {"title": "gate-alice-book", "secret": "gate-secret-alice-7f3a", "owner": "alice"}
+    }
+  },
+  "cases": [
+    {"id": "book-owner", "method": "GET", "path": "/books/v1/gate-alice-book", "actor": "alice", "expect": "allow",
+     "violation": {"vulnerable": false, "protected": false}, "oracle": "disclosure:alice_book.secret",
+     "source": "books.py get_by_title: owner lookup succeeds in both branches"},
+    {"id": "book-peer", "method": "GET", "path": "/books/v1/gate-alice-book", "actor": "bob", "expect": "deny",
+     "violation": {"vulnerable": true, "protected": false}, "oracle": "disclosure:alice_book.secret",
+     "source": "books.py get_by_title: vuln branch filters by title only; protected branch filters by caller and returns 404"},
+    {"id": "book-admin", "method": "GET", "path": "/books/v1/gate-alice-book", "actor": "admin", "expect": "deny",
+     "violation": {"vulnerable": true, "protected": false}, "oracle": "disclosure:alice_book.secret",
+     "source": "README: only the owner may view the secret; same code path as book-peer"},
+    {"id": "book-anonymous", "method": "GET", "path": "/books/v1/gate-alice-book", "actor": "anonymous", "expect": "deny",
+     "violation": {"vulnerable": false, "protected": false}, "oracle": "disclosure:alice_book.secret",
+     "source": "books.py get_by_title: token_validator returns 401 before the vuln branch"},
+    {"id": "users-public", "method": "GET", "path": "/users/v1", "actor": "anonymous", "expect": "allow",
+     "violation": {"vulnerable": false, "protected": false}, "oracle": "none",
+     "source": "README: unregistered users may see minimal user information"},
+    {"id": "debug-anonymous", "method": "GET", "path": "/users/v1/_debug", "actor": "anonymous", "expect": "deny",
+     "violation": {"vulnerable": true, "protected": true}, "oracle": "disclosure:alice.password",
+     "source": "users.py debug: no authentication, returns passwords; app.py: debug stays vulnerable with vulnerable=0"},
+    {"id": "debug-peer", "method": "GET", "path": "/users/v1/_debug", "actor": "bob", "expect": "deny",
+     "violation": {"vulnerable": true, "protected": true}, "oracle": "disclosure:alice.password",
+     "source": "users.py debug: exposes every user's password to any caller"},
+    {"id": "password-peer", "method": "PUT", "path": "/users/v1/gate_alice/password", "actor": "bob", "expect": "deny",
+     "body": {"password": "changed-by-bob"},
+     "violation": {"vulnerable": true, "protected": false}, "oracle": "write:alice.password",
+     "source": "users.py update_password: vuln branch updates the path user; protected branch updates the caller and still returns 204"},
+    {"id": "password-owner", "method": "PUT", "path": "/users/v1/gate_alice/password", "actor": "alice", "expect": "allow",
+     "body": {"password": "changed-by-alice"},
+     "violation": {"vulnerable": false, "protected": false}, "oracle": "write:alice.password",
+     "source": "users.py update_password: caller is the path user in both branches"},
+    {"id": "password-anonymous", "method": "PUT", "path": "/users/v1/gate_alice/password", "actor": "anonymous", "expect": "deny",
+     "body": {"password": "changed-by-anonymous"},
+     "violation": {"vulnerable": false, "protected": false}, "oracle": "write:alice.password",
+     "source": "users.py update_password: 401 before any update"},
+    {"id": "email-peer", "method": "PUT", "path": "/users/v1/gate_alice/email", "actor": "bob", "expect": "deny",
+     "body": {"email": "bobtook@gate.io"},
+     "violation": {"vulnerable": false, "protected": false}, "oracle": "write:alice.email",
+     "source": "users.py update_email: both branches update the caller (resp['sub']), never the path user; returns 204"},
+    {"id": "email-owner", "method": "PUT", "path": "/users/v1/gate_alice/email", "actor": "alice", "expect": "allow",
+     "body": {"email": "alicenew@gate.io"},
+     "violation": {"vulnerable": false, "protected": false}, "oracle": "write:alice.email",
+     "source": "users.py update_email: caller is the path user"},
+    {"id": "delete-peer", "method": "DELETE", "path": "/users/v1/gate_carol", "actor": "bob", "expect": "deny",
+     "violation": {"vulnerable": false, "protected": false}, "oracle": "write:carol.exists",
+     "source": "users.py delete_user: non-admin receives 401 in both modes"},
+    {"id": "delete-admin", "method": "DELETE", "path": "/users/v1/gate_carol", "actor": "admin", "expect": "allow",
+     "violation": {"vulnerable": false, "protected": false}, "oracle": "write:carol.exists",
+     "source": "users.py delete_user: admin may delete"}
+  ],
+  "out_of_scope": [
+    {"vulnerability": "SQL injection (get_by_username)", "reason": "Gate tests identity-dependent access decisions, not injection."},
+    {"vulnerability": "Mass assignment (register admin flag)", "reason": "Self-registration privilege; no second identity's access decision to compare."},
+    {"vulnerability": "User and password enumeration (login)", "reason": "Response-content difference on an unauthenticated endpoint, not an authorization decision."},
+    {"vulnerability": "RegexDoS (update_email)", "reason": "Availability; Gate sends one request per identity."},
+    {"vulnerability": "Lack of rate limiting", "reason": "Not an authorization decision; rate-limit packs are not built (CLAUDE.md Phase 5)."},
+    {"vulnerability": "Weak JWT signing key", "reason": "Requires forging tokens; Gate uses supplied credentials."}
+  ]
+}

@@ -1,0 +1,224 @@
+{
+  "schema_version": 1,
+  "mapping": "pre-registered plan.json zap_access_control; actor rows only; status identity gate; independent database ground truth",
+  "modes": {
+    "vulnerable": {
+      "repeats": 3,
+      "metrics": {
+        "TN": 6,
+        "TP": 5,
+        "FP": 3
+      },
+      "cases": [
+        {
+          "case": "book-owner",
+          "actor_status": 200,
+          "scanner_result": "Valid",
+          "ground_truth_violation": false,
+          "verdict": "TN"
+        },
+        {
+          "case": "book-peer",
+          "actor_status": 200,
+          "scanner_result": "Invalid",
+          "ground_truth_violation": true,
+          "verdict": "TP"
+        },
+        {
+          "case": "book-admin",
+          "actor_status": 200,
+          "scanner_result": "Invalid",
+          "ground_truth_violation": true,
+          "verdict": "TP"
+        },
+        {
+          "case": "book-anonymous",
+          "actor_status": 401,
+          "scanner_result": "Invalid",
+          "ground_truth_violation": false,
+          "verdict": "FP"
+        },
+        {
+          "case": "users-public",
+          "actor_status": 200,
+          "scanner_result": "Valid",
+          "ground_truth_violation": false,
+          "verdict": "TN"
+        },
+        {
+          "case": "debug-anonymous",
+          "actor_status": 200,
+          "scanner_result": "Invalid",
+          "ground_truth_violation": true,
+          "verdict": "TP"
+        },
+        {
+          "case": "debug-peer",
+          "actor_status": 200,
+          "scanner_result": "Invalid",
+          "ground_truth_violation": true,
+          "verdict": "TP"
+        },
+        {
+          "case": "password-peer",
+          "actor_status": 204,
+          "scanner_result": "Invalid",
+          "ground_truth_violation": true,
+          "verdict": "TP"
+        },
+        {
+          "case": "password-owner",
+          "actor_status": 204,
+          "scanner_result": "Valid",
+          "ground_truth_violation": false,
+          "verdict": "TN"
+        },
+        {
+          "case": "password-anonymous",
+          "actor_status": 401,
+          "scanner_result": "Invalid",
+          "ground_truth_violation": false,
+          "verdict": "FP"
+        },
+        {
+          "case": "email-peer",
+          "actor_status": 204,
+          "scanner_result": "Invalid",
+          "ground_truth_violation": false,
+          "verdict": "FP"
+        },
+        {
+          "case": "email-owner",
+          "actor_status": 204,
+          "scanner_result": "Valid",
+          "ground_truth_violation": false,
+          "verdict": "TN"
+        },
+        {
+          "case": "delete-peer",
+          "actor_status": 401,
+          "scanner_result": "Valid",
+          "ground_truth_violation": false,
+          "verdict": "TN"
+        },
+        {
+          "case": "delete-admin",
+          "actor_status": 200,
+          "scanner_result": "Valid",
+          "ground_truth_violation": false,
+          "verdict": "TN"
+        }
+      ],
+      "source_sha256": "2dac273e0c52be7bd95ca9d3716c6753d9d728e65ded29bd9e04c66d819c0c43"
+    },
+    "protected": {
+      "repeats": 3,
+      "metrics": {
+        "TN": 8,
+        "FP": 4,
+        "TP": 2
+      },
+      "cases": [
+        {
+          "case": "book-owner",
+          "actor_status": 200,
+          "scanner_result": "Valid",
+          "ground_truth_violation": false,
+          "verdict": "TN"
+        },
+        {
+          "case": "book-peer",
+          "actor_status": 404,
+          "scanner_result": "Valid",
+          "ground_truth_violation": false,
+          "verdict": "TN"
+        },
+        {
+          "case": "book-admin",
+          "actor_status": 404,
+          "scanner_result": "Valid",
+          "ground_truth_violation": false,
+          "verdict": "TN"
+        },
+        {
+          "case": "book-anonymous",
+          "actor_status": 401,
+          "scanner_result": "Invalid",
+          "ground_truth_violation": false,
+          "verdict": "FP"
+        },
+        {
+          "case": "users-public",
+          "actor_status": 200,
+          "scanner_result": "Valid",
+          "ground_truth_violation": false,
+          "verdict": "TN"
+        },
+        {
+          "case": "debug-anonymous",
+          "actor_status": 200,
+          "scanner_result": "Invalid",
+          "ground_truth_violation": true,
+          "verdict": "TP"
+        },
+        {
+          "case": "debug-peer",
+          "actor_status": 200,
+          "scanner_result": "Invalid",
+          "ground_truth_violation": true,
+          "verdict": "TP"
+        },
+        {
+          "case": "password-peer",
+          "actor_status": 204,
+          "scanner_result": "Invalid",
+          "ground_truth_violation": false,
+          "verdict": "FP"
+        },
+        {
+          "case": "password-owner",
+          "actor_status": 204,
+          "scanner_result": "Valid",
+          "ground_truth_violation": false,
+          "verdict": "TN"
+        },
+        {
+          "case": "password-anonymous",
+          "actor_status": 401,
+          "scanner_result": "Invalid",
+          "ground_truth_violation": false,
+          "verdict": "FP"
+        },
+        {
+          "case": "email-peer",
+          "actor_status": 204,
+          "scanner_result": "Invalid",
+          "ground_truth_violation": false,
+          "verdict": "FP"
+        },
+        {
+          "case": "email-owner",
+          "actor_status": 204,
+          "scanner_result": "Valid",
+          "ground_truth_violation": false,
+          "verdict": "TN"
+        },
+        {
+          "case": "delete-peer",
+          "actor_status": 401,
+          "scanner_result": "Valid",
+          "ground_truth_violation": false,
+          "verdict": "TN"
+        },
+        {
+          "case": "delete-admin",
+          "actor_status": 200,
+          "scanner_result": "Valid",
+          "ground_truth_violation": false,
+          "verdict": "TN"
+        }
+      ],
+      "source_sha256": "c3f99d50ee1a46767c3ff397def16008cb2e230fb343f3d79e84648253937c41"
+    }
+  }
+}

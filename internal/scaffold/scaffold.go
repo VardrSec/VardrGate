@@ -87,6 +87,9 @@ type wireIdentity struct {
 // wireVerification carries the verifier's identity through wireIdentity so its
 // credential gets the same placeholder treatment as every other identity.
 type wireVerification struct {
+	Strategy          string                `json:"strategy,omitempty"`
+	AfterStatus       []int                 `json:"after_status,omitempty"`
+	Reset             *model.SetupStep      `json:"reset,omitempty"`
 	Environment       string                `json:"environment,omitempty"`
 	Identity          wireIdentity          `json:"identity"`
 	Request           model.RequestTemplate `json:"request"`
@@ -109,6 +112,9 @@ func toWire(tc model.AuthorizationTestCase) wireCase {
 	var verification *wireVerification
 	if wv := tc.WriteVerification; wv != nil {
 		verification = &wireVerification{
+			Strategy:          wv.Strategy,
+			AfterStatus:       wv.AfterStatus,
+			Reset:             wv.Reset,
 			Environment:       wv.Environment,
 			Identity:          toWireIdentity(wv.Identity),
 			Request:           wv.Request,

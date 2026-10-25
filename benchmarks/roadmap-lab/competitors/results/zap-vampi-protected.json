@@ -1,0 +1,2240 @@
+{
+  "tool": "zap_access_control",
+  "app": "vampi",
+  "mode": "protected",
+  "dead_token": null,
+  "image": "zaproxy/zap-stable:2.17.0@sha256:5ccfff9a411743ab2615136a2edd7416bec9ce41572fa94e935df38c14adb2b6",
+  "started_at": "2026-10-25T19:17:35Z",
+  "docker_run": "docker run --rm -d --name vgbench-zap --network authzlab-network -p 127.0.0.1:8090:8090 --cpus 2 --memory 4g --pids-limit 1024 --cap-drop ALL --security-opt no-new-privileges -v 'C:\\Users\\Jorge A\\OneDrive\\Documentos\\New project\\vardrgate-write-assurance\\benchmarks\\roadmap-lab\\competitors\\zap:/zap/bench:ro' -v 'C:\\Users\\Jorge A\\OneDrive\\Documentos\\New project\\vardrgate-write-assurance\\benchmarks\\roadmap-lab\\competitors\\results\\zap:/zap/wrk' zaproxy/zap-stable:2.17.0@sha256:5ccfff9a411743ab2615136a2edd7416bec9ce41572fa94e935df38c14adb2b6 zap.sh -daemon -host 0.0.0.0 -port 8090 -config 'api.key=<random per run>' -config 'api.addrs.addr.name=.*' -config api.addrs.addr.regex=true",
+  "startup_seconds": 9.7,
+  "addon_install_seconds": 1.3,
+  "zap_version": "2.17.0",
+  "addons": {
+    "accessControl": "13.0.0",
+    "graaljs": "0.14.0",
+    "commonlib": "1.44.0"
+  },
+  "runs": [
+    [
+      {
+        "case": "book-owner",
+        "expect": "allow",
+        "label_violation": false,
+        "actor": "alice",
+        "users": [
+          "alice"
+        ],
+        "rules": {
+          "alice": "ALLOWED"
+        },
+        "ground_truth_status": 200,
+        "ground_truth_violation": false,
+        "seed_status": 401,
+        "rules_applied": 4,
+        "scan_status": "NOT RUNNING",
+        "scan_seconds": 0.22,
+        "report": "zap\\vampi-protected-r1\\book-owner.html",
+        "report_rows": {
+          "header": [
+            "",
+            "",
+            "alice",
+            "Method",
+            "URL",
+            "Authorized?",
+            "Access Control"
+          ],
+          "rows": [
+            [
+              "GET",
+              "http://host.docker.internal:5102/books/v1/gate-alice-book?bench_case=book-owner&amp;vg_book_owner=1",
+              "Yes",
+              "Valid"
+            ]
+          ]
+        },
+        "replay_statuses": [
+          {
+            "id": 5,
+            "type": 13,
+            "status": 200
+          }
+        ]
+      },
+      {
+        "case": "book-peer",
+        "expect": "deny",
+        "label_violation": false,
+        "actor": "bob",
+        "users": [
+          "bob",
+          "alice"
+        ],
+        "rules": {
+          "bob": "DENIED",
+          "alice": "ALLOWED"
+        },
+        "ground_truth_status": 404,
+        "ground_truth_violation": false,
+        "seed_status": 401,
+        "rules_applied": 8,
+        "scan_status": "NOT RUNNING",
+        "scan_seconds": 0.21,
+        "report": "zap\\vampi-protected-r1\\book-peer.html",
+        "report_rows": {
+          "header": [
+            "",
+            "",
+            "bob",
+            "alice",
+            "Method",
+            "URL",
+            "Authorized?",
+            "Access Control",
+            "Authorized?",
+            "Access Control"
+          ],
+          "rows": [
+            [
+              "GET",
+              "http://host.docker.internal:5102/books/v1/gate-alice-book?bench_case=book-peer&amp;vg_book_peer=1",
+              "No",
+              "Valid",
+              "Yes",
+              "Valid"
+            ]
+          ]
+        },
+        "replay_statuses": [
+          {
+            "id": 10,
+            "type": 13,
+            "status": 404
+          },
+          {
+            "id": 11,
+            "type": 13,
+            "status": 200
+          }
+        ]
+      },
+      {
+        "case": "book-admin",
+        "expect": "deny",
+        "label_violation": false,
+        "actor": "admin",
+        "users": [
+          "admin",
+          "alice"
+        ],
+        "rules": {
+          "admin": "DENIED",
+          "alice": "ALLOWED"
+        },
+        "ground_truth_status": 404,
+        "ground_truth_violation": false,
+        "seed_status": 401,
+        "rules_applied": 8,
+        "scan_status": "NOT RUNNING",
+        "scan_seconds": 0.23,
+        "report": "zap\\vampi-protected-r1\\book-admin.html",
+        "report_rows": {
+          "header": [
+            "",
+            "",
+            "admin",
+            "alice",
+            "Method",
+            "URL",
+            "Authorized?",
+            "Access Control",
+            "Authorized?",
+            "Access Control"
+          ],
+          "rows": [
+            [
+              "GET",
+              "http://host.docker.internal:5102/books/v1/gate-alice-book?bench_case=book-admin&amp;vg_book_admin=1",
+              "No",
+              "Valid",
+              "Yes",
+              "Valid"
+            ]
+          ]
+        },
+        "replay_statuses": [
+          {
+            "id": 16,
+            "type": 13,
+            "status": 404
+          },
+          {
+            "id": 17,
+            "type": 13,
+            "status": 200
+          }
+        ]
+      },
+      {
+        "case": "book-anonymous",
+        "expect": "deny",
+        "label_violation": false,
+        "actor": "anonymous",
+        "users": [
+          "anonymous",
+          "alice"
+        ],
+        "rules": {
+          "anonymous": "DENIED",
+          "alice": "ALLOWED"
+        },
+        "ground_truth_status": 401,
+        "ground_truth_violation": false,
+        "seed_status": 401,
+        "rules_applied": 8,
+        "scan_status": "NOT RUNNING",
+        "scan_seconds": 0.25,
+        "report": "zap\\vampi-protected-r1\\book-anonymous.html",
+        "report_rows": {
+          "header": [
+            "",
+            "",
+            "&lt;&lt; Unauthenticated &gt;&gt;",
+            "alice",
+            "Method",
+            "URL",
+            "Authorized?",
+            "Access Control",
+            "Authorized?",
+            "Access Control"
+          ],
+          "rows": [
+            [
+              "GET",
+              "http://host.docker.internal:5102/books/v1/gate-alice-book?bench_case=book-anonymous&amp;vg_book_anonymous=1",
+              "Yes",
+              "Invalid",
+              "Yes",
+              "Valid"
+            ]
+          ]
+        },
+        "replay_statuses": [
+          {
+            "id": 22,
+            "type": 13,
+            "status": 200
+          },
+          {
+            "id": 23,
+            "type": 13,
+            "status": 401
+          }
+        ]
+      },
+      {
+        "case": "users-public",
+        "expect": "allow",
+        "label_violation": false,
+        "actor": "anonymous",
+        "users": [
+          "anonymous",
+          "alice"
+        ],
+        "rules": {
+          "anonymous": "ALLOWED",
+          "alice": "ALLOWED"
+        },
+        "ground_truth_status": 200,
+        "ground_truth_violation": false,
+        "seed_status": 200,
+        "rules_applied": 6,
+        "scan_status": "NOT RUNNING",
+        "scan_seconds": 0.23,
+        "report": "zap\\vampi-protected-r1\\users-public.html",
+        "report_rows": {
+          "header": [
+            "",
+            "",
+            "&lt;&lt; Unauthenticated &gt;&gt;",
+            "alice",
+            "Method",
+            "URL",
+            "Authorized?",
+            "Access Control",
+            "Authorized?",
+            "Access Control"
+          ],
+          "rows": [
+            [
+              "GET",
+              "http://host.docker.internal:5102/users/v1?bench_case=users-public&amp;vg_users_public=1",
+              "Yes",
+              "Valid",
+              "Yes",
+              "Valid"
+            ]
+          ]
+        },
+        "replay_statuses": [
+          {
+            "id": 27,
+            "type": 13,
+            "status": 200
+          },
+          {
+            "id": 28,
+            "type": 13,
+            "status": 200
+          }
+        ]
+      },
+      {
+        "case": "debug-anonymous",
+        "expect": "deny",
+        "label_violation": true,
+        "actor": "anonymous",
+        "users": [
+          "anonymous",
+          "alice"
+        ],
+        "rules": {
+          "anonymous": "DENIED",
+          "alice": "DENIED"
+        },
+        "ground_truth_status": 200,
+        "ground_truth_violation": true,
+        "seed_status": 200,
+        "rules_applied": 8,
+        "scan_status": "NOT RUNNING",
+        "scan_seconds": 0.24,
+        "report": "zap\\vampi-protected-r1\\debug-anonymous.html",
+        "report_rows": {
+          "header": [
+            "",
+            "",
+            "&lt;&lt; Unauthenticated &gt;&gt;",
+            "alice",
+            "Method",
+            "URL",
+            "Authorized?",
+            "Access Control",
+            "Authorized?",
+            "Access Control"
+          ],
+          "rows": [
+            [
+              "GET",
+              "http://host.docker.internal:5102/users/v1/_debug?bench_case=debug-anonymous&amp;vg_debug_anonymous=1",
+              "Yes",
+              "Invalid",
+              "Yes",
+              "Invalid"
+            ]
+          ]
+        },
+        "replay_statuses": [
+          {
+            "id": 33,
+            "type": 13,
+            "status": 200
+          },
+          {
+            "id": 34,
+            "type": 13,
+            "status": 200
+          }
+        ]
+      },
+      {
+        "case": "debug-peer",
+        "expect": "deny",
+        "label_violation": true,
+        "actor": "bob",
+        "users": [
+          "bob"
+        ],
+        "rules": {
+          "bob": "DENIED"
+        },
+        "ground_truth_status": 200,
+        "ground_truth_violation": true,
+        "seed_status": 200,
+        "rules_applied": 4,
+        "scan_status": "NOT RUNNING",
+        "scan_seconds": 0.22,
+        "report": "zap\\vampi-protected-r1\\debug-peer.html",
+        "report_rows": {
+          "header": [
+            "",
+            "",
+            "bob",
+            "Method",
+            "URL",
+            "Authorized?",
+            "Access Control"
+          ],
+          "rows": [
+            [
+              "GET",
+              "http://host.docker.internal:5102/users/v1/_debug?bench_case=debug-peer&amp;vg_debug_peer=1",
+              "Yes",
+              "Invalid"
+            ]
+          ]
+        },
+        "replay_statuses": [
+          {
+            "id": 39,
+            "type": 13,
+            "status": 200
+          }
+        ]
+      },
+      {
+        "case": "password-peer",
+        "expect": "deny",
+        "label_violation": false,
+        "actor": "bob",
+        "users": [
+          "bob",
+          "alice"
+        ],
+        "rules": {
+          "bob": "DENIED",
+          "alice": "ALLOWED"
+        },
+        "ground_truth_status": 204,
+        "ground_truth_violation": false,
+        "seed_status": 401,
+        "rules_applied": 10,
+        "scan_status": "NOT RUNNING",
+        "scan_seconds": 0.24,
+        "report": "zap\\vampi-protected-r1\\password-peer.html",
+        "report_rows": {
+          "header": [
+            "",
+            "",
+            "bob",
+            "alice",
+            "Method",
+            "URL",
+            "Authorized?",
+            "Access Control",
+            "Authorized?",
+            "Access Control"
+          ],
+          "rows": [
+            [
+              "PUT",
+              "http://host.docker.internal:5102/users/v1/gate_alice/password?bench_case=password-peer&amp;vg_password_peer=1",
+              "Yes",
+              "Invalid",
+              "Yes",
+              "Valid"
+            ]
+          ]
+        },
+        "replay_statuses": [
+          {
+            "id": 45,
+            "type": 13,
+            "status": 204
+          },
+          {
+            "id": 46,
+            "type": 13,
+            "status": 204
+          }
+        ]
+      },
+      {
+        "case": "password-owner",
+        "expect": "allow",
+        "label_violation": false,
+        "actor": "alice",
+        "users": [
+          "alice"
+        ],
+        "rules": {
+          "alice": "ALLOWED"
+        },
+        "ground_truth_status": 204,
+        "ground_truth_violation": false,
+        "seed_status": 401,
+        "rules_applied": 5,
+        "scan_status": "NOT RUNNING",
+        "scan_seconds": 0.21,
+        "report": "zap\\vampi-protected-r1\\password-owner.html",
+        "report_rows": {
+          "header": [
+            "",
+            "",
+            "alice",
+            "Method",
+            "URL",
+            "Authorized?",
+            "Access Control"
+          ],
+          "rows": [
+            [
+              "PUT",
+              "http://host.docker.internal:5102/users/v1/gate_alice/password?bench_case=password-owner&amp;vg_password_owner=1",
+              "Yes",
+              "Valid"
+            ]
+          ]
+        },
+        "replay_statuses": [
+          {
+            "id": 52,
+            "type": 13,
+            "status": 204
+          }
+        ]
+      },
+      {
+        "case": "password-anonymous",
+        "expect": "deny",
+        "label_violation": false,
+        "actor": "anonymous",
+        "users": [
+          "anonymous",
+          "alice"
+        ],
+        "rules": {
+          "anonymous": "DENIED",
+          "alice": "ALLOWED"
+        },
+        "ground_truth_status": 401,
+        "ground_truth_violation": false,
+        "seed_status": 401,
+        "rules_applied": 10,
+        "scan_status": "NOT RUNNING",
+        "scan_seconds": 0.23,
+        "report": "zap\\vampi-protected-r1\\password-anonymous.html",
+        "report_rows": {
+          "header": [
+            "",
+            "",
+            "&lt;&lt; Unauthenticated &gt;&gt;",
+            "alice",
+            "Method",
+            "URL",
+            "Authorized?",
+            "Access Control",
+            "Authorized?",
+            "Access Control"
+          ],
+          "rows": [
+            [
+              "PUT",
+              "http://host.docker.internal:5102/users/v1/gate_alice/password?bench_case=password-anonymous&amp;vg_password_anonymous=1",
+              "Yes",
+              "Invalid",
+              "Yes",
+              "Valid"
+            ]
+          ]
+        },
+        "replay_statuses": [
+          {
+            "id": 58,
+            "type": 13,
+            "status": 204
+          },
+          {
+            "id": 59,
+            "type": 13,
+            "status": 401
+          }
+        ]
+      },
+      {
+        "case": "email-peer",
+        "expect": "deny",
+        "label_violation": false,
+        "actor": "bob",
+        "users": [
+          "bob",
+          "alice"
+        ],
+        "rules": {
+          "bob": "DENIED",
+          "alice": "ALLOWED"
+        },
+        "ground_truth_status": 204,
+        "ground_truth_violation": false,
+        "seed_status": 401,
+        "rules_applied": 10,
+        "scan_status": "NOT RUNNING",
+        "scan_seconds": 0.24,
+        "report": "zap\\vampi-protected-r1\\email-peer.html",
+        "report_rows": {
+          "header": [
+            "",
+            "",
+            "bob",
+            "alice",
+            "Method",
+            "URL",
+            "Authorized?",
+            "Access Control",
+            "Authorized?",
+            "Access Control"
+          ],
+          "rows": [
+            [
+              "PUT",
+              "http://host.docker.internal:5102/users/v1/gate_alice/email?bench_case=email-peer&amp;vg_email_peer=1",
+              "Yes",
+              "Invalid",
+              "Yes",
+              "Valid"
+            ]
+          ]
+        },
+        "replay_statuses": [
+          {
+            "id": 65,
+            "type": 13,
+            "status": 204
+          },
+          {
+            "id": 66,
+            "type": 13,
+            "status": 204
+          }
+        ]
+      },
+      {
+        "case": "email-owner",
+        "expect": "allow",
+        "label_violation": false,
+        "actor": "alice",
+        "users": [
+          "alice"
+        ],
+        "rules": {
+          "alice": "ALLOWED"
+        },
+        "ground_truth_status": 204,
+        "ground_truth_violation": false,
+        "seed_status": 401,
+        "rules_applied": 5,
+        "scan_status": "NOT RUNNING",
+        "scan_seconds": 0.25,
+        "report": "zap\\vampi-protected-r1\\email-owner.html",
+        "report_rows": {
+          "header": [
+            "",
+            "",
+            "alice",
+            "Method",
+            "URL",
+            "Authorized?",
+            "Access Control"
+          ],
+          "rows": [
+            [
+              "PUT",
+              "http://host.docker.internal:5102/users/v1/gate_alice/email?bench_case=email-owner&amp;vg_email_owner=1",
+              "Yes",
+              "Valid"
+            ]
+          ]
+        },
+        "replay_statuses": [
+          {
+            "id": 72,
+            "type": 13,
+            "status": 204
+          }
+        ]
+      },
+      {
+        "case": "delete-peer",
+        "expect": "deny",
+        "label_violation": false,
+        "actor": "bob",
+        "users": [
+          "bob",
+          "admin"
+        ],
+        "rules": {
+          "bob": "DENIED",
+          "admin": "ALLOWED"
+        },
+        "ground_truth_status": 401,
+        "ground_truth_violation": false,
+        "seed_status": 401,
+        "rules_applied": 8,
+        "scan_status": "NOT RUNNING",
+        "scan_seconds": 0.21,
+        "report": "zap\\vampi-protected-r1\\delete-peer.html",
+        "report_rows": {
+          "header": [
+            "",
+            "",
+            "bob",
+            "admin",
+            "Method",
+            "URL",
+            "Authorized?",
+            "Access Control",
+            "Authorized?",
+            "Access Control"
+          ],
+          "rows": [
+            [
+              "DELETE",
+              "http://host.docker.internal:5102/users/v1/gate_carol?bench_case=delete-peer&amp;vg_delete_peer=1",
+              "No",
+              "Valid",
+              "Yes",
+              "Valid"
+            ]
+          ]
+        },
+        "replay_statuses": [
+          {
+            "id": 77,
+            "type": 13,
+            "status": 401
+          },
+          {
+            "id": 78,
+            "type": 13,
+            "status": 200
+          }
+        ]
+      },
+      {
+        "case": "delete-admin",
+        "expect": "allow",
+        "label_violation": false,
+        "actor": "admin",
+        "users": [
+          "admin"
+        ],
+        "rules": {
+          "admin": "ALLOWED"
+        },
+        "ground_truth_status": 200,
+        "ground_truth_violation": false,
+        "seed_status": 401,
+        "rules_applied": 4,
+        "scan_status": "NOT RUNNING",
+        "scan_seconds": 0.23,
+        "report": "zap\\vampi-protected-r1\\delete-admin.html",
+        "report_rows": {
+          "header": [
+            "",
+            "",
+            "admin",
+            "Method",
+            "URL",
+            "Authorized?",
+            "Access Control"
+          ],
+          "rows": [
+            [
+              "DELETE",
+              "http://host.docker.internal:5102/users/v1/gate_carol?bench_case=delete-admin&amp;vg_delete_admin=1",
+              "Yes",
+              "Valid"
+            ]
+          ]
+        },
+        "replay_statuses": [
+          {
+            "id": 83,
+            "type": 13,
+            "status": 200
+          }
+        ]
+      }
+    ],
+    [
+      {
+        "case": "book-owner",
+        "expect": "allow",
+        "label_violation": false,
+        "actor": "alice",
+        "users": [
+          "alice"
+        ],
+        "rules": {
+          "alice": "ALLOWED"
+        },
+        "ground_truth_status": 200,
+        "ground_truth_violation": false,
+        "seed_status": 401,
+        "rules_applied": 4,
+        "scan_status": "NOT RUNNING",
+        "scan_seconds": 0.21,
+        "report": "zap\\vampi-protected-r2\\book-owner.html",
+        "report_rows": {
+          "header": [
+            "",
+            "",
+            "alice",
+            "Method",
+            "URL",
+            "Authorized?",
+            "Access Control"
+          ],
+          "rows": [
+            [
+              "GET",
+              "http://host.docker.internal:5102/books/v1/gate-alice-book?bench_case=book-owner&amp;vg_book_owner=1",
+              "Yes",
+              "Valid"
+            ]
+          ]
+        },
+        "replay_statuses": [
+          {
+            "id": 88,
+            "type": 13,
+            "status": 200
+          }
+        ]
+      },
+      {
+        "case": "book-peer",
+        "expect": "deny",
+        "label_violation": false,
+        "actor": "bob",
+        "users": [
+          "bob",
+          "alice"
+        ],
+        "rules": {
+          "bob": "DENIED",
+          "alice": "ALLOWED"
+        },
+        "ground_truth_status": 404,
+        "ground_truth_violation": false,
+        "seed_status": 401,
+        "rules_applied": 8,
+        "scan_status": "NOT RUNNING",
+        "scan_seconds": 0.21,
+        "report": "zap\\vampi-protected-r2\\book-peer.html",
+        "report_rows": {
+          "header": [
+            "",
+            "",
+            "bob",
+            "alice",
+            "Method",
+            "URL",
+            "Authorized?",
+            "Access Control",
+            "Authorized?",
+            "Access Control"
+          ],
+          "rows": [
+            [
+              "GET",
+              "http://host.docker.internal:5102/books/v1/gate-alice-book?bench_case=book-peer&amp;vg_book_peer=1",
+              "No",
+              "Valid",
+              "Yes",
+              "Valid"
+            ]
+          ]
+        },
+        "replay_statuses": [
+          {
+            "id": 93,
+            "type": 13,
+            "status": 404
+          },
+          {
+            "id": 94,
+            "type": 13,
+            "status": 200
+          }
+        ]
+      },
+      {
+        "case": "book-admin",
+        "expect": "deny",
+        "label_violation": false,
+        "actor": "admin",
+        "users": [
+          "admin",
+          "alice"
+        ],
+        "rules": {
+          "admin": "DENIED",
+          "alice": "ALLOWED"
+        },
+        "ground_truth_status": 404,
+        "ground_truth_violation": false,
+        "seed_status": 401,
+        "rules_applied": 8,
+        "scan_status": "NOT RUNNING",
+        "scan_seconds": 0.21,
+        "report": "zap\\vampi-protected-r2\\book-admin.html",
+        "report_rows": {
+          "header": [
+            "",
+            "",
+            "admin",
+            "alice",
+            "Method",
+            "URL",
+            "Authorized?",
+            "Access Control",
+            "Authorized?",
+            "Access Control"
+          ],
+          "rows": [
+            [
+              "GET",
+              "http://host.docker.internal:5102/books/v1/gate-alice-book?bench_case=book-admin&amp;vg_book_admin=1",
+              "No",
+              "Valid",
+              "Yes",
+              "Valid"
+            ]
+          ]
+        },
+        "replay_statuses": [
+          {
+            "id": 99,
+            "type": 13,
+            "status": 404
+          },
+          {
+            "id": 100,
+            "type": 13,
+            "status": 200
+          }
+        ]
+      },
+      {
+        "case": "book-anonymous",
+        "expect": "deny",
+        "label_violation": false,
+        "actor": "anonymous",
+        "users": [
+          "anonymous",
+          "alice"
+        ],
+        "rules": {
+          "anonymous": "DENIED",
+          "alice": "ALLOWED"
+        },
+        "ground_truth_status": 401,
+        "ground_truth_violation": false,
+        "seed_status": 401,
+        "rules_applied": 8,
+        "scan_status": "NOT RUNNING",
+        "scan_seconds": 0.21,
+        "report": "zap\\vampi-protected-r2\\book-anonymous.html",
+        "report_rows": {
+          "header": [
+            "",
+            "",
+            "&lt;&lt; Unauthenticated &gt;&gt;",
+            "alice",
+            "Method",
+            "URL",
+            "Authorized?",
+            "Access Control",
+            "Authorized?",
+            "Access Control"
+          ],
+          "rows": [
+            [
+              "GET",
+              "http://host.docker.internal:5102/books/v1/gate-alice-book?bench_case=book-anonymous&amp;vg_book_anonymous=1",
+              "Yes",
+              "Invalid",
+              "Yes",
+              "Valid"
+            ]
+          ]
+        },
+        "replay_statuses": [
+          {
+            "id": 105,
+            "type": 13,
+            "status": 200
+          },
+          {
+            "id": 106,
+            "type": 13,
+            "status": 401
+          }
+        ]
+      },
+      {
+        "case": "users-public",
+        "expect": "allow",
+        "label_violation": false,
+        "actor": "anonymous",
+        "users": [
+          "anonymous",
+          "alice"
+        ],
+        "rules": {
+          "anonymous": "ALLOWED",
+          "alice": "ALLOWED"
+        },
+        "ground_truth_status": 200,
+        "ground_truth_violation": false,
+        "seed_status": 200,
+        "rules_applied": 6,
+        "scan_status": "NOT RUNNING",
+        "scan_seconds": 0.21,
+        "report": "zap\\vampi-protected-r2\\users-public.html",
+        "report_rows": {
+          "header": [
+            "",
+            "",
+            "&lt;&lt; Unauthenticated &gt;&gt;",
+            "alice",
+            "Method",
+            "URL",
+            "Authorized?",
+            "Access Control",
+            "Authorized?",
+            "Access Control"
+          ],
+          "rows": [
+            [
+              "GET",
+              "http://host.docker.internal:5102/users/v1?bench_case=users-public&amp;vg_users_public=1",
+              "Yes",
+              "Valid",
+              "Yes",
+              "Valid"
+            ]
+          ]
+        },
+        "replay_statuses": [
+          {
+            "id": 110,
+            "type": 13,
+            "status": 200
+          },
+          {
+            "id": 111,
+            "type": 13,
+            "status": 200
+          }
+        ]
+      },
+      {
+        "case": "debug-anonymous",
+        "expect": "deny",
+        "label_violation": true,
+        "actor": "anonymous",
+        "users": [
+          "anonymous",
+          "alice"
+        ],
+        "rules": {
+          "anonymous": "DENIED",
+          "alice": "DENIED"
+        },
+        "ground_truth_status": 200,
+        "ground_truth_violation": true,
+        "seed_status": 200,
+        "rules_applied": 8,
+        "scan_status": "NOT RUNNING",
+        "scan_seconds": 0.21,
+        "report": "zap\\vampi-protected-r2\\debug-anonymous.html",
+        "report_rows": {
+          "header": [
+            "",
+            "",
+            "&lt;&lt; Unauthenticated &gt;&gt;",
+            "alice",
+            "Method",
+            "URL",
+            "Authorized?",
+            "Access Control",
+            "Authorized?",
+            "Access Control"
+          ],
+          "rows": [
+            [
+              "GET",
+              "http://host.docker.internal:5102/users/v1/_debug?bench_case=debug-anonymous&amp;vg_debug_anonymous=1",
+              "Yes",
+              "Invalid",
+              "Yes",
+              "Invalid"
+            ]
+          ]
+        },
+        "replay_statuses": [
+          {
+            "id": 116,
+            "type": 13,
+            "status": 200
+          },
+          {
+            "id": 117,
+            "type": 13,
+            "status": 200
+          }
+        ]
+      },
+      {
+        "case": "debug-peer",
+        "expect": "deny",
+        "label_violation": true,
+        "actor": "bob",
+        "users": [
+          "bob"
+        ],
+        "rules": {
+          "bob": "DENIED"
+        },
+        "ground_truth_status": 200,
+        "ground_truth_violation": true,
+        "seed_status": 200,
+        "rules_applied": 4,
+        "scan_status": "NOT RUNNING",
+        "scan_seconds": 0.03,
+        "report": "zap\\vampi-protected-r2\\debug-peer.html",
+        "report_rows": {
+          "header": [
+            "",
+            "",
+            "bob",
+            "Method",
+            "URL",
+            "Authorized?",
+            "Access Control"
+          ],
+          "rows": [
+            [
+              "GET",
+              "http://host.docker.internal:5102/users/v1/_debug?bench_case=debug-peer&amp;vg_debug_peer=1",
+              "Yes",
+              "Invalid"
+            ]
+          ]
+        },
+        "replay_statuses": [
+          {
+            "id": 122,
+            "type": 13,
+            "status": 200
+          }
+        ]
+      },
+      {
+        "case": "password-peer",
+        "expect": "deny",
+        "label_violation": false,
+        "actor": "bob",
+        "users": [
+          "bob",
+          "alice"
+        ],
+        "rules": {
+          "bob": "DENIED",
+          "alice": "ALLOWED"
+        },
+        "ground_truth_status": 204,
+        "ground_truth_violation": false,
+        "seed_status": 401,
+        "rules_applied": 10,
+        "scan_status": "NOT RUNNING",
+        "scan_seconds": 0.24,
+        "report": "zap\\vampi-protected-r2\\password-peer.html",
+        "report_rows": {
+          "header": [
+            "",
+            "",
+            "bob",
+            "alice",
+            "Method",
+            "URL",
+            "Authorized?",
+            "Access Control",
+            "Authorized?",
+            "Access Control"
+          ],
+          "rows": [
+            [
+              "PUT",
+              "http://host.docker.internal:5102/users/v1/gate_alice/password?bench_case=password-peer&amp;vg_password_peer=1",
+              "Yes",
+              "Invalid",
+              "Yes",
+              "Valid"
+            ]
+          ]
+        },
+        "replay_statuses": [
+          {
+            "id": 128,
+            "type": 13,
+            "status": 204
+          },
+          {
+            "id": 129,
+            "type": 13,
+            "status": 204
+          }
+        ]
+      },
+      {
+        "case": "password-owner",
+        "expect": "allow",
+        "label_violation": false,
+        "actor": "alice",
+        "users": [
+          "alice"
+        ],
+        "rules": {
+          "alice": "ALLOWED"
+        },
+        "ground_truth_status": 204,
+        "ground_truth_violation": false,
+        "seed_status": 401,
+        "rules_applied": 5,
+        "scan_status": "NOT RUNNING",
+        "scan_seconds": 0.23,
+        "report": "zap\\vampi-protected-r2\\password-owner.html",
+        "report_rows": {
+          "header": [
+            "",
+            "",
+            "alice",
+            "Method",
+            "URL",
+            "Authorized?",
+            "Access Control"
+          ],
+          "rows": [
+            [
+              "PUT",
+              "http://host.docker.internal:5102/users/v1/gate_alice/password?bench_case=password-owner&amp;vg_password_owner=1",
+              "Yes",
+              "Valid"
+            ]
+          ]
+        },
+        "replay_statuses": [
+          {
+            "id": 135,
+            "type": 13,
+            "status": 204
+          }
+        ]
+      },
+      {
+        "case": "password-anonymous",
+        "expect": "deny",
+        "label_violation": false,
+        "actor": "anonymous",
+        "users": [
+          "anonymous",
+          "alice"
+        ],
+        "rules": {
+          "anonymous": "DENIED",
+          "alice": "ALLOWED"
+        },
+        "ground_truth_status": 401,
+        "ground_truth_violation": false,
+        "seed_status": 401,
+        "rules_applied": 10,
+        "scan_status": "NOT RUNNING",
+        "scan_seconds": 0.26,
+        "report": "zap\\vampi-protected-r2\\password-anonymous.html",
+        "report_rows": {
+          "header": [
+            "",
+            "",
+            "&lt;&lt; Unauthenticated &gt;&gt;",
+            "alice",
+            "Method",
+            "URL",
+            "Authorized?",
+            "Access Control",
+            "Authorized?",
+            "Access Control"
+          ],
+          "rows": [
+            [
+              "PUT",
+              "http://host.docker.internal:5102/users/v1/gate_alice/password?bench_case=password-anonymous&amp;vg_password_anonymous=1",
+              "Yes",
+              "Invalid",
+              "Yes",
+              "Valid"
+            ]
+          ]
+        },
+        "replay_statuses": [
+          {
+            "id": 141,
+            "type": 13,
+            "status": 204
+          },
+          {
+            "id": 142,
+            "type": 13,
+            "status": 401
+          }
+        ]
+      },
+      {
+        "case": "email-peer",
+        "expect": "deny",
+        "label_violation": false,
+        "actor": "bob",
+        "users": [
+          "bob",
+          "alice"
+        ],
+        "rules": {
+          "bob": "DENIED",
+          "alice": "ALLOWED"
+        },
+        "ground_truth_status": 204,
+        "ground_truth_violation": false,
+        "seed_status": 401,
+        "rules_applied": 10,
+        "scan_status": "NOT RUNNING",
+        "scan_seconds": 0.21,
+        "report": "zap\\vampi-protected-r2\\email-peer.html",
+        "report_rows": {
+          "header": [
+            "",
+            "",
+            "bob",
+            "alice",
+            "Method",
+            "URL",
+            "Authorized?",
+            "Access Control",
+            "Authorized?",
+            "Access Control"
+          ],
+          "rows": [
+            [
+              "PUT",
+              "http://host.docker.internal:5102/users/v1/gate_alice/email?bench_case=email-peer&amp;vg_email_peer=1",
+              "Yes",
+              "Invalid",
+              "Yes",
+              "Valid"
+            ]
+          ]
+        },
+        "replay_statuses": [
+          {
+            "id": 148,
+            "type": 13,
+            "status": 204
+          },
+          {
+            "id": 149,
+            "type": 13,
+            "status": 204
+          }
+        ]
+      },
+      {
+        "case": "email-owner",
+        "expect": "allow",
+        "label_violation": false,
+        "actor": "alice",
+        "users": [
+          "alice"
+        ],
+        "rules": {
+          "alice": "ALLOWED"
+        },
+        "ground_truth_status": 204,
+        "ground_truth_violation": false,
+        "seed_status": 401,
+        "rules_applied": 5,
+        "scan_status": "NOT RUNNING",
+        "scan_seconds": 0.21,
+        "report": "zap\\vampi-protected-r2\\email-owner.html",
+        "report_rows": {
+          "header": [
+            "",
+            "",
+            "alice",
+            "Method",
+            "URL",
+            "Authorized?",
+            "Access Control"
+          ],
+          "rows": [
+            [
+              "PUT",
+              "http://host.docker.internal:5102/users/v1/gate_alice/email?bench_case=email-owner&amp;vg_email_owner=1",
+              "Yes",
+              "Valid"
+            ]
+          ]
+        },
+        "replay_statuses": [
+          {
+            "id": 155,
+            "type": 13,
+            "status": 204
+          }
+        ]
+      },
+      {
+        "case": "delete-peer",
+        "expect": "deny",
+        "label_violation": false,
+        "actor": "bob",
+        "users": [
+          "bob",
+          "admin"
+        ],
+        "rules": {
+          "bob": "DENIED",
+          "admin": "ALLOWED"
+        },
+        "ground_truth_status": 401,
+        "ground_truth_violation": false,
+        "seed_status": 401,
+        "rules_applied": 8,
+        "scan_status": "NOT RUNNING",
+        "scan_seconds": 0.25,
+        "report": "zap\\vampi-protected-r2\\delete-peer.html",
+        "report_rows": {
+          "header": [
+            "",
+            "",
+            "bob",
+            "admin",
+            "Method",
+            "URL",
+            "Authorized?",
+            "Access Control",
+            "Authorized?",
+            "Access Control"
+          ],
+          "rows": [
+            [
+              "DELETE",
+              "http://host.docker.internal:5102/users/v1/gate_carol?bench_case=delete-peer&amp;vg_delete_peer=1",
+              "No",
+              "Valid",
+              "Yes",
+              "Valid"
+            ]
+          ]
+        },
+        "replay_statuses": [
+          {
+            "id": 160,
+            "type": 13,
+            "status": 401
+          },
+          {
+            "id": 161,
+            "type": 13,
+            "status": 200
+          }
+        ]
+      },
+      {
+        "case": "delete-admin",
+        "expect": "allow",
+        "label_violation": false,
+        "actor": "admin",
+        "users": [
+          "admin"
+        ],
+        "rules": {
+          "admin": "ALLOWED"
+        },
+        "ground_truth_status": 200,
+        "ground_truth_violation": false,
+        "seed_status": 401,
+        "rules_applied": 4,
+        "scan_status": "NOT RUNNING",
+        "scan_seconds": 0.21,
+        "report": "zap\\vampi-protected-r2\\delete-admin.html",
+        "report_rows": {
+          "header": [
+            "",
+            "",
+            "admin",
+            "Method",
+            "URL",
+            "Authorized?",
+            "Access Control"
+          ],
+          "rows": [
+            [
+              "DELETE",
+              "http://host.docker.internal:5102/users/v1/gate_carol?bench_case=delete-admin&amp;vg_delete_admin=1",
+              "Yes",
+              "Valid"
+            ]
+          ]
+        },
+        "replay_statuses": [
+          {
+            "id": 166,
+            "type": 13,
+            "status": 200
+          }
+        ]
+      }
+    ],
+    [
+      {
+        "case": "book-owner",
+        "expect": "allow",
+        "label_violation": false,
+        "actor": "alice",
+        "users": [
+          "alice"
+        ],
+        "rules": {
+          "alice": "ALLOWED"
+        },
+        "ground_truth_status": 200,
+        "ground_truth_violation": false,
+        "seed_status": 401,
+        "rules_applied": 4,
+        "scan_status": "NOT RUNNING",
+        "scan_seconds": 0.23,
+        "report": "zap\\vampi-protected-r3\\book-owner.html",
+        "report_rows": {
+          "header": [
+            "",
+            "",
+            "alice",
+            "Method",
+            "URL",
+            "Authorized?",
+            "Access Control"
+          ],
+          "rows": [
+            [
+              "GET",
+              "http://host.docker.internal:5102/books/v1/gate-alice-book?bench_case=book-owner&amp;vg_book_owner=1",
+              "Yes",
+              "Valid"
+            ]
+          ]
+        },
+        "replay_statuses": [
+          {
+            "id": 171,
+            "type": 13,
+            "status": 200
+          }
+        ]
+      },
+      {
+        "case": "book-peer",
+        "expect": "deny",
+        "label_violation": false,
+        "actor": "bob",
+        "users": [
+          "bob",
+          "alice"
+        ],
+        "rules": {
+          "bob": "DENIED",
+          "alice": "ALLOWED"
+        },
+        "ground_truth_status": 404,
+        "ground_truth_violation": false,
+        "seed_status": 401,
+        "rules_applied": 8,
+        "scan_status": "NOT RUNNING",
+        "scan_seconds": 0.22,
+        "report": "zap\\vampi-protected-r3\\book-peer.html",
+        "report_rows": {
+          "header": [
+            "",
+            "",
+            "bob",
+            "alice",
+            "Method",
+            "URL",
+            "Authorized?",
+            "Access Control",
+            "Authorized?",
+            "Access Control"
+          ],
+          "rows": [
+            [
+              "GET",
+              "http://host.docker.internal:5102/books/v1/gate-alice-book?bench_case=book-peer&amp;vg_book_peer=1",
+              "No",
+              "Valid",
+              "Yes",
+              "Valid"
+            ]
+          ]
+        },
+        "replay_statuses": [
+          {
+            "id": 176,
+            "type": 13,
+            "status": 404
+          },
+          {
+            "id": 177,
+            "type": 13,
+            "status": 200
+          }
+        ]
+      },
+      {
+        "case": "book-admin",
+        "expect": "deny",
+        "label_violation": false,
+        "actor": "admin",
+        "users": [
+          "admin",
+          "alice"
+        ],
+        "rules": {
+          "admin": "DENIED",
+          "alice": "ALLOWED"
+        },
+        "ground_truth_status": 404,
+        "ground_truth_violation": false,
+        "seed_status": 401,
+        "rules_applied": 8,
+        "scan_status": "NOT RUNNING",
+        "scan_seconds": 0.23,
+        "report": "zap\\vampi-protected-r3\\book-admin.html",
+        "report_rows": {
+          "header": [
+            "",
+            "",
+            "admin",
+            "alice",
+            "Method",
+            "URL",
+            "Authorized?",
+            "Access Control",
+            "Authorized?",
+            "Access Control"
+          ],
+          "rows": [
+            [
+              "GET",
+              "http://host.docker.internal:5102/books/v1/gate-alice-book?bench_case=book-admin&amp;vg_book_admin=1",
+              "No",
+              "Valid",
+              "Yes",
+              "Valid"
+            ]
+          ]
+        },
+        "replay_statuses": [
+          {
+            "id": 182,
+            "type": 13,
+            "status": 404
+          },
+          {
+            "id": 183,
+            "type": 13,
+            "status": 200
+          }
+        ]
+      },
+      {
+        "case": "book-anonymous",
+        "expect": "deny",
+        "label_violation": false,
+        "actor": "anonymous",
+        "users": [
+          "anonymous",
+          "alice"
+        ],
+        "rules": {
+          "anonymous": "DENIED",
+          "alice": "ALLOWED"
+        },
+        "ground_truth_status": 401,
+        "ground_truth_violation": false,
+        "seed_status": 401,
+        "rules_applied": 8,
+        "scan_status": "NOT RUNNING",
+        "scan_seconds": 0.21,
+        "report": "zap\\vampi-protected-r3\\book-anonymous.html",
+        "report_rows": {
+          "header": [
+            "",
+            "",
+            "&lt;&lt; Unauthenticated &gt;&gt;",
+            "alice",
+            "Method",
+            "URL",
+            "Authorized?",
+            "Access Control",
+            "Authorized?",
+            "Access Control"
+          ],
+          "rows": [
+            [
+              "GET",
+              "http://host.docker.internal:5102/books/v1/gate-alice-book?bench_case=book-anonymous&amp;vg_book_anonymous=1",
+              "Yes",
+              "Invalid",
+              "Yes",
+              "Valid"
+            ]
+          ]
+        },
+        "replay_statuses": [
+          {
+            "id": 188,
+            "type": 13,
+            "status": 200
+          },
+          {
+            "id": 189,
+            "type": 13,
+            "status": 401
+          }
+        ]
+      },
+      {
+        "case": "users-public",
+        "expect": "allow",
+        "label_violation": false,
+        "actor": "anonymous",
+        "users": [
+          "anonymous",
+          "alice"
+        ],
+        "rules": {
+          "anonymous": "ALLOWED",
+          "alice": "ALLOWED"
+        },
+        "ground_truth_status": 200,
+        "ground_truth_violation": false,
+        "seed_status": 200,
+        "rules_applied": 6,
+        "scan_status": "NOT RUNNING",
+        "scan_seconds": 0.22,
+        "report": "zap\\vampi-protected-r3\\users-public.html",
+        "report_rows": {
+          "header": [
+            "",
+            "",
+            "&lt;&lt; Unauthenticated &gt;&gt;",
+            "alice",
+            "Method",
+            "URL",
+            "Authorized?",
+            "Access Control",
+            "Authorized?",
+            "Access Control"
+          ],
+          "rows": [
+            [
+              "GET",
+              "http://host.docker.internal:5102/users/v1?bench_case=users-public&amp;vg_users_public=1",
+              "Yes",
+              "Valid",
+              "Yes",
+              "Valid"
+            ]
+          ]
+        },
+        "replay_statuses": [
+          {
+            "id": 193,
+            "type": 13,
+            "status": 200
+          },
+          {
+            "id": 194,
+            "type": 13,
+            "status": 200
+          }
+        ]
+      },
+      {
+        "case": "debug-anonymous",
+        "expect": "deny",
+        "label_violation": true,
+        "actor": "anonymous",
+        "users": [
+          "anonymous",
+          "alice"
+        ],
+        "rules": {
+          "anonymous": "DENIED",
+          "alice": "DENIED"
+        },
+        "ground_truth_status": 200,
+        "ground_truth_violation": true,
+        "seed_status": 200,
+        "rules_applied": 8,
+        "scan_status": "NOT RUNNING",
+        "scan_seconds": 0.25,
+        "report": "zap\\vampi-protected-r3\\debug-anonymous.html",
+        "report_rows": {
+          "header": [
+            "",
+            "",
+            "&lt;&lt; Unauthenticated &gt;&gt;",
+            "alice",
+            "Method",
+            "URL",
+            "Authorized?",
+            "Access Control",
+            "Authorized?",
+            "Access Control"
+          ],
+          "rows": [
+            [
+              "GET",
+              "http://host.docker.internal:5102/users/v1/_debug?bench_case=debug-anonymous&amp;vg_debug_anonymous=1",
+              "Yes",
+              "Invalid",
+              "Yes",
+              "Invalid"
+            ]
+          ]
+        },
+        "replay_statuses": [
+          {
+            "id": 199,
+            "type": 13,
+            "status": 200
+          },
+          {
+            "id": 200,
+            "type": 13,
+            "status": 200
+          }
+        ]
+      },
+      {
+        "case": "debug-peer",
+        "expect": "deny",
+        "label_violation": true,
+        "actor": "bob",
+        "users": [
+          "bob"
+        ],
+        "rules": {
+          "bob": "DENIED"
+        },
+        "ground_truth_status": 200,
+        "ground_truth_violation": true,
+        "seed_status": 200,
+        "rules_applied": 4,
+        "scan_status": "NOT RUNNING",
+        "scan_seconds": 0.02,
+        "report": "zap\\vampi-protected-r3\\debug-peer.html",
+        "report_rows": {
+          "header": [
+            "",
+            "",
+            "bob",
+            "Method",
+            "URL",
+            "Authorized?",
+            "Access Control"
+          ],
+          "rows": [
+            [
+              "GET",
+              "http://host.docker.internal:5102/users/v1/_debug?bench_case=debug-peer&amp;vg_debug_peer=1",
+              "Yes",
+              "Invalid"
+            ]
+          ]
+        },
+        "replay_statuses": [
+          {
+            "id": 205,
+            "type": 13,
+            "status": 200
+          }
+        ]
+      },
+      {
+        "case": "password-peer",
+        "expect": "deny",
+        "label_violation": false,
+        "actor": "bob",
+        "users": [
+          "bob",
+          "alice"
+        ],
+        "rules": {
+          "bob": "DENIED",
+          "alice": "ALLOWED"
+        },
+        "ground_truth_status": 204,
+        "ground_truth_violation": false,
+        "seed_status": 401,
+        "rules_applied": 10,
+        "scan_status": "NOT RUNNING",
+        "scan_seconds": 0.21,
+        "report": "zap\\vampi-protected-r3\\password-peer.html",
+        "report_rows": {
+          "header": [
+            "",
+            "",
+            "bob",
+            "alice",
+            "Method",
+            "URL",
+            "Authorized?",
+            "Access Control",
+            "Authorized?",
+            "Access Control"
+          ],
+          "rows": [
+            [
+              "PUT",
+              "http://host.docker.internal:5102/users/v1/gate_alice/password?bench_case=password-peer&amp;vg_password_peer=1",
+              "Yes",
+              "Invalid",
+              "Yes",
+              "Valid"
+            ]
+          ]
+        },
+        "replay_statuses": [
+          {
+            "id": 211,
+            "type": 13,
+            "status": 204
+          },
+          {
+            "id": 212,
+            "type": 13,
+            "status": 204
+          }
+        ]
+      },
+      {
+        "case": "password-owner",
+        "expect": "allow",
+        "label_violation": false,
+        "actor": "alice",
+        "users": [
+          "alice"
+        ],
+        "rules": {
+          "alice": "ALLOWED"
+        },
+        "ground_truth_status": 204,
+        "ground_truth_violation": false,
+        "seed_status": 401,
+        "rules_applied": 5,
+        "scan_status": "NOT RUNNING",
+        "scan_seconds": 0.24,
+        "report": "zap\\vampi-protected-r3\\password-owner.html",
+        "report_rows": {
+          "header": [
+            "",
+            "",
+            "alice",
+            "Method",
+            "URL",
+            "Authorized?",
+            "Access Control"
+          ],
+          "rows": [
+            [
+              "PUT",
+              "http://host.docker.internal:5102/users/v1/gate_alice/password?bench_case=password-owner&amp;vg_password_owner=1",
+              "Yes",
+              "Valid"
+            ]
+          ]
+        },
+        "replay_statuses": [
+          {
+            "id": 218,
+            "type": 13,
+            "status": 204
+          }
+        ]
+      },
+      {
+        "case": "password-anonymous",
+        "expect": "deny",
+        "label_violation": false,
+        "actor": "anonymous",
+        "users": [
+          "anonymous",
+          "alice"
+        ],
+        "rules": {
+          "anonymous": "DENIED",
+          "alice": "ALLOWED"
+        },
+        "ground_truth_status": 401,
+        "ground_truth_violation": false,
+        "seed_status": 401,
+        "rules_applied": 10,
+        "scan_status": "NOT RUNNING",
+        "scan_seconds": 0.21,
+        "report": "zap\\vampi-protected-r3\\password-anonymous.html",
+        "report_rows": {
+          "header": [
+            "",
+            "",
+            "&lt;&lt; Unauthenticated &gt;&gt;",
+            "alice",
+            "Method",
+            "URL",
+            "Authorized?",
+            "Access Control",
+            "Authorized?",
+            "Access Control"
+          ],
+          "rows": [
+            [
+              "PUT",
+              "http://host.docker.internal:5102/users/v1/gate_alice/password?bench_case=password-anonymous&amp;vg_password_anonymous=1",
+              "Yes",
+              "Invalid",
+              "Yes",
+              "Valid"
+            ]
+          ]
+        },
+        "replay_statuses": [
+          {
+            "id": 224,
+            "type": 13,
+            "status": 204
+          },
+          {
+            "id": 225,
+            "type": 13,
+            "status": 401
+          }
+        ]
+      },
+      {
+        "case": "email-peer",
+        "expect": "deny",
+        "label_violation": false,
+        "actor": "bob",
+        "users": [
+          "bob",
+          "alice"
+        ],
+        "rules": {
+          "bob": "DENIED",
+          "alice": "ALLOWED"
+        },
+        "ground_truth_status": 204,
+        "ground_truth_violation": false,
+        "seed_status": 401,
+        "rules_applied": 10,
+        "scan_status": "NOT RUNNING",
+        "scan_seconds": 0.21,
+        "report": "zap\\vampi-protected-r3\\email-peer.html",
+        "report_rows": {
+          "header": [
+            "",
+            "",
+            "bob",
+            "alice",
+            "Method",
+            "URL",
+            "Authorized?",
+            "Access Control",
+            "Authorized?",
+            "Access Control"
+          ],
+          "rows": [
+            [
+              "PUT",
+              "http://host.docker.internal:5102/users/v1/gate_alice/email?bench_case=email-peer&amp;vg_email_peer=1",
+              "Yes",
+              "Invalid",
+              "Yes",
+              "Valid"
+            ]
+          ]
+        },
+        "replay_statuses": [
+          {
+            "id": 231,
+            "type": 13,
+            "status": 204
+          },
+          {
+            "id": 232,
+            "type": 13,
+            "status": 204
+          }
+        ]
+      },
+      {
+        "case": "email-owner",
+        "expect": "allow",
+        "label_violation": false,
+        "actor": "alice",
+        "users": [
+          "alice"
+        ],
+        "rules": {
+          "alice": "ALLOWED"
+        },
+        "ground_truth_status": 204,
+        "ground_truth_violation": false,
+        "seed_status": 401,
+        "rules_applied": 5,
+        "scan_status": "NOT RUNNING",
+        "scan_seconds": 0.22,
+        "report": "zap\\vampi-protected-r3\\email-owner.html",
+        "report_rows": {
+          "header": [
+            "",
+            "",
+            "alice",
+            "Method",
+            "URL",
+            "Authorized?",
+            "Access Control"
+          ],
+          "rows": [
+            [
+              "PUT",
+              "http://host.docker.internal:5102/users/v1/gate_alice/email?bench_case=email-owner&amp;vg_email_owner=1",
+              "Yes",
+              "Valid"
+            ]
+          ]
+        },
+        "replay_statuses": [
+          {
+            "id": 238,
+            "type": 13,
+            "status": 204
+          }
+        ]
+      },
+      {
+        "case": "delete-peer",
+        "expect": "deny",
+        "label_violation": false,
+        "actor": "bob",
+        "users": [
+          "bob",
+          "admin"
+        ],
+        "rules": {
+          "bob": "DENIED",
+          "admin": "ALLOWED"
+        },
+        "ground_truth_status": 401,
+        "ground_truth_violation": false,
+        "seed_status": 401,
+        "rules_applied": 8,
+        "scan_status": "NOT RUNNING",
+        "scan_seconds": 0.21,
+        "report": "zap\\vampi-protected-r3\\delete-peer.html",
+        "report_rows": {
+          "header": [
+            "",
+            "",
+            "bob",
+            "admin",
+            "Method",
+            "URL",
+            "Authorized?",
+            "Access Control",
+            "Authorized?",
+            "Access Control"
+          ],
+          "rows": [
+            [
+              "DELETE",
+              "http://host.docker.internal:5102/users/v1/gate_carol?bench_case=delete-peer&amp;vg_delete_peer=1",
+              "No",
+              "Valid",
+              "Yes",
+              "Valid"
+            ]
+          ]
+        },
+        "replay_statuses": [
+          {
+            "id": 243,
+            "type": 13,
+            "status": 401
+          },
+          {
+            "id": 244,
+            "type": 13,
+            "status": 200
+          }
+        ]
+      },
+      {
+        "case": "delete-admin",
+        "expect": "allow",
+        "label_violation": false,
+        "actor": "admin",
+        "users": [
+          "admin"
+        ],
+        "rules": {
+          "admin": "ALLOWED"
+        },
+        "ground_truth_status": 200,
+        "ground_truth_violation": false,
+        "seed_status": 401,
+        "rules_applied": 4,
+        "scan_status": "NOT RUNNING",
+        "scan_seconds": 0.25,
+        "report": "zap\\vampi-protected-r3\\delete-admin.html",
+        "report_rows": {
+          "header": [
+            "",
+            "",
+            "admin",
+            "Method",
+            "URL",
+            "Authorized?",
+            "Access Control"
+          ],
+          "rows": [
+            [
+              "DELETE",
+              "http://host.docker.internal:5102/users/v1/gate_carol?bench_case=delete-admin&amp;vg_delete_admin=1",
+              "Yes",
+              "Valid"
+            ]
+          ]
+        },
+        "replay_statuses": [
+          {
+            "id": 249,
+            "type": 13,
+            "status": 200
+          }
+        ]
+      }
+    ]
+  ],
+  "finished_at": "2026-10-25T19:18:53Z"
+}

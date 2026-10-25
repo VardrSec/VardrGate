@@ -34,6 +34,9 @@ type Policy struct {
 // observes the target's state before and after each identity's request. The
 // role must not appear in expect, so the reader never performs the write.
 type VerifySpec struct {
+	Strategy          string           `yaml:"strategy"`
+	AfterStatus       []int            `yaml:"after_status"`
+	Reset             *SetupSpec       `yaml:"reset"`
 	Environment       string           `yaml:"environment"`
 	As                string           `yaml:"as"`
 	Request           SetupRequestSpec `yaml:"request"`
@@ -668,11 +671,21 @@ func (p Policy) compileVerify(b Bindings) ([]model.Identity, *model.WriteVerific
 		}
 	}
 	wv := &model.WriteVerification{
+		Strategy:          p.Verify.Strategy,
+		AfterStatus:       p.Verify.AfterStatus,
 		Environment:       p.Verify.Environment,
 		Identity:          *verifier,
 		Request:           vreq,
 		AllowUnsafeMethod: p.Verify.AllowUnsafeMethod,
 		JSONPointer:       p.Verify.JSONPointer,
+	}
+	if p.Verify.Reset != nil {
+		resetPolicy := Policy{Setup: []SetupSpec{*p.Verify.Reset}}
+		steps, err := resetPolicy.compileSetup(b)
+		if err != nil {
+			return nil, nil, fmt.Errorf("verify.reset: %w", err)
+		}
+		wv.Reset = &steps[0]
 	}
 	if p.Verify.ChangedTo.Kind != 0 {
 		if wv.ChangedTo, err = nodeJSON(&p.Verify.ChangedTo); err != nil {

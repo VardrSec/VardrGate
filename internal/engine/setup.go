@@ -119,6 +119,26 @@ func applySetupVars(tc model.AuthorizationTestCase, vars map[string]string) (mod
 		identities[i].Credential.Value = value
 	}
 	tc.Identities = identities
+	if tc.WriteVerification != nil {
+		wv := *tc.WriteVerification
+		wv.Request, err = substituteRequest(wv.Request, vars)
+		if err != nil {
+			return tc, fmt.Errorf("verification request substitution failed")
+		}
+		wv.Identity.Credential.Value, err = substitute(wv.Identity.Credential.Value, vars)
+		if err != nil {
+			return tc, fmt.Errorf("verification credential substitution failed")
+		}
+		if wv.Reset != nil {
+			reset := *wv.Reset
+			reset.Request, err = substituteRequest(reset.Request, vars)
+			if err != nil {
+				return tc, fmt.Errorf("verification reset substitution failed")
+			}
+			wv.Reset = &reset
+		}
+		tc.WriteVerification = &wv
+	}
 
 	if tc.Resource != nil {
 		res := *tc.Resource

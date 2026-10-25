@@ -1,0 +1,320 @@
+{
+  "schema_version": 1,
+  "note": "Competitor mapping for the frozen corpora, written before any competitor run. 'original' is the identity whose request is sent through the Burp proxy for replay tools (Autorize, Auth Analyzer); the case actor is the identity the tool must judge. 'authorized' is the full per-request policy AuthMatrix needs, derived from the same authorization_rules as the corpus. 'success_regex' is AuthMatrix's success marker, built from the same allow evidence given to VardrGate's assertion profile. Ground truth is the corpus label, which the VardrGate harnesses verify against the target's real effect on every run.",
+  "verdict_mapping": {
+    "note": "Pre-registered before results. Primary mapping counts only an explicit bypass as a finding; the sensitivity mapping also counts the tool's uncertain bucket as a finding.",
+    "autorize": {
+      "Bypassed!": "finding",
+      "Is enforced??? (please configure enforcement detector)": "inconclusive",
+      "Enforced!": "denied",
+      "sensitivity": {
+        "Is enforced??? (please configure enforcement detector)": "finding"
+      }
+    },
+    "auth_analyzer": {
+      "SAME": "finding",
+      "SIMILAR": "inconclusive",
+      "DIFFERENT": "denied",
+      "N/A": "inconclusive",
+      "sensitivity": {
+        "SIMILAR": "finding"
+      }
+    },
+    "authmatrix": {
+      "role result false (red) for the actor's role": "finding",
+      "role result true (green)": "conclusive_pass"
+    },
+    "zap_access_control": {
+      "note": "Pre-registered 2026-10-25 before any ZAP run. ZAP judges each user's replay against a per-user allow/deny rule; it does not compare with an original. Result per (node, user): VALID / ILLEGAL / UNKNOWN.",
+      "deny-expected row": {
+        "ILLEGAL": "finding",
+        "VALID": "denied",
+        "UNKNOWN": "inconclusive"
+      },
+      "allow-expected row": {
+        "VALID": "conclusive_pass",
+        "ILLEGAL": "false alarm (allowed identity judged unauthorized)",
+        "UNKNOWN": "inconclusive"
+      },
+      "no result row for the scored identity": "NOT TESTED"
+    }
+  },
+  "scoring_rules": {
+    "note": "Pre-registered 2026-10-25 before any competitor export existed.",
+    "matching": "A row is identified by its bench_case query value plus the tool's identity column (Autorize user / Unauthenticated, Auth Analyzer session, AuthMatrix single-user role). A corpus row with no matching tool row is NOT TESTED.",
+    "identity_gate": "Take the scored actor's replay HTTP status from the tool's saved state or response data, and compare it with that actor's ground-truth status for the same case/mode in reports/*-612fa42.json (harness ground_truth). On a mismatch the row is a configuration error, scored NOT TESTED, never FN or FP. Exception: dead-token passes, where the actor's 401 is the condition under test. If the status is unavailable from an export, the row is scored but flagged 'identity unverified'.",
+    "originals": "In proxy passes, a row whose original request returned 401 (proxy log original_status) is NOT TESTED.",
+    "rows_compared": "Competitive metrics use only deny-expected rows that every compared tool actually ran (AuthZLab + VAmPI). Allow-expected rows are reported for VardrGate and AuthMatrix only. Autorize and Auth Analyzer treat those requests as originals and do not assess them.",
+    "inconclusive": "Inconclusive never counts as detection or as a true negative. An inconclusive known failure is a miss.",
+    "dead_token_axis": "Dead-token passes are scored on one question for every tool, VardrGate included: would a reader conclude the endpoint is protected? 'silent pass' = the tool reports enforced/denied/green. 'flagged' = the tool reports inconclusive, not tested, or a credential problem. TP/FN are not used on this axis.",
+    "extra_alarms": "Alarms raised for identities other than the scored actor (e.g. AuthMatrix rows for other roles) are counted and reported separately as noise, not as FP of the scored row."
+  },
+  "gate_paired_configuration": {
+    "note": "Pre-registered before competitor results. Replay tools always see an authorized original next to the actor, and that original acts as a positive control. To give VardrGate the same identities, a separately labeled run adds plan 'original' as an allow-expected identity, only where the original is in that case's 'authorized' list. Run with and without verify, scoring only the actor row. Gate orders deny-expected identities first (docs/write-verification.md). The frozen single-actor runs stay unchanged and are reported too.",
+    "excluded": [
+      "mass-assign-status",
+      "approve-xtenant",
+      "debug-anonymous",
+      "debug-peer"
+    ]
+  },
+  "apps": {
+    "authzlab": {
+      "corpus": "corpus-authzlab.json",
+      "users": [
+        "anonymous",
+        "diana",
+        "charlie",
+        "bob",
+        "alice",
+        "eve"
+      ],
+      "replay_users": [
+        "charlie",
+        "alice",
+        "diana",
+        "bob"
+      ],
+      "deny_markers": [
+        "\"title\":\"Not Found\"",
+        "\"title\":\"Forbidden\"",
+        "\"title\":\"Business Rule Violation\"",
+        "\"title\":\"Authentication Failed\""
+      ],
+      "cases": {
+        "read-owner": {
+          "original": "eve",
+          "authorized": [
+            "eve"
+          ],
+          "success_regex": "\"id\":\"{E}\""
+        },
+        "read-xtenant-member": {
+          "original": "eve",
+          "authorized": [
+            "eve"
+          ],
+          "success_regex": "\"id\":\"{E}\""
+        },
+        "read-xtenant-admin": {
+          "original": "eve",
+          "authorized": [
+            "eve"
+          ],
+          "success_regex": "\"id\":\"{E}\""
+        },
+        "read-member-peer": {
+          "original": "charlie",
+          "authorized": [
+            "charlie",
+            "bob",
+            "alice"
+          ],
+          "success_regex": "\"id\":\"{C}\""
+        },
+        "read-approver": {
+          "original": "bob",
+          "authorized": [
+            "charlie",
+            "bob",
+            "alice"
+          ],
+          "success_regex": "\"id\":\"{C}\""
+        },
+        "read-anonymous": {
+          "original": "eve",
+          "authorized": [
+            "eve"
+          ],
+          "success_regex": "\"id\":\"{E}\""
+        },
+        "list-xtenant": {
+          "original": "eve",
+          "authorized": [
+            "eve"
+          ],
+          "success_regex": "\"id\":\"{E}\""
+        },
+        "approve-member": {
+          "original": "alice",
+          "authorized": [
+            "alice"
+          ],
+          "success_regex": "\"status\":\"approved\""
+        },
+        "approve-legit": {
+          "original": "bob",
+          "authorized": [
+            "bob",
+            "alice"
+          ],
+          "success_regex": "\"status\":\"approved\""
+        },
+        "approve-self": {
+          "original": "alice",
+          "authorized": [
+            "alice"
+          ],
+          "success_regex": "\"status\":\"approved\""
+        },
+        "approve-xtenant": {
+          "original": "eve",
+          "authorized": [],
+          "success_regex": "\"status\":\"approved\""
+        },
+        "patch-owner": {
+          "original": "charlie",
+          "authorized": [
+            "charlie",
+            "bob",
+            "alice"
+          ],
+          "success_regex": "\"description\":\"gate-desc-owner\""
+        },
+        "patch-xtenant": {
+          "original": "eve",
+          "authorized": [
+            "eve"
+          ],
+          "success_regex": "\"description\":\"gate-desc-xtenant\""
+        },
+        "mass-assign-status": {
+          "original": null,
+          "authorized": [],
+          "success_regex": "\"status\":\"approved\"",
+          "replay_tools": "not applicable: the violation is the same identity sending a forbidden property, so there is no second identity to swap in"
+        }
+      }
+    },
+    "vampi": {
+      "corpus": "corpus.json",
+      "users": [
+        "anonymous",
+        "bob",
+        "alice",
+        "admin"
+      ],
+      "replay_users": [
+        "bob",
+        "admin"
+      ],
+      "deny_markers": [
+        "Book not found!",
+        "Invalid token. Please log in again.",
+        "Only Admins may delete users!"
+      ],
+      "cases": {
+        "book-owner": {
+          "original": "alice",
+          "authorized": [
+            "alice"
+          ],
+          "success_regex": "gate-secret-alice-7f3a"
+        },
+        "book-peer": {
+          "original": "alice",
+          "authorized": [
+            "alice"
+          ],
+          "success_regex": "gate-secret-alice-7f3a"
+        },
+        "book-admin": {
+          "original": "alice",
+          "authorized": [
+            "alice"
+          ],
+          "success_regex": "gate-secret-alice-7f3a"
+        },
+        "book-anonymous": {
+          "original": "alice",
+          "authorized": [
+            "alice"
+          ],
+          "success_regex": "gate-secret-alice-7f3a"
+        },
+        "users-public": {
+          "original": "alice",
+          "authorized": [
+            "anonymous",
+            "bob",
+            "alice",
+            "admin"
+          ],
+          "success_regex": "name1"
+        },
+        "debug-anonymous": {
+          "original": "admin",
+          "authorized": [],
+          "success_regex": "alice-pass-1"
+        },
+        "debug-peer": {
+          "original": "admin",
+          "authorized": [],
+          "success_regex": "alice-pass-1"
+        },
+        "password-peer": {
+          "original": "alice",
+          "authorized": [
+            "alice"
+          ],
+          "success_regex": "^HTTP/1\\.[01] 204"
+        },
+        "password-owner": {
+          "original": "alice",
+          "authorized": [
+            "alice"
+          ],
+          "success_regex": "^HTTP/1\\.[01] 204"
+        },
+        "password-anonymous": {
+          "original": "alice",
+          "authorized": [
+            "alice"
+          ],
+          "success_regex": "^HTTP/1\\.[01] 204"
+        },
+        "email-peer": {
+          "original": "alice",
+          "authorized": [
+            "alice"
+          ],
+          "success_regex": "^HTTP/1\\.[01] 204"
+        },
+        "email-owner": {
+          "original": "alice",
+          "authorized": [
+            "alice"
+          ],
+          "success_regex": "^HTTP/1\\.[01] 204"
+        },
+        "delete-peer": {
+          "original": "admin",
+          "authorized": [
+            "admin"
+          ],
+          "success_regex": "^HTTP/1\\.[01] 200"
+        },
+        "delete-admin": {
+          "original": "admin",
+          "authorized": [
+            "admin"
+          ],
+          "success_regex": "^HTTP/1\\.[01] 200"
+        }
+      }
+    }
+  },
+  "zap_configuration": {
+    "note": "Pre-registered 2026-10-25 before any ZAP run. Chosen so ZAP sees the same identities, tokens, requests and deny evidence as the other tools.",
+    "image": "zaproxy/zap-stable:2.17.0@sha256:5ccfff9a411743ab2615136a2edd7416bec9ce41572fa94e935df38c14adb2b6",
+    "addon": "accessControl 13.0.0 from the ZAP marketplace, installed inside the disposable container; the run aborts on any other version",
+    "users_per_case": "The case actor, plus the plan 'original' as a positive control when it is a different identity and is in 'authorized' (same as gate_paired_configuration). Actor first, so on writes the actor acts before the control. ZAP always replays the unauthenticated user last.",
+    "rules": "Every ZAP user gets ALLOWED if it is in the case's 'authorized' list, else DENIED, set on every node of the case's context. The actor's rule must agree with the corpus 'expect' label or the run aborts.",
+    "authorization_detection": "Basic method: body regex = the app's deny_markers (the same strings given to Autorize), joined with |; no status code; no header regex; OR. ZAP accepts one status code only, so no status-only variant equivalent to VardrGate's status profile can be expressed.",
+    "credentials": "Manual authentication. An httpsender script sets 'Authorization: Bearer <token>' for each ZAP user from the same session tokens the other tools get, and removes Authorization from the unauthenticated replay (otherwise ZAP resends the seeded request's own header). Applies only to Access Control scanner traffic.",
+    "seeding": "ZAP needs each request in its Sites tree before it can replay it. Each case is seeded with one unauthenticated request through ZAP's proxy (rejected, so no state change), because ZAP's decision does not use the seeding response. One fresh ZAP session and context per case, include regex = the case's exact URL.",
+    "cases": "All 14 AuthZLab cases, including mass-assign-status and approve-xtenant: ZAP judges by rule, so it does not need a second identity.",
+    "dead_token_pass": "AuthZLab vulnerable only: charlie's token replaced with the other mode's token (rejected with 401), scored on the dead_token_axis.",
+    "repeats": 3
+  }
+}
