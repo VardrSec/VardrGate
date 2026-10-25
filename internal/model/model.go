@@ -512,6 +512,11 @@ type AuthorizationTestCase struct {
 type WriteVerification struct {
 	Identity Identity        `json:"identity"`
 	Request  RequestTemplate `json:"request"`
+	// Environment declares the reviewed write/read contract: "unknown" keeps
+	// observations inconclusive; "synchronous_isolated" asserts completion and
+	// exclusive fixture access. Empty retains legacy behavior. Gate cannot
+	// establish remote isolation or synchronous visibility itself.
+	Environment string `json:"environment,omitempty"`
 	// AllowUnsafeMethod acknowledges a verifier that uses POST or similar,
 	// such as logging in as the victim, and asserts it changes no state.
 	AllowUnsafeMethod bool `json:"allow_unsafe_method,omitempty"`

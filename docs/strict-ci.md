@@ -64,5 +64,12 @@ credential uncertainty, reviewed authorization expectations and positive write
 controls. Existing jobs/cases/suites default to compatibility behavior unless
 strict settings are supplied.
 
+For write policies, also declare `verify.environment: unknown` unless you have
+reviewed synchronous completion, immediate verifier visibility and exclusive
+fixture access; only then declare `synchronous_isolated`. Identity preflight
+does not establish these properties. Unknown write environments stay
+inconclusive and fail the configured completeness gate. Omitting the field
+retains legacy write assumptions. See [write verification](write-verification.md).
+
 Pinned VAmPI checks exercise the API, JSON CLI, job input and YAML verifier;
 see [interface parity evidence](../benchmarks/strict-ci/README.md).

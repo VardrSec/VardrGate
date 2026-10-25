@@ -91,6 +91,8 @@ func (s summary) headline() string {
 // inconclusiveReasons explains each assessment reason in terms an operator can
 // act on. Reasons are fixed codes from the engine, never response content.
 var inconclusiveReasons = map[string]string{
+	"write_completion_unconfirmed": "the write returned 202 and no effect was observed; completion is unknown, so unchanged state cannot prove denial",
+	"write_environment_unverified": "write timing or isolation is unknown; use a resettable fixture with a reviewed synchronous write/read contract and exclusive access before drawing authorization conclusions",
 	"no_assertion_matched":         "no response assertion matched; the assertion may be stale or the response format changed",
 	"conflicting_assertions":       "both an allow and a deny assertion matched; the assertions contradict each other",
 	"invalid_or_unsupported_json":  "response assertions are configured but the body is not usable JSON",

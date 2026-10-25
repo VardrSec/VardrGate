@@ -17,6 +17,7 @@ expect:
   owner: allow
   peer: deny
 verify:
+  environment: synchronous_isolated # reviewed completion, visibility and exclusive fixture access
   as: auditor                     # a role NOT in expect; bind exactly one identity to it
   request:
     method: GET
@@ -48,6 +49,7 @@ password never appears in results.
 
 ```json
 "write_verification": {
+  "environment": "synchronous_isolated",
   "identity": {"id": "auditor", "credential": {"type": "static_header"}},
   "request": {"method": "GET", "url": "https://api.example.com/users/v1/alice"},
   "json_pointer": "/email",
@@ -59,6 +61,8 @@ password never appears in results.
 
 | Observation | `decision` / `reason` |
 |---|---|
+| Timing or isolation declared `unknown` | `inconclusive` / `write_environment_unverified` |
+| HTTP 202 with no observed effect, even with a working owner control | `inconclusive` / `write_completion_unconfirmed` |
 | State unchanged, with a demonstrated allow-expected write control | `denied` / `state_unchanged` |
 | State unchanged with no allow-expected control | `inconclusive` / `no_positive_control` |
 | State unchanged but the allow-expected control did not demonstrate a write | `inconclusive` / `positive_control_failed` |
@@ -79,6 +83,23 @@ Verification decides the result ahead of response assertions, `deny_status`
 and `deny_when`.
 
 ## Choosing the oracle
+
+Declare `environment: unknown` unless the API's write completes before its
+response, the reader immediately observes the committed state, and the fixture
+is exclusive to this test for the entire case. Only after reviewing those
+conditions use `environment: synchronous_isolated`. Gate does not establish
+these guarantees; two stable reads and a working control do not establish them.
+With `unknown`, even an observed change cannot be attributed to the tested
+identity. More specific verifier/error diagnostics still take precedence.
+Use `--fail-on-inconclusive` in CI so uncertainty cannot produce a passing gate.
+
+Omitting `environment` retains the old behavior for compatibility. It does not
+establish timing or isolation. HTTP 202 with unchanged state is inconclusive
+even in compatibility mode. These settings do not poll for asynchronous jobs;
+a timeout or an observation deadline cannot prove that a write was denied.
+Use a resettable dedicated resource and a fresh, unique attempted value when
+possible. Gate does not provide resource-version checks or remote locking.
+See [ADR 0021](adr/0021-write-environment-assurance.md).
 
 - Read the victim's record, not the caller's own.
 - Prefer a GET that any reviewed reader can make. Avoid oracles that depend

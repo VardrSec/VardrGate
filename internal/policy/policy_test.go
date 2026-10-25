@@ -660,6 +660,25 @@ func TestCompile_Verify(t *testing.T) {
 	}
 }
 
+func TestCompile_VerifyEnvironment(t *testing.T) {
+	for _, environment := range []string{"unknown", "synchronous_isolated", "invalid"} {
+		p, err := Parse([]byte(strings.Replace(verifyPolicy, "as: auditor", "as: auditor\n  environment: "+environment, 1)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		tc, err := p.Compile(verifyBindings())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if tc.WriteVerification.Environment != environment {
+			t.Fatal("policy dropped environment")
+		}
+		if err := engine.Validate(tc); (err != nil) != (environment == "invalid") {
+			t.Fatalf("environment %s: validation %v", environment, err)
+		}
+	}
+}
+
 func TestCompile_VerifyErrors(t *testing.T) {
 	for name, tt := range map[string]struct {
 		doc string

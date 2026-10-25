@@ -109,6 +109,23 @@ func TestEnvSlug(t *testing.T) {
 	}
 }
 
+func TestMarshalCasesPreservesWriteEnvironment(t *testing.T) {
+	for _, environment := range []string{"", "unknown", "synchronous_isolated"} {
+		original := model.AuthorizationTestCase{ID: "write", WriteVerification: &model.WriteVerification{Environment: environment}}
+		b, err := MarshalCases([]model.AuthorizationTestCase{original})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var back []model.AuthorizationTestCase
+		if err := json.Unmarshal(b, &back); err != nil {
+			t.Fatal(err)
+		}
+		if back[0].WriteVerification.Environment != environment {
+			t.Fatal("generated JSON dropped write environment")
+		}
+	}
+}
+
 // wireCase exists to control field order in a generated file. This asserts it
 // is otherwise a faithful mirror of the model, so a field added to the test
 // case cannot be silently dropped on the way to disk.
