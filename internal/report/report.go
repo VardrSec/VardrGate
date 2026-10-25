@@ -107,6 +107,7 @@ var inconclusiveReasons = map[string]string{
 	"write_execution_error":        "the write request failed and no change was observed, so it shows nothing about authorization",
 	"no_positive_control":          "the state was unchanged but no allow-expected identity shows the verifier can see a write; add the owner to the case",
 	"positive_control_failed":      "the state was unchanged, and the allow-expected identity's own write was not observed either; check the verifier path and pointer",
+	"credential_rejected":          "the identity sent credentials and got 401, so its token may be dead or expired; refresh it, add identity preflight, or set unauthorized_is_denial if this API refuses authorization with 401",
 }
 
 // Explain renders an inconclusive assessment as one line of operator guidance.

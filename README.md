@@ -234,6 +234,12 @@ the engine read the object's tenant out of the response body, so
 `cross_tenant_access` does not require knowing the target's tenant in advance.
 See [`docs/adr/0007-policy-driven-deny-classification.md`](docs/adr/0007-policy-driven-deny-classification.md).
 
+A 401 to an identity that sent credentials is reported inconclusive
+(`credential_rejected`), not as a correct denial: a dead or expired token gets
+the same answer. If this API refuses authenticated callers with 401, set
+`response.unauthorized_is_denial: true`. Listing 401 in `deny_status` does not
+change this. See [ADR 0019](docs/adr/0019-credential-rejected-denials.md).
+
 ### When the API refuses with a success status
 
 Plenty of APIs answer `200 OK` with an error body instead of a 4xx. Left

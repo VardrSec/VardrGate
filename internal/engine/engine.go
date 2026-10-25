@@ -102,7 +102,7 @@ func InconclusiveReasons() []string {
 		reasonVerifierReadFailed, reasonVerifierDenied, reasonVerifierValueMissing,
 		reasonBaselineMissing, reasonConcurrentChange, reasonTargetAlreadyPresent,
 		reasonChangedUnexpectedly, reasonVerifierStatus, reasonWriteFailed,
-		reasonNoPositiveControl, reasonPositiveControlFailed,
+		reasonNoPositiveControl, reasonPositiveControlFailed, reasonCredentialRejected,
 	}
 }
 
@@ -152,7 +152,9 @@ func (e *Engine) Run(ctx context.Context, tc model.AuthorizationTestCase) (Resul
 		if ea, ok := expectedFor(tc, identity.ID); ok && tc.WriteVerification != nil && ea.Decision != model.AccessDecisionSkip {
 			var a model.Assessment
 			exec, a = e.verifiedExecute(ctx, tc.WriteVerification, identity, req, ea)
-			verified[identity.ID] = a
+			// Before the positive-control guard, so a dead peer token is
+			// reported as such rather than as a verifier problem.
+			verified[identity.ID] = demoteRejectedCredential(tc, identity, exec, a)
 		} else {
 			exec = e.exec.Execute(ctx, identity, req)
 		}
@@ -189,7 +191,7 @@ func (e *Engine) Run(ctx context.Context, tc model.AuthorizationTestCase) (Resul
 
 		assessment, isVerified := verified[identity.ID]
 		if !isVerified {
-			assessment = assess(identity.ID, execByID[identity.ID], ea, hasExpected)
+			assessment = demoteRejectedCredential(tc, identity, execByID[identity.ID], assess(identity.ID, execByID[identity.ID], ea, hasExpected))
 		}
 		result.Assessments = append(result.Assessments, assessment)
 

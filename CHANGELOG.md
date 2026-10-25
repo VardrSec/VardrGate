@@ -70,6 +70,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- A deny-expected identity that sends credentials and gets 401 is now
+  inconclusive (`credential_rejected`) rather than a verified denial, because a
+  dead or expired token produces the same response. This applies to status,
+  assertion and write-verification decisions. Cases where the API refuses
+  authorization with 401 opt out with the new `response.unauthorized_is_denial`
+  (JSON `unauthorized_is_denial`). Listing 401 in `deny_status` behaves exactly
+  as before and does not opt out. Findings are unchanged. See
+  [ADR 0019](docs/adr/0019-credential-rejected-denials.md).
 - Reports now show status-only ambiguous outcomes (for example, an undeclared
   404 on an expected denial) as inconclusive. Findings and exit codes are
   unchanged.

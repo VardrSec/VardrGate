@@ -72,6 +72,7 @@ password never appears in results.
 | No value at `json_pointer` | `inconclusive` / `verifier_value_unavailable` |
 | State changed between the two before-reads | `inconclusive` / `state_changing_concurrently` |
 | State already holds `changed_to` | `inconclusive` / `target_value_already_present` |
+| State unchanged, but the deny-expected identity sent credentials and got 401 | `inconclusive` / `credential_rejected` |
 
 If the before-state cannot be read, the identity's request is not sent.
 Verification decides the result ahead of response assertions, `deny_status`
