@@ -8,6 +8,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `regression save` retains an operator-confirmed unresolved case for the
+  existing runner, with a template hash and literal credential guards. Request,
+  setup, preflight and assertion references bind at execution. See ADR 0025.
+
 - Explicit changed/created/deleted verification strategies, reviewed readback
   status transitions and fixed fixture resets for multiple unknown-value writes.
   Failed readback/reset and consumed baselines remain inconclusive. See ADR 0024.

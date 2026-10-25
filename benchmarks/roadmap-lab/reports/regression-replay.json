@@ -1,0 +1,110 @@
+{
+  "schema_version": 1,
+  "rows": [
+    {
+      "mode": "vulnerable",
+      "phase": "reproduce",
+      "exit": 2,
+      "assessments": [
+        {
+          "identity_id": "bob",
+          "expected_access": "deny",
+          "decision": "allowed",
+          "source": "write_verification",
+          "reason": "state_changed"
+        },
+        {
+          "identity_id": "alice",
+          "expected_access": "allow",
+          "decision": "allowed",
+          "source": "write_verification",
+          "reason": "state_changed"
+        }
+      ],
+      "preflight": [
+        {
+          "identity_id": "bob",
+          "status": "passed",
+          "reason": "identity_verified",
+          "status_code": 200
+        },
+        {
+          "identity_id": "alice",
+          "status": "passed",
+          "reason": "identity_verified",
+          "status_code": 200
+        }
+      ]
+    },
+    {
+      "mode": "protected",
+      "phase": "fixed",
+      "exit": 0,
+      "assessments": [
+        {
+          "identity_id": "bob",
+          "expected_access": "deny",
+          "decision": "denied",
+          "source": "write_verification",
+          "reason": "state_unchanged"
+        },
+        {
+          "identity_id": "alice",
+          "expected_access": "allow",
+          "decision": "allowed",
+          "source": "write_verification",
+          "reason": "state_changed"
+        }
+      ],
+      "preflight": [
+        {
+          "identity_id": "bob",
+          "status": "passed",
+          "reason": "identity_verified",
+          "status_code": 200
+        },
+        {
+          "identity_id": "alice",
+          "status": "passed",
+          "reason": "identity_verified",
+          "status_code": 200
+        }
+      ]
+    },
+    {
+      "mode": "vulnerable",
+      "phase": "reintroduced",
+      "exit": 2,
+      "assessments": [
+        {
+          "identity_id": "bob",
+          "expected_access": "deny",
+          "decision": "allowed",
+          "source": "write_verification",
+          "reason": "state_changed"
+        },
+        {
+          "identity_id": "alice",
+          "expected_access": "allow",
+          "decision": "allowed",
+          "source": "write_verification",
+          "reason": "state_changed"
+        }
+      ],
+      "preflight": [
+        {
+          "identity_id": "bob",
+          "status": "passed",
+          "reason": "identity_verified",
+          "status_code": 200
+        },
+        {
+          "identity_id": "alice",
+          "status": "passed",
+          "reason": "identity_verified",
+          "status_code": 200
+        }
+      ]
+    }
+  ]
+}

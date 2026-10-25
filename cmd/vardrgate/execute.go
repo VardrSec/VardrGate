@@ -693,10 +693,7 @@ func loadCases(path string) ([]model.AuthorizationTestCase, error) {
 	// `gen` writes ${VAR} placeholders into credential values; resolve them here
 	// so a generated suite runs straight from the repository it lives in.
 	for i := range cases {
-		if err := secretref.ExpandIdentities(cases[i].Identities); err != nil {
-			return nil, fmt.Errorf("case %q: %w", cases[i].ID, err)
-		}
-		if err := secretref.ExpandVerification(cases[i].WriteVerification); err != nil {
+		if err := secretref.ExpandCase(&cases[i]); err != nil {
 			return nil, fmt.Errorf("case %q: %w", cases[i].ID, err)
 		}
 	}

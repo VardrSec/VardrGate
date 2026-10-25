@@ -106,6 +106,43 @@ func ExpandRequest(req *model.RequestTemplate) error {
 	return nil
 }
 
+// ExpandCase binds a saved regression template once, before engine validation.
+// Runtime setup captures use {{name}} and remain untouched by this pass.
+func ExpandCase(tc *model.AuthorizationTestCase) error {
+	if err := ExpandIdentities(tc.Identities); err != nil {
+		return err
+	}
+	if err := ExpandVerification(tc.WriteVerification); err != nil {
+		return err
+	}
+	if err := ExpandRequest(&tc.Request); err != nil {
+		return err
+	}
+	for i := range tc.Setup {
+		if err := ExpandRequest(&tc.Setup[i].Request); err != nil {
+			return err
+		}
+	}
+	for i := range tc.ExpectedAccess {
+		for j := range tc.ExpectedAccess[i].ResponseAssertions {
+			rule := &tc.ExpectedAccess[i].ResponseAssertions[j]
+			req := model.RequestTemplate{Body: rule.Equals}
+			if err := ExpandRequest(&req); err != nil {
+				return err
+			}
+			rule.Equals = req.Body
+		}
+	}
+	if tc.WriteVerification != nil && len(tc.WriteVerification.ChangedTo) > 0 {
+		req := model.RequestTemplate{Body: tc.WriteVerification.ChangedTo}
+		if err := ExpandRequest(&req); err != nil {
+			return err
+		}
+		tc.WriteVerification.ChangedTo = req.Body
+	}
+	return nil
+}
+
 func expandStrings(v any) (any, error) {
 	switch t := v.(type) {
 	case string:
@@ -138,6 +175,21 @@ func ExpandIdentities(identities []model.Identity) error {
 			return fmt.Errorf("identity %q: %w", identities[i].ID, err)
 		}
 		identities[i].Credential.Value = expanded
+		if p := identities[i].Preflight; p != nil {
+			copy := *p
+			var err error
+			if copy.URL, err = Expand(p.URL); err != nil {
+				return err
+			}
+			copy.JSONFields = make(map[string]string, len(p.JSONFields))
+			for key, value := range p.JSONFields {
+				copy.JSONFields[key], err = Expand(value)
+				if err != nil {
+					return err
+				}
+			}
+			identities[i].Preflight = &copy
+		}
 	}
 	return nil
 }
