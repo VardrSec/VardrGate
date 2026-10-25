@@ -66,6 +66,8 @@ func main() {
 		err = genTestCases(args[1:])
 	case "coverage":
 		err = reportCoverage(args[1:])
+	case "regression":
+		err = saveRegression(args[1:])
 	case "help", "-h", "--help":
 		usage(os.Stdout)
 		return
@@ -121,6 +123,7 @@ Commands:
   discover   Draft policies from an OpenAPI spec for you to complete
   gen        Generate starter test cases from an OpenAPI spec or Postman collection
   coverage   Report which OpenAPI operations have authorization tests
+  regression Save an operator-confirmed finding as an existing-engine test case
   serve      Run the HTTP API (the default when no command is given)
   version    Print the version
   help       Print this message

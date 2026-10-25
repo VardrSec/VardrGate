@@ -1,0 +1,94 @@
+[
+  {
+    "require_identity_preflight": true,
+    "id": "password-peer",
+    "identities": [
+      {
+        "id": "bob",
+        "credential": {
+          "type": "bearer",
+          "value": "${VAMPI_BOB_TOKEN}"
+        },
+        "preflight": {
+          "url": "${VAMPI_BASE}/me",
+          "expected_status": 200,
+          "json_fields": {
+            "data.username": "gate_bob"
+          }
+        }
+      },
+      {
+        "id": "alice",
+        "credential": {
+          "type": "bearer",
+          "value": "${VAMPI_ALICE_TOKEN}"
+        },
+        "preflight": {
+          "url": "${VAMPI_BASE}/me",
+          "expected_status": 200,
+          "json_fields": {
+            "data.username": "gate_alice"
+          }
+        }
+      }
+    ],
+    "request": {
+      "method": "PUT",
+      "url": "${VAMPI_BASE}/users/v1/gate_alice/password",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "password": "${VAMPI_NEW_PASSWORD}"
+      }
+    },
+    "mutating": true,
+    "write_verification": {
+      "strategy": "changed",
+      "reset": {
+        "name": "restore-original-password",
+        "as": "alice",
+        "request": {
+          "method": "PUT",
+          "url": "${VAMPI_BASE}/users/v1/gate_alice/password",
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "password": "${VAMPI_ALICE_PASSWORD}"
+          }
+        }
+      },
+      "environment": "synchronous_isolated",
+      "identity": {
+        "id": "verifier",
+        "credential": {
+          "type": "static_header"
+        }
+      },
+      "request": {
+        "method": "POST",
+        "url": "${VAMPI_BASE}/users/v1/login",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "username": "gate_alice",
+          "password": "${VAMPI_ALICE_PASSWORD}"
+        }
+      },
+      "allow_unsafe_method": true,
+      "json_pointer": "/status"
+    },
+    "expected_access": [
+      {
+        "identity_id": "bob",
+        "decision": "deny"
+      },
+      {
+        "identity_id": "alice",
+        "decision": "allow"
+      }
+    ]
+  }
+]
