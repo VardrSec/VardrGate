@@ -1,0 +1,222 @@
+{
+  "schema_version": 1,
+  "method": "source-informed deterministic executor schedules",
+  "fixture_sha256": "f75f0b3013e5931333bbcf47087beeb4ebad414c34d7c957b13d9214884ac6f2",
+  "go_version": "go version go1.26.3 windows/amd64",
+  "before": {
+    "revision": "e86b8cd73e365a9edd35e946cd64adc262ff3cb0",
+    "source_sha256": "889186534de31e8a7e0ce7b031e2c7ee482ab2133569e2aac7fab7198ea925b8",
+    "test_binary_sha256": "0962208cf993637256a0432568e4b74d845d2f1872a6bb61631b2a0b9728a72a",
+    "test_exit": 1,
+    "repeat_count": 3,
+    "stable": true,
+    "metrics": {
+      "true_positives": 1,
+      "false_positives": 1,
+      "missed_authorization_failures": 4,
+      "true_negatives": 3,
+      "inconclusive_assessments": 1,
+      "inconclusive_known_failures": 1
+    },
+    "schedules": [
+      {
+        "decision": "denied",
+        "environment": "",
+        "findings": 0,
+        "peer_committed": true,
+        "reads": 6,
+        "reason": "state_unchanged",
+        "scenario": "accepted",
+        "writes": 2
+      },
+      {
+        "decision": "denied",
+        "environment": "synchronous_isolated",
+        "findings": 0,
+        "peer_committed": true,
+        "reads": 6,
+        "reason": "state_unchanged",
+        "scenario": "accepted",
+        "writes": 2
+      },
+      {
+        "decision": "denied",
+        "environment": "unknown",
+        "findings": 0,
+        "peer_committed": true,
+        "reads": 6,
+        "reason": "state_unchanged",
+        "scenario": "delayed",
+        "writes": 2
+      },
+      {
+        "decision": "inconclusive",
+        "environment": "unknown",
+        "findings": 0,
+        "peer_committed": true,
+        "reads": 6,
+        "reason": "write_execution_error",
+        "scenario": "delayed_error",
+        "writes": 2
+      },
+      {
+        "decision": "allowed",
+        "environment": "unknown",
+        "findings": 1,
+        "peer_committed": false,
+        "reads": 5,
+        "reason": "state_changed",
+        "scenario": "interference",
+        "writes": 1
+      },
+      {
+        "decision": "denied",
+        "environment": "unknown",
+        "findings": 0,
+        "peer_committed": false,
+        "reads": 6,
+        "reason": "state_unchanged",
+        "scenario": "protected",
+        "writes": 2
+      },
+      {
+        "decision": "denied",
+        "environment": "synchronous_isolated",
+        "findings": 0,
+        "peer_committed": false,
+        "reads": 6,
+        "reason": "state_unchanged",
+        "scenario": "protected",
+        "writes": 2
+      },
+      {
+        "decision": "denied",
+        "environment": "",
+        "findings": 0,
+        "peer_committed": false,
+        "reads": 6,
+        "reason": "state_unchanged",
+        "scenario": "protected",
+        "writes": 2
+      },
+      {
+        "decision": "allowed",
+        "environment": "synchronous_isolated",
+        "findings": 1,
+        "peer_committed": true,
+        "reads": 5,
+        "reason": "state_changed",
+        "scenario": "committed_error",
+        "writes": 1
+      }
+    ]
+  },
+  "after": {
+    "revision": "e8269e99955de87bcc0cdd912dd7a5d64ffcf9cb",
+    "source_sha256": "b4e4b8fd497f474ef0786ce1d8673fa95ea9c040795b7ee450b20656e528128f",
+    "test_binary_sha256": "bed60e9e5d8f598f6d3d2f5541b6b4aea573ed8f5354b30688cf4c7254ca19b1",
+    "test_exit": 0,
+    "repeat_count": 3,
+    "stable": true,
+    "metrics": {
+      "true_positives": 1,
+      "false_positives": 0,
+      "missed_authorization_failures": 4,
+      "true_negatives": 2,
+      "inconclusive_assessments": 6,
+      "inconclusive_known_failures": 4
+    },
+    "schedules": [
+      {
+        "decision": "inconclusive",
+        "environment": "",
+        "findings": 0,
+        "peer_committed": true,
+        "reads": 6,
+        "reason": "write_completion_unconfirmed",
+        "scenario": "accepted",
+        "writes": 2
+      },
+      {
+        "decision": "inconclusive",
+        "environment": "synchronous_isolated",
+        "findings": 0,
+        "peer_committed": true,
+        "reads": 6,
+        "reason": "write_completion_unconfirmed",
+        "scenario": "accepted",
+        "writes": 2
+      },
+      {
+        "decision": "inconclusive",
+        "environment": "unknown",
+        "findings": 0,
+        "peer_committed": true,
+        "reads": 6,
+        "reason": "write_environment_unverified",
+        "scenario": "delayed",
+        "writes": 2
+      },
+      {
+        "decision": "inconclusive",
+        "environment": "unknown",
+        "findings": 0,
+        "peer_committed": true,
+        "reads": 6,
+        "reason": "write_execution_error",
+        "scenario": "delayed_error",
+        "writes": 2
+      },
+      {
+        "decision": "inconclusive",
+        "environment": "unknown",
+        "findings": 0,
+        "peer_committed": false,
+        "reads": 5,
+        "reason": "write_environment_unverified",
+        "scenario": "interference",
+        "writes": 1
+      },
+      {
+        "decision": "inconclusive",
+        "environment": "unknown",
+        "findings": 0,
+        "peer_committed": false,
+        "reads": 6,
+        "reason": "write_environment_unverified",
+        "scenario": "protected",
+        "writes": 2
+      },
+      {
+        "decision": "denied",
+        "environment": "synchronous_isolated",
+        "findings": 0,
+        "peer_committed": false,
+        "reads": 6,
+        "reason": "state_unchanged",
+        "scenario": "protected",
+        "writes": 2
+      },
+      {
+        "decision": "denied",
+        "environment": "",
+        "findings": 0,
+        "peer_committed": false,
+        "reads": 6,
+        "reason": "state_unchanged",
+        "scenario": "protected",
+        "writes": 2
+      },
+      {
+        "decision": "allowed",
+        "environment": "synchronous_isolated",
+        "findings": 1,
+        "peer_committed": true,
+        "reads": 5,
+        "reason": "state_changed",
+        "scenario": "committed_error",
+        "writes": 1
+      }
+    ]
+  }
+}
