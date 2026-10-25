@@ -31,7 +31,7 @@ func writeTemp(t *testing.T, name, content string) string {
 
 // The whole point of the gen → run loop: what gen writes must be something run
 // can read back.
-func TestGenTestCases_OutputIsRunnableInput(t *testing.T) {
+func TestGenTestCases_OutputRequiresReviewedPermissions(t *testing.T) {
 	specPath := writeTemp(t, "spec.json", miniSpec)
 	outPath := filepath.Join(t.TempDir(), "cases.json")
 
@@ -48,6 +48,8 @@ func TestGenTestCases_OutputIsRunnableInput(t *testing.T) {
 	}
 
 	t.Setenv("VARDRGATE_AUTHENTICATED_TOKEN", "a-token")
+	t.Setenv("VARDRGATE_OTHER_USER_TOKEN", "peer-token")
+	t.Setenv("VARDRGATE_OTHER_TENANT_TOKEN", "tenant-token")
 	cases, err := loadCases(outPath)
 	if err != nil {
 		t.Fatalf("generated file is not loadable by run --cases: %v", err)
@@ -58,8 +60,17 @@ func TestGenTestCases_OutputIsRunnableInput(t *testing.T) {
 	if got := cases[0].Identities[0].Credential.Value; got != "a-token" {
 		t.Errorf("placeholder was not resolved: %q", got)
 	}
+	if err := validateSuite(cases, genScaffoldHint); err == nil {
+		t.Fatal("unreviewed permissions must fail validation even with credentials")
+	}
+	for i := range cases[0].ExpectedAccess {
+		if cases[0].ExpectedAccess[i].Decision != "TODO" {
+			t.Fatal("inferred executable permission")
+		}
+		cases[0].ExpectedAccess[i].Decision = model.AccessDecisionDeny
+	}
 	if err := validateSuite(cases, genScaffoldHint); err != nil {
-		t.Errorf("a generated suite with credentials set must validate: %v", err)
+		t.Fatalf("reviewed cases should validate: %v", err)
 	}
 }
 
