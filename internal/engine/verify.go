@@ -162,6 +162,7 @@ func (e *Engine) observe(ctx context.Context, wv *model.WriteVerification, after
 	req := wv.Request
 	req.Method = verifierMethod(wv)
 	ex := e.exec.Execute(ctx, wv.Identity, req)
+	statusOnly := observedState{status: ex.StatusCode}
 	if after && ex.Error == "" && ex.ErrorKind == "" {
 		for _, status := range wv.AfterStatus {
 			if ex.StatusCode == status {
@@ -171,16 +172,16 @@ func (e *Engine) observe(ctx context.Context, wv *model.WriteVerification, after
 	}
 	switch {
 	case ex.Error != "" || ex.ErrorKind != "" || ex.StatusCode >= 500:
-		return observedState{}, reasonVerifierReadFailed
+		return statusOnly, reasonVerifierReadFailed
 	case ex.StatusCode == 401 || ex.StatusCode == 403:
-		return observedState{}, reasonVerifierDenied
+		return statusOnly, reasonVerifierDenied
 	case ex.StatusCode != 404 && (ex.StatusCode < 200 || ex.StatusCode >= 300):
 		// Only 404 is supported as an absent-resource observation for deletes.
 		// Redirects, rate limits and other client errors are unreadable state.
-		return observedState{}, reasonVerifierStatus
+		return statusOnly, reasonVerifierStatus
 	}
 	if wv.Strategy == "changed" && ex.StatusCode == 404 {
-		return observedState{}, reasonVerifierStatus
+		return statusOnly, reasonVerifierStatus
 	}
 	st := observedState{status: ex.StatusCode}
 	if wv.JSONPointer == "" || ex.StatusCode < 200 || ex.StatusCode >= 300 {
@@ -188,12 +189,12 @@ func (e *Engine) observe(ctx context.Context, wv *model.WriteVerification, after
 	}
 	doc, err := decodeAssertionJSON(ex.Body)
 	if err != nil {
-		return observedState{}, reasonVerifierValueMissing
+		return statusOnly, reasonVerifierValueMissing
 	}
 	tokens, _ := pointerTokens(wv.JSONPointer) // Validated before any execution.
 	v, ok := pointerValue(doc, tokens)
 	if !ok {
-		return observedState{}, reasonVerifierValueMissing
+		return statusOnly, reasonVerifierValueMissing
 	}
 	st.value, st.hasValue = v, true
 	return st, ""
@@ -206,6 +207,14 @@ func (e *Engine) verifiedExecute(ctx context.Context, tc model.AuthorizationTest
 	wv := tc.WriteVerification
 	a := model.Assessment{IdentityID: identity.ID, ExpectedAccess: ea.Decision,
 		Decision: model.AssessmentInconclusive, Source: sourceWriteVerification}
+	strategy, environment := wv.Strategy, wv.Environment
+	if strategy == "" {
+		strategy = "legacy_change"
+	}
+	if environment == "" {
+		environment = "legacy"
+	}
+	a.Verification = &model.VerificationEvidence{Strategy: strategy, Environment: environment, ReaderIdentityID: wv.Identity.ID, BeforeStatuses: []int{}}
 
 	if wv.Reset != nil {
 		actor := model.Identity{ID: "verification-reset", Credential: model.Credential{Type: model.CredentialTypeStaticHeader}}
@@ -215,12 +224,14 @@ func (e *Engine) verifiedExecute(ctx context.Context, tc model.AuthorizationTest
 			}
 		}
 		reset := e.exec.Execute(ctx, actor, wv.Reset.Request)
+		a.Verification.ResetStatus = reset.StatusCode
 		if reset.Error != "" || reset.ErrorKind != "" || reset.StatusCode < 200 || reset.StatusCode >= 300 || reset.StatusCode == 202 {
 			a.Reason = reasonResetFailed
 			return model.ExecutionResult{IdentityID: identity.ID, Error: "write verification reset failed", ErrorKind: model.ErrorKindVerification}, a
 		}
 	}
 	before, reason := e.observe(ctx, wv, false)
+	a.Verification.BeforeStatuses = append(a.Verification.BeforeStatuses, before.status)
 	if reason == reasonVerifierStatus {
 		// Preserve the baseline diagnostic for an unusable first read; after
 		// reads use the more specific unexpected-status reason.
@@ -233,7 +244,9 @@ func (e *Engine) verifiedExecute(ctx context.Context, tc model.AuthorizationTest
 	}
 	if reason == "" {
 		var again observedState
-		if again, reason = e.observe(ctx, wv, false); reason == "" && !again.equal(before) {
+		again, reason = e.observe(ctx, wv, false)
+		a.Verification.BeforeStatuses = append(a.Verification.BeforeStatuses, again.status)
+		if reason == "" && !again.equal(before) {
 			reason = reasonConcurrentChange
 		}
 	}
@@ -255,6 +268,7 @@ func (e *Engine) verifiedExecute(ctx context.Context, tc model.AuthorizationTest
 	exec := e.exec.Execute(ctx, identity, req)
 
 	after, reason := e.observe(ctx, wv, true)
+	a.Verification.AfterStatus = after.status
 	switch {
 	case reason != "":
 		a.Reason = reason

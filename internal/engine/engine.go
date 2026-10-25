@@ -129,6 +129,21 @@ func (e *Engine) Run(ctx context.Context, tc model.AuthorizationTestCase) (Resul
 	var ready bool
 	result.Preflight, ready = e.runPreflight(ctx, tc)
 	if !ready {
+		for _, identity := range tc.Identities {
+			ea, hasExpected := expectedFor(tc, identity.ID)
+			a := model.Assessment{IdentityID: identity.ID, ExpectedAccess: ea.Decision, Decision: model.AssessmentInconclusive, Source: "none", Reason: "identity_preflight_failed"}
+			a.CredentialStatus = credentialStatus(identity, result.Preflight, model.ExecutionResult{})
+			a.WriteVerification = "not_applied"
+			if ea.Decision == model.AccessDecisionSkip {
+				a.Decision = model.AssessmentSkipped
+				a.Reason = "explicit_skip"
+			}
+			if !hasExpected {
+				a.Decision = model.AssessmentSkipped
+				a.Reason = "no_expectation"
+			}
+			result.Assessments = append(result.Assessments, a)
+		}
 		return result, nil
 	}
 
@@ -187,12 +202,28 @@ func (e *Engine) Run(ctx context.Context, tc model.AuthorizationTestCase) (Resul
 	for _, ea := range tc.ExpectedAccess {
 		expectedByID[ea.IdentityID] = ea
 	}
-	for _, identity := range tc.Identities {
+	for index, identity := range tc.Identities {
 		ea, hasExpected := expectedByID[identity.ID]
 
 		assessment, isVerified := verified[identity.ID]
 		if !isVerified {
 			assessment = demoteRejectedCredential(tc, identity, execByID[identity.ID], assess(identity.ID, execByID[identity.ID], ea, hasExpected))
+		}
+		assessment.CredentialStatus = credentialStatus(identity, result.Preflight, execByID[identity.ID])
+		assessment.ExecutionIndex = &index
+		assessment.WriteVerification = "not_configured"
+		if tc.WriteVerification != nil {
+			assessment.WriteVerification = "not_applied"
+			if isVerified {
+				assessment.WriteVerification = "inconclusive"
+				if assessment.Decision == model.AssessmentAllowed {
+					assessment.WriteVerification = "verified_effect"
+				}
+				if assessment.Decision == model.AssessmentDenied {
+					assessment.WriteVerification = "verified_no_effect"
+				}
+				assessment.Verification.ReaderCredentialStatus = credentialStatus(tc.WriteVerification.Identity, result.Preflight, model.ExecutionResult{})
+			}
 		}
 		result.Assessments = append(result.Assessments, assessment)
 

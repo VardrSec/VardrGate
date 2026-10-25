@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "note": "Assertion profile for AuthZLab from its documented response shapes (InvoiceResponse; RFC 7807 problem details from api/errors.py), before any Gate run. Keyed by case id. {X} placeholders resolve to the case's invoice ids during setup. The same strings are handed to competitor tools as enforcement/success markers so neither side gets evidence the other lacks.",
+  "assertions": {
+    "read-owner": [{"json_pointer": "/id", "equals": "{E}", "decision": "allow"}],
+    "read-xtenant-member": [{"json_pointer": "/id", "equals": "{E}", "decision": "allow"}, {"json_pointer": "/title", "equals": "Not Found", "decision": "deny"}],
+    "read-xtenant-admin": [{"json_pointer": "/id", "equals": "{E}", "decision": "allow"}, {"json_pointer": "/title", "equals": "Not Found", "decision": "deny"}],
+    "read-member-peer": [{"json_pointer": "/id", "equals": "{C}", "decision": "allow"}, {"json_pointer": "/title", "equals": "Forbidden", "decision": "deny"}],
+    "read-approver": [{"json_pointer": "/id", "equals": "{C}", "decision": "allow"}],
+    "read-anonymous": [{"json_pointer": "/id", "equals": "{E}", "decision": "allow"}, {"json_pointer": "/title", "equals": "Authentication Failed", "decision": "deny"}],
+    "approve-member": [{"json_pointer": "/status", "equals": "approved", "decision": "allow"}, {"json_pointer": "/title", "equals": "Forbidden", "decision": "deny"}],
+    "approve-legit": [{"json_pointer": "/status", "equals": "approved", "decision": "allow"}],
+    "approve-self": [{"json_pointer": "/status", "equals": "approved", "decision": "allow"}, {"json_pointer": "/title", "equals": "Business Rule Violation", "decision": "deny"}],
+    "approve-xtenant": [{"json_pointer": "/status", "equals": "approved", "decision": "allow"}, {"json_pointer": "/title", "equals": "Not Found", "decision": "deny"}],
+    "patch-owner": [{"json_pointer": "/description", "equals": "gate-desc-owner", "decision": "allow"}],
+    "patch-xtenant": [{"json_pointer": "/description", "equals": "gate-desc-xtenant", "decision": "allow"}, {"json_pointer": "/title", "equals": "Not Found", "decision": "deny"}],
+    "mass-assign-status": [{"json_pointer": "/status", "equals": "approved", "decision": "allow"}, {"json_pointer": "/title", "equals": "Business Rule Violation", "decision": "deny"}]
+  }
+}

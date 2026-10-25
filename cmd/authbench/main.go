@@ -352,7 +352,8 @@ func signature(rows []assessment) []string {
 			categories = append(categories, string(f.Category)+":"+f.IdentityID)
 		}
 		sort.Strings(categories)
-		out = append(out, fmt.Sprintf("%s|%s|%t|%d|%s|%s|%v|%v|%v", row.Scenario.ID, row.Verdict, row.Inconclusive, ex.StatusCode, ex.ObservedOutcome, ex.ErrorKind, categories, row.Oracle, result.Assessments))
+		semantic, _ := json.Marshal(result.Assessments) // Compare values, never pointer addresses.
+		out = append(out, fmt.Sprintf("%s|%s|%t|%d|%s|%s|%v|%v|%s", row.Scenario.ID, row.Verdict, row.Inconclusive, ex.StatusCode, ex.ObservedOutcome, ex.ErrorKind, categories, row.Oracle, semantic))
 	}
 	return out
 }

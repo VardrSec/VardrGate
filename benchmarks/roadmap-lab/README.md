@@ -63,9 +63,20 @@ these cases. These results do not claim the delete credential ambiguity is fixed
 
 ## Scorecard limits
 
+The final shared-profile replay uses the same frozen allow evidence and
+deduplicates existing denial assertions into four scoped profiles, with real
+policy/suite compilation (`harness/profiles_bench.py`). Independent ground truth
+matches all 28 case/mode pairs. Results: vulnerable 9 TP / 0 FP / 0 FN; protected
+12 TN / 2 inconclusive. It replaces repeated denial authoring while preserving
+the two justified unknowns; it does not label generic validation errors denials.
+
+The final synthetic verifier benchmark (`reports/authbench-final.json`) is stable
+across three runs: 9 TP / 0 FP / 0 misses / 7 TN / 6 inconclusive. New provenance
+pointers are compared as JSON values in its repeat signature, never addresses.
+
 The supplied 19/19 recall and zero verified false positives across the larger
 research corpus remain historical baselines, not newly reproduced claims here.
 AuthZLab's retained baseline is 7 secure inconclusives with status-only and 2
-with individual assertions. Reusable profiles must preserve that distinction;
+with individual assertions. Reusable profiles preserve that distinction;
 generic validation failures must not become authorization denials. Human policy
 authoring time still needs a counterbalanced operator study.

@@ -7,7 +7,5 @@ reports/vampi-verified-612fa42.json
 harness/crapi_bench.py
 harness/juiceshop_bench.py
 competitors/score.py
-corpus-authzlab.json
-profiles-authzlab.json
 verification-authzlab.json
 mistakes.json

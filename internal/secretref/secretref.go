@@ -91,7 +91,9 @@ func ExpandRequest(req *model.RequestTemplate) error {
 		return nil
 	}
 	var body any
-	if err := json.Unmarshal(req.Body, &body); err != nil {
+	decoder := json.NewDecoder(strings.NewReader(string(req.Body)))
+	decoder.UseNumber()
+	if err := decoder.Decode(&body); err != nil || !json.Valid(req.Body) {
 		return fmt.Errorf("write_verification: request body is not valid JSON")
 	}
 	expanded, err := expandStrings(body)

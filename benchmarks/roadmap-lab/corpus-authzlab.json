@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "target": {
+    "name": "AuthZLab",
+    "repository": "https://github.com/stefanicla/authzlab-api-security-lab",
+    "commit": "0d30202",
+    "independence": "Third-party project (single author, created 2026-10-13, 0 stars at time of use). Not written by VardrSec. Immature: treat as one independent multi-tenant target, not a reference benchmark.",
+    "modes": {
+      "vulnerable": {"base_url": "http://127.0.0.1:8001", "service": "api-lab", "database": "authzlab_lab"},
+      "protected": {"base_url": "http://127.0.0.1:8000", "service": "api-secure", "database": "authzlab"}
+    }
+  },
+  "frozen_note": "Labels derived from AuthZLab docs/vulnerabilities/lab-01..04 and src/authzlab/application/policies before any Gate or competitor run against AuthZLab. Changes after the first run need a separate written justification.",
+  "authorization_rules": [
+    "Tenants are isolated: a user may not read, list, approve or modify another tenant's invoices, admins included (lab-01; policies ensure_same_tenant). Secure app answers cross-tenant access with 404 'Resource not found'.",
+    "Members may view only their own invoices; approvers and admins may view all invoices in their tenant (ensure_can_view_invoice). Same-tenant violation is 403 in the secure app.",
+    "Only APPROVER or ADMIN may approve (lab-02, 403); never their own invoice (lab-04, 409); only SUBMITTED invoices (409).",
+    "Owners may edit amount/currency/description of their own DRAFT invoices; status, owner_id, tenant_id, approved_by are never client-writable (lab-03, 422)."
+  ],
+  "fixtures": {
+    "reset": "Seeded users from scripts/seed_demo.py. Each case creates fresh invoices through the API: E (eve, Globex, DRAFT), C (charlie, Acme, SUBMITTED), B (bob, Acme, SUBMITTED), D (charlie, Acme, DRAFT). Seeded invoices are not used.",
+    "password": "password123 (seed_demo.py default; local lab only)",
+    "identities": {
+      "alice": {"email": "alice@acme.com", "tenant": "Acme", "role": "admin"},
+      "bob": {"email": "bob@acme.com", "tenant": "Acme", "role": "approver"},
+      "charlie": {"email": "charlie@acme.com", "tenant": "Acme", "role": "member"},
+      "diana": {"email": "diana@acme.com", "tenant": "Acme", "role": "member"},
+      "eve": {"email": "eve@globex.com", "tenant": "Globex", "role": "admin"},
+      "anonymous": {"credential": "none"}
+    }
+  },
+  "cases": [
+    {"id": "read-owner", "category": "bola", "method": "GET", "path": "/api/v1/invoices/{E}", "actor": "eve", "expect": "allow",
+     "violation": {"vulnerable": false, "protected": false}, "oracle": "disclosure:E", "source": "owner in tenant; ensure_can_view_invoice owner branch"},
+    {"id": "read-xtenant-member", "category": "cross_tenant", "method": "GET", "path": "/api/v1/invoices/{E}", "actor": "charlie", "expect": "deny",
+     "violation": {"vulnerable": true, "protected": false}, "oracle": "disclosure:E", "source": "lab-01 exploit; secure returns 404"},
+    {"id": "read-xtenant-admin", "category": "cross_tenant", "method": "GET", "path": "/api/v1/invoices/{E}", "actor": "alice", "expect": "deny",
+     "violation": {"vulnerable": true, "protected": false}, "oracle": "disclosure:E", "source": "lab-01: no tenant filter; admin of another tenant is still cross-tenant"},
+    {"id": "read-member-peer", "category": "bola", "method": "GET", "path": "/api/v1/invoices/{C}", "actor": "diana", "expect": "deny",
+     "violation": {"vulnerable": true, "protected": false}, "oracle": "disclosure:C", "source": "lab-01 fix note: same-tenant members reading others' invoices get 403"},
+    {"id": "read-approver", "category": "bola", "method": "GET", "path": "/api/v1/invoices/{C}", "actor": "bob", "expect": "allow",
+     "violation": {"vulnerable": false, "protected": false}, "oracle": "disclosure:C", "source": "approvers view all tenant invoices"},
+    {"id": "read-anonymous", "category": "authn", "method": "GET", "path": "/api/v1/invoices/{E}", "actor": "anonymous", "expect": "deny",
+     "violation": {"vulnerable": false, "protected": false}, "oracle": "disclosure:E", "source": "get_current_user requires Authorization in both apps"},
+    {"id": "list-xtenant", "category": "cross_tenant", "method": "GET", "path": "/api/v1/invoices?tenant_id={globex}", "actor": "charlie", "expect": "deny",
+     "violation": {"vulnerable": true, "protected": false}, "oracle": "disclosure:E", "source": "lab-01 listing variant; ensure_can_list_invoices"},
+    {"id": "approve-member", "category": "bfla", "method": "POST", "path": "/api/v1/invoices/{B}/approve", "actor": "charlie", "expect": "deny",
+     "violation": {"vulnerable": true, "protected": false}, "oracle": "write:B.status=approved", "source": "lab-02; secure 403"},
+    {"id": "approve-legit", "category": "bfla", "method": "POST", "path": "/api/v1/invoices/{C}/approve", "actor": "bob", "expect": "allow",
+     "violation": {"vulnerable": false, "protected": false}, "oracle": "write:C.status=approved", "source": "lab-02 test_legitimate_operations_work_in_secure"},
+    {"id": "approve-self", "category": "business_logic", "method": "POST", "path": "/api/v1/invoices/{B}/approve", "actor": "bob", "expect": "deny",
+     "violation": {"vulnerable": true, "protected": false}, "oracle": "write:B.status=approved", "source": "lab-04; secure 409"},
+    {"id": "approve-xtenant", "category": "cross_tenant", "method": "POST", "path": "/api/v1/invoices/{E}/approve", "actor": "bob", "expect": "deny",
+     "violation": {"vulnerable": true, "protected": false}, "oracle": "write:E.status=approved", "source": "lab-02: no tenant scope or state check in lab; secure 404"},
+    {"id": "patch-owner", "category": "bopla", "method": "PATCH", "path": "/api/v1/invoices/{D}", "actor": "charlie", "expect": "allow",
+     "body": {"description": "gate-desc-owner"}, "violation": {"vulnerable": false, "protected": false}, "oracle": "write:D.description=gate-desc-owner", "source": "owner may edit description of own DRAFT"},
+    {"id": "patch-xtenant", "category": "cross_tenant", "method": "PATCH", "path": "/api/v1/invoices/{E}", "actor": "charlie", "expect": "deny",
+     "body": {"description": "gate-desc-xtenant"}, "violation": {"vulnerable": true, "protected": false}, "oracle": "write:E.description=gate-desc-xtenant", "source": "lab-01/03: lab update has no tenant scope; secure scopes by tenant (404)"},
+    {"id": "mass-assign-status", "category": "bopla", "method": "PATCH", "path": "/api/v1/invoices/{D}", "actor": "charlie", "expect": "deny",
+     "body": {"status": "approved"}, "violation": {"vulnerable": true, "protected": false}, "oracle": "write:D.status=approved", "source": "lab-03; secure 422. Same identity as the owner: a property-level, not identity-level, rule"}
+  ],
+  "out_of_scope": [
+    "Token forgery and JWT algorithm issues (RS256 with ephemeral keys; not an identity-replay test).",
+    "Submit-state transitions other than approval."
+  ]
+}

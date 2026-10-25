@@ -47,6 +47,17 @@ func TestExpand(t *testing.T) {
 	}
 }
 
+func TestExpandedRegressionJSONKeepsExactNumbers(t *testing.T) {
+	t.Setenv("REGRESSION_SECRET", "quoted\"value")
+	tc := model.AuthorizationTestCase{Request: model.RequestTemplate{Body: json.RawMessage(`{"id":9007199254740993,"password":"${REGRESSION_SECRET}"}`)}}
+	if err := ExpandCase(&tc); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(tc.Request.Body), "9007199254740993") || !json.Valid(tc.Request.Body) {
+		t.Fatalf("precision/escaping lost: %s", tc.Request.Body)
+	}
+}
+
 func TestExpandIdentities(t *testing.T) {
 	t.Setenv("VARDRGATE_TEST_TOKEN", "resolved")
 	ids := []model.Identity{

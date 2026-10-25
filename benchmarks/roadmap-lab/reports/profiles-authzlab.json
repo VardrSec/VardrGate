@@ -1,0 +1,864 @@
+{
+  "schema_version": 1,
+  "profiles": {
+    "not_found": {
+      "confirmed": true,
+      "endpoints": [
+        "GET /api/v1/invoices/{E}",
+        "POST /api/v1/invoices/{E}/approve",
+        "PATCH /api/v1/invoices/{E}"
+      ],
+      "rules": [
+        {
+          "json_pointer": "/title",
+          "equals": "Not Found"
+        }
+      ]
+    },
+    "forbidden": {
+      "confirmed": true,
+      "endpoints": [
+        "GET /api/v1/invoices/{C}",
+        "POST /api/v1/invoices/{B}/approve"
+      ],
+      "rules": [
+        {
+          "json_pointer": "/title",
+          "equals": "Forbidden"
+        }
+      ]
+    },
+    "authentication_failed": {
+      "confirmed": true,
+      "endpoints": [
+        "GET /api/v1/invoices/{E}"
+      ],
+      "rules": [
+        {
+          "json_pointer": "/title",
+          "equals": "Authentication Failed"
+        }
+      ]
+    },
+    "business_rule_violation": {
+      "confirmed": true,
+      "endpoints": [
+        "POST /api/v1/invoices/{B}/approve",
+        "PATCH /api/v1/invoices/{D}"
+      ],
+      "rules": [
+        {
+          "json_pointer": "/title",
+          "equals": "Business Rule Violation"
+        }
+      ]
+    }
+  },
+  "ground_truth": [
+    {
+      "mode": "vulnerable",
+      "case": "read-owner",
+      "status": 200,
+      "violation": false
+    },
+    {
+      "mode": "vulnerable",
+      "case": "read-xtenant-member",
+      "status": 200,
+      "violation": true
+    },
+    {
+      "mode": "vulnerable",
+      "case": "read-xtenant-admin",
+      "status": 200,
+      "violation": true
+    },
+    {
+      "mode": "vulnerable",
+      "case": "read-member-peer",
+      "status": 200,
+      "violation": true
+    },
+    {
+      "mode": "vulnerable",
+      "case": "read-approver",
+      "status": 200,
+      "violation": false
+    },
+    {
+      "mode": "vulnerable",
+      "case": "read-anonymous",
+      "status": 401,
+      "violation": false
+    },
+    {
+      "mode": "vulnerable",
+      "case": "list-xtenant",
+      "status": 200,
+      "violation": true
+    },
+    {
+      "mode": "vulnerable",
+      "case": "approve-member",
+      "status": 200,
+      "violation": true
+    },
+    {
+      "mode": "vulnerable",
+      "case": "approve-legit",
+      "status": 200,
+      "violation": false
+    },
+    {
+      "mode": "vulnerable",
+      "case": "approve-self",
+      "status": 200,
+      "violation": true
+    },
+    {
+      "mode": "vulnerable",
+      "case": "approve-xtenant",
+      "status": 200,
+      "violation": true
+    },
+    {
+      "mode": "vulnerable",
+      "case": "patch-owner",
+      "status": 200,
+      "violation": false
+    },
+    {
+      "mode": "vulnerable",
+      "case": "patch-xtenant",
+      "status": 200,
+      "violation": true
+    },
+    {
+      "mode": "vulnerable",
+      "case": "mass-assign-status",
+      "status": 200,
+      "violation": true
+    },
+    {
+      "mode": "protected",
+      "case": "read-owner",
+      "status": 200,
+      "violation": false
+    },
+    {
+      "mode": "protected",
+      "case": "read-xtenant-member",
+      "status": 404,
+      "violation": false
+    },
+    {
+      "mode": "protected",
+      "case": "read-xtenant-admin",
+      "status": 404,
+      "violation": false
+    },
+    {
+      "mode": "protected",
+      "case": "read-member-peer",
+      "status": 403,
+      "violation": false
+    },
+    {
+      "mode": "protected",
+      "case": "read-approver",
+      "status": 200,
+      "violation": false
+    },
+    {
+      "mode": "protected",
+      "case": "read-anonymous",
+      "status": 401,
+      "violation": false
+    },
+    {
+      "mode": "protected",
+      "case": "list-xtenant",
+      "status": 404,
+      "violation": false
+    },
+    {
+      "mode": "protected",
+      "case": "approve-member",
+      "status": 403,
+      "violation": false
+    },
+    {
+      "mode": "protected",
+      "case": "approve-legit",
+      "status": 200,
+      "violation": false
+    },
+    {
+      "mode": "protected",
+      "case": "approve-self",
+      "status": 409,
+      "violation": false
+    },
+    {
+      "mode": "protected",
+      "case": "approve-xtenant",
+      "status": 404,
+      "violation": false
+    },
+    {
+      "mode": "protected",
+      "case": "patch-owner",
+      "status": 200,
+      "violation": false
+    },
+    {
+      "mode": "protected",
+      "case": "patch-xtenant",
+      "status": 404,
+      "violation": false
+    },
+    {
+      "mode": "protected",
+      "case": "mass-assign-status",
+      "status": 422,
+      "violation": false
+    }
+  ],
+  "results": {
+    "vulnerable": {
+      "metrics": {
+        "true_positive": 9,
+        "false_positive": 0,
+        "false_negative": 0,
+        "true_negative": 5,
+        "inconclusive_control": 0,
+        "inconclusive_assessments": 0,
+        "inconclusive_known_failures": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "known_failures": 9,
+        "total": 14
+      },
+      "cases": [
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": {
+            "credential_status": "not_checked",
+            "write_verification": "not_configured",
+            "execution_index": 0,
+            "identity_id": "eve",
+            "expected_access": "allow",
+            "decision": "allowed",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              0
+            ]
+          },
+          "findings": [],
+          "case": "read-owner"
+        },
+        {
+          "verdict": "true_positive",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": {
+            "credential_status": "not_checked",
+            "write_verification": "not_configured",
+            "execution_index": 0,
+            "identity_id": "charlie",
+            "expected_access": "deny",
+            "decision": "allowed",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              0
+            ]
+          },
+          "findings": [
+            [
+              "unexpected_access",
+              "high"
+            ]
+          ],
+          "case": "read-xtenant-member"
+        },
+        {
+          "verdict": "true_positive",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": {
+            "credential_status": "not_checked",
+            "write_verification": "not_configured",
+            "execution_index": 0,
+            "identity_id": "alice",
+            "expected_access": "deny",
+            "decision": "allowed",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              0
+            ]
+          },
+          "findings": [
+            [
+              "unexpected_access",
+              "high"
+            ]
+          ],
+          "case": "read-xtenant-admin"
+        },
+        {
+          "verdict": "true_positive",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": {
+            "credential_status": "not_checked",
+            "write_verification": "not_configured",
+            "execution_index": 0,
+            "identity_id": "diana",
+            "expected_access": "deny",
+            "decision": "allowed",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              0
+            ]
+          },
+          "findings": [
+            [
+              "unexpected_access",
+              "high"
+            ]
+          ],
+          "case": "read-member-peer"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": {
+            "credential_status": "not_checked",
+            "write_verification": "not_configured",
+            "execution_index": 0,
+            "identity_id": "bob",
+            "expected_access": "allow",
+            "decision": "allowed",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              0
+            ]
+          },
+          "findings": [],
+          "case": "read-approver"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": {
+            "credential_status": "anonymous_identity",
+            "write_verification": "not_configured",
+            "execution_index": 0,
+            "identity_id": "anonymous",
+            "expected_access": "deny",
+            "decision": "denied",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              2
+            ]
+          },
+          "findings": [],
+          "case": "read-anonymous"
+        },
+        {
+          "verdict": "true_positive",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": {
+            "credential_status": "not_checked",
+            "write_verification": "not_configured",
+            "execution_index": 0,
+            "identity_id": "charlie",
+            "expected_access": "deny",
+            "decision": "allowed",
+            "source": "http_status",
+            "reason": "status_only"
+          },
+          "findings": [
+            [
+              "unexpected_access",
+              "high"
+            ]
+          ],
+          "case": "list-xtenant"
+        },
+        {
+          "verdict": "true_positive",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": {
+            "credential_status": "not_checked",
+            "write_verification": "not_configured",
+            "execution_index": 0,
+            "identity_id": "charlie",
+            "expected_access": "deny",
+            "decision": "allowed",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              0
+            ]
+          },
+          "findings": [
+            [
+              "unexpected_access",
+              "high"
+            ]
+          ],
+          "case": "approve-member"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": {
+            "credential_status": "not_checked",
+            "write_verification": "not_configured",
+            "execution_index": 0,
+            "identity_id": "bob",
+            "expected_access": "allow",
+            "decision": "allowed",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              0
+            ]
+          },
+          "findings": [],
+          "case": "approve-legit"
+        },
+        {
+          "verdict": "true_positive",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": {
+            "credential_status": "not_checked",
+            "write_verification": "not_configured",
+            "execution_index": 0,
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "allowed",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              0
+            ]
+          },
+          "findings": [
+            [
+              "unexpected_access",
+              "high"
+            ]
+          ],
+          "case": "approve-self"
+        },
+        {
+          "verdict": "true_positive",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": {
+            "credential_status": "not_checked",
+            "write_verification": "not_configured",
+            "execution_index": 0,
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "allowed",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              0
+            ]
+          },
+          "findings": [
+            [
+              "unexpected_access",
+              "high"
+            ]
+          ],
+          "case": "approve-xtenant"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": {
+            "credential_status": "not_checked",
+            "write_verification": "not_configured",
+            "execution_index": 0,
+            "identity_id": "charlie",
+            "expected_access": "allow",
+            "decision": "allowed",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              0
+            ]
+          },
+          "findings": [],
+          "case": "patch-owner"
+        },
+        {
+          "verdict": "true_positive",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": {
+            "credential_status": "not_checked",
+            "write_verification": "not_configured",
+            "execution_index": 0,
+            "identity_id": "charlie",
+            "expected_access": "deny",
+            "decision": "allowed",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              0
+            ]
+          },
+          "findings": [
+            [
+              "unexpected_access",
+              "high"
+            ]
+          ],
+          "case": "patch-xtenant"
+        },
+        {
+          "verdict": "true_positive",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": {
+            "credential_status": "not_checked",
+            "write_verification": "not_configured",
+            "execution_index": 0,
+            "identity_id": "charlie",
+            "expected_access": "deny",
+            "decision": "allowed",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              0
+            ]
+          },
+          "findings": [
+            [
+              "unexpected_access",
+              "high"
+            ]
+          ],
+          "case": "mass-assign-status"
+        }
+      ]
+    },
+    "protected": {
+      "metrics": {
+        "true_positive": 0,
+        "false_positive": 0,
+        "false_negative": 0,
+        "true_negative": 12,
+        "inconclusive_control": 2,
+        "inconclusive_assessments": 2,
+        "inconclusive_known_failures": 0,
+        "precision": 0,
+        "recall": 0,
+        "known_failures": 0,
+        "total": 14
+      },
+      "cases": [
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": {
+            "credential_status": "not_checked",
+            "write_verification": "not_configured",
+            "execution_index": 0,
+            "identity_id": "eve",
+            "expected_access": "allow",
+            "decision": "allowed",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              0
+            ]
+          },
+          "findings": [],
+          "case": "read-owner"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": {
+            "credential_status": "not_checked",
+            "write_verification": "not_configured",
+            "execution_index": 0,
+            "identity_id": "charlie",
+            "expected_access": "deny",
+            "decision": "denied",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              1
+            ]
+          },
+          "findings": [],
+          "case": "read-xtenant-member"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": {
+            "credential_status": "not_checked",
+            "write_verification": "not_configured",
+            "execution_index": 0,
+            "identity_id": "alice",
+            "expected_access": "deny",
+            "decision": "denied",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              1
+            ]
+          },
+          "findings": [],
+          "case": "read-xtenant-admin"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": {
+            "credential_status": "not_checked",
+            "write_verification": "not_configured",
+            "execution_index": 0,
+            "identity_id": "diana",
+            "expected_access": "deny",
+            "decision": "denied",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              1
+            ]
+          },
+          "findings": [],
+          "case": "read-member-peer"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": {
+            "credential_status": "not_checked",
+            "write_verification": "not_configured",
+            "execution_index": 0,
+            "identity_id": "bob",
+            "expected_access": "allow",
+            "decision": "allowed",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              0
+            ]
+          },
+          "findings": [],
+          "case": "read-approver"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": {
+            "credential_status": "anonymous_identity",
+            "write_verification": "not_configured",
+            "execution_index": 0,
+            "identity_id": "anonymous",
+            "expected_access": "deny",
+            "decision": "denied",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              2
+            ]
+          },
+          "findings": [],
+          "case": "read-anonymous"
+        },
+        {
+          "verdict": "inconclusive_control",
+          "inconclusive": true,
+          "not_tested": false,
+          "assessment": {
+            "credential_status": "not_checked",
+            "write_verification": "not_configured",
+            "execution_index": 0,
+            "identity_id": "charlie",
+            "expected_access": "deny",
+            "decision": "inconclusive",
+            "source": "http_status",
+            "reason": "ambiguous_http_outcome"
+          },
+          "findings": [],
+          "case": "list-xtenant"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": {
+            "credential_status": "not_checked",
+            "write_verification": "not_configured",
+            "execution_index": 0,
+            "identity_id": "charlie",
+            "expected_access": "deny",
+            "decision": "denied",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              1
+            ]
+          },
+          "findings": [],
+          "case": "approve-member"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": {
+            "credential_status": "not_checked",
+            "write_verification": "not_configured",
+            "execution_index": 0,
+            "identity_id": "bob",
+            "expected_access": "allow",
+            "decision": "allowed",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              0
+            ]
+          },
+          "findings": [],
+          "case": "approve-legit"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": {
+            "credential_status": "not_checked",
+            "write_verification": "not_configured",
+            "execution_index": 0,
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "denied",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              2
+            ]
+          },
+          "findings": [],
+          "case": "approve-self"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": {
+            "credential_status": "not_checked",
+            "write_verification": "not_configured",
+            "execution_index": 0,
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "denied",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              1
+            ]
+          },
+          "findings": [],
+          "case": "approve-xtenant"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": {
+            "credential_status": "not_checked",
+            "write_verification": "not_configured",
+            "execution_index": 0,
+            "identity_id": "charlie",
+            "expected_access": "allow",
+            "decision": "allowed",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              0
+            ]
+          },
+          "findings": [],
+          "case": "patch-owner"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": {
+            "credential_status": "not_checked",
+            "write_verification": "not_configured",
+            "execution_index": 0,
+            "identity_id": "charlie",
+            "expected_access": "deny",
+            "decision": "denied",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              1
+            ]
+          },
+          "findings": [],
+          "case": "patch-xtenant"
+        },
+        {
+          "verdict": "inconclusive_control",
+          "inconclusive": true,
+          "not_tested": false,
+          "assessment": {
+            "credential_status": "not_checked",
+            "write_verification": "not_configured",
+            "execution_index": 0,
+            "identity_id": "charlie",
+            "expected_access": "deny",
+            "decision": "inconclusive",
+            "source": "response_assertion",
+            "reason": "no_assertion_matched"
+          },
+          "findings": [],
+          "case": "mass-assign-status"
+        }
+      ]
+    }
+  },
+  "baseline": "frozen 612fa42: status-only protected inconclusive 7; individual assertions 2",
+  "inputs_sha256": {
+    "corpus-authzlab.json": "247c2f01fc8d4d0c417383ce0f9f6fd2cb693ae512321727a8de4a73d38b2238",
+    "profiles-authzlab.json": "2c9cc4809cd8e515204eefd971ee69066bf90dc3b570994d64ef282fcf86effb"
+  }
+}
