@@ -6,8 +6,10 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/VardrSec/vardrgate/internal/coverage"
+	"github.com/VardrSec/vardrgate/internal/discover"
 	"github.com/VardrSec/vardrgate/internal/model"
 	"github.com/VardrSec/vardrgate/internal/openapi"
 	"github.com/VardrSec/vardrgate/internal/postman"
@@ -23,8 +25,8 @@ func genTestCases(args []string) error {
 	fs.Usage = func() {
 		fmt.Fprint(fs.Output(), `Usage: vardrgate gen (--spec <file> | --postman <file>) [flags]
 
-Generates starter authorization test cases, one per operation. Add real
-credential values to the output, then run it with "vardrgate run --cases".
+Generates review-only authorization cases, one per operation. Confirm each TODO
+permission and bind identities/resources before running "vardrgate run --cases".
 
 Flags:
 `)
@@ -34,14 +36,30 @@ Flags:
 	postmanPath := fs.String("postman", "", "path to a Postman v2.1 collection JSON")
 	baseURL := fs.String("base", "", "base URL to target instead of the spec/collection's own")
 	outPath := fs.String("out", "", "path to write the generated cases (default: stdout)")
+	harPath := fs.String("har", "", "optional HAR captured traffic to correlate with --spec, offline")
+	hypothesesPath := fs.String("hypotheses", "", "write unconfirmed discovery hypotheses as JSON (requires --spec)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if (*specPath == "") == (*postmanPath == "") {
 		return errors.New("exactly one of --spec or --postman is required")
 	}
+	if (*harPath != "" || *hypothesesPath != "") && *specPath == "" {
+		return errors.New("--har and --hypotheses require --spec")
+	}
+	if *harPath != "" && *hypothesesPath == "" {
+		return errors.New("--har requires --hypotheses to retain reviewable guidance")
+	}
+	if *outPath != "" && *hypothesesPath != "" {
+		a, _ := filepath.Abs(*outPath)
+		b, _ := filepath.Abs(*hypothesesPath)
+		if a == b {
+			return errors.New("--out and --hypotheses must be different files")
+		}
+	}
 
 	var cases []model.AuthorizationTestCase
+	var hypotheses []discover.Candidate
 	if *specPath != "" {
 		data, err := os.ReadFile(*specPath)
 		if err != nil {
@@ -52,6 +70,17 @@ Flags:
 			return err
 		}
 		cases = spec.GenerateTestCases(*baseURL)
+		var har []byte
+		if *harPath != "" {
+			har, err = os.ReadFile(*harPath)
+			if err != nil {
+				return fmt.Errorf("read HAR: %w", err)
+			}
+		}
+		hypotheses, err = discover.Candidates(spec, *baseURL, har)
+		if err != nil {
+			return err
+		}
 	} else {
 		data, err := os.ReadFile(*postmanPath)
 		if err != nil {
@@ -63,10 +92,16 @@ Flags:
 		}
 		cases = coll.GenerateTestCases(*baseURL)
 	}
+	discover.ReviewCases(cases)
 
 	out, err := scaffold.MarshalCases(cases)
 	if err != nil {
 		return err
+	}
+	if *hypothesesPath != "" {
+		if err := writeJSON(*hypothesesPath, hypotheses); err != nil {
+			return err
+		}
 	}
 	if *outPath == "" {
 		_, err = os.Stdout.Write(out)

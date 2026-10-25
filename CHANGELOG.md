@@ -8,6 +8,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Policy-assisted `gen`: review-only permissions and peer/cross-tenant templates,
+  with optional origin-scoped offline HAR hypotheses. Captured values are never
+  retained; operators must confirm identities, ownership and permissions.
+  See [discovery guidance](docs/policy-assisted-discovery.md) and ADR 0022.
+
 - Write-verification `environment` explicitly declares unknown or reviewed
   synchronous/isolated execution. Unknown environments remain inconclusive;
   omitted settings retain compatibility. HTTP 202 with no observed effect is

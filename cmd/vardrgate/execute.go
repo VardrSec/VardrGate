@@ -670,7 +670,7 @@ func validateSuite(cases []model.AuthorizationTestCase, hint string) error {
 
 // genScaffoldHint explains the most common reason a --cases suite fails
 // validation.
-const genScaffoldHint = "Cases from `vardrgate gen` are scaffolds — fill in the credential values before running them."
+const genScaffoldHint = "Cases from `vardrgate gen` require review — confirm every TODO permission, bind resources and fill in credential references before running them."
 
 // loadCases reads a JSON array of test cases, also accepting a single object so
 // a hand-written case does not have to be wrapped in brackets.

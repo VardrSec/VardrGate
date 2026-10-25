@@ -395,10 +395,12 @@ See [`docs/adr/0009-policy-discovery.md`](docs/adr/0009-policy-discovery.md).
 vardrgate gen --spec openapi.json --base https://api.example.com --out cases.json
 ```
 
-Emits one starter test case per path+method (request pre-filled, plus an
-authenticated and an anonymous template identity). Each credential carries a
+Emits one review-only test case per path+method (request pre-filled, plus
+authenticated, peer, cross-tenant and anonymous identity templates). Every
+permission is `TODO`: confirm identities, ownership and expected permissions
+before execution. Each credential carries a
 `${VARDRGATE_<IDENTITY>_TOKEN}` placeholder showing where the token belongs; set
-those variables and run the file directly:
+those variables after reviewing the cases:
 
 ```sh
 VARDRGATE_AUTHENTICATED_TOKEN=... vardrgate run --cases cases.json --fail-on high
@@ -409,6 +411,10 @@ A Postman v2.1 collection works too:
 ```sh
 vardrgate gen --postman collection.json --base https://api.example.com
 ```
+
+Add `--har capture.har --hypotheses hypotheses.json` with `--spec` for offline,
+origin-scoped suggestions. Hypotheses never become executable permissions.
+See [policy-assisted discovery](docs/policy-assisted-discovery.md).
 
 ### Report coverage of a spec
 
