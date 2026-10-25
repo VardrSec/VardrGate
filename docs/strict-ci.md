@@ -63,3 +63,6 @@ security. A token can expire after its preflight. Preserve resource-time
 credential uncertainty, reviewed authorization expectations and positive write
 controls. Existing jobs/cases/suites default to compatibility behavior unless
 strict settings are supplied.
+
+Pinned VAmPI checks exercise the API, JSON CLI, job input and YAML verifier;
+see [interface parity evidence](../benchmarks/strict-ci/README.md).
