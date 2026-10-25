@@ -25,8 +25,9 @@ import (
 // Suite is the on-disk representation of a set of policies bound to one
 // environment.
 type Suite struct {
-	RequireIdentityPreflight bool `yaml:"require_identity_preflight"`
-	FailOnInconclusive       bool `yaml:"fail_on_inconclusive"`
+	DenialProfiles           map[string]policy.DenialProfile `yaml:"denial_profiles"`
+	RequireIdentityPreflight bool                            `yaml:"require_identity_preflight"`
+	FailOnInconclusive       bool                            `yaml:"fail_on_inconclusive"`
 	// Base is the environment's base URL. A --base flag overrides it, so the
 	// same suite runs against staging and production without editing.
 	Base string `yaml:"base"`
@@ -55,6 +56,7 @@ type Case struct {
 
 // Options are the run-time values that are not part of the suite file.
 type Options struct {
+	DenialProfiles           map[string]policy.DenialProfile
 	RequireIdentityPreflight *bool
 	// BaseOverride replaces the suite's base URL when set.
 	BaseOverride  string
@@ -87,6 +89,7 @@ func Load(path string) (Suite, error) {
 // discovering authoring errors one partial run at a time is the wrong way to
 // find out.
 func (s Suite) Compile(dir string, opts Options) ([]Case, error) {
+	opts.DenialProfiles = s.DenialProfiles
 	if opts.RequireIdentityPreflight == nil {
 		opts.RequireIdentityPreflight = &s.RequireIdentityPreflight
 	}
@@ -182,6 +185,7 @@ func (e Entry) compile(dir, base, defaultIdentities string, opts Options, loadId
 	}
 
 	tc, err := p.Compile(policy.Bindings{
+		DenialProfiles:           opts.DenialProfiles,
 		RequireIdentityPreflight: opts.RequireIdentityPreflight != nil && *opts.RequireIdentityPreflight,
 		TestCaseID:               e.ID,
 		BaseURL:                  base,
