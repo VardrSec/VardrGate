@@ -152,6 +152,7 @@ Flags:
 	casesPath := fs.String("cases", "", "path to a JSON array of test cases (as produced by `vardrgate gen`)")
 	out := addOutputFlags(fs)
 	failOn := fs.String("fail-on", failOnNone, "exit 2 when a finding at or above this severity is reported (none, info, low, medium, high, critical)")
+	failOnInconclusive := fs.Bool("fail-on-inconclusive", false, "exit 4 when an identity with an allow or deny expectation could not be judged")
 	allowPrivate := fs.Bool("allow-private-targets", false, "permit loopback and private-network targets (--cases only; a job envelope carries its own setting)")
 	allowMutating := fs.Bool("allow-mutating", false, "confirm that replaying an unsafe method (POST/PUT/PATCH/DELETE) once per identity is intended")
 	requirePreflight := fs.Bool("require-identity-preflight", false, "require at least one declared identity preflight (Runner compatibility guard)")
@@ -236,7 +237,10 @@ Flags:
 	if err := out.emit(payload, reportCases(source, results)); err != nil {
 		return err
 	}
-	return gate(results, threshold)
+	if err := gate(results, threshold); err != nil {
+		return err
+	}
+	return gateInconclusive(results, *failOnInconclusive)
 }
 
 // runPolicy dispatches the policy subcommands. Only "run" exists today; the
@@ -292,6 +296,7 @@ Flags:
 	caseID := fs.String("id", "", "test case id (default: derived from the endpoint)")
 	out := addOutputFlags(fs)
 	failOn := fs.String("fail-on", failOnNone, "exit 2 when a finding at or above this severity is reported (none, info, low, medium, high, critical)")
+	failOnInconclusive := fs.Bool("fail-on-inconclusive", false, "exit 4 when an identity with an allow or deny expectation could not be judged")
 	allowPrivate := fs.Bool("allow-private-targets", false, "permit loopback and private-network targets")
 	timeout := fs.Duration("timeout", 0, "per-request timeout (0 uses the client default)")
 	if err := fs.Parse(args); err != nil {
@@ -389,7 +394,10 @@ Flags:
 	if err := out.emit(payload, reported); err != nil {
 		return err
 	}
-	return gate(results, threshold)
+	if err := gate(results, threshold); err != nil {
+		return err
+	}
+	return gateInconclusive(results, *failOnInconclusive)
 }
 
 func compilePolicy(policyPath, identitiesPath string, b policy.Bindings) (model.AuthorizationTestCase, error) {
@@ -537,6 +545,28 @@ func runError(err error) error {
 	return err
 }
 
+// gateInconclusive fails an opted-in run in which some expectation could not be
+// judged. It runs after gate, so "not tested" and threshold findings keep their
+// codes and precedence; without the flag the exit code is unchanged.
+func gateInconclusive(results []engine.Result, enabled bool) error {
+	if !enabled {
+		return nil
+	}
+	var lines []string
+	for _, res := range results {
+		for _, a := range res.Inconclusive() {
+			lines = append(lines, res.TestCaseID+": "+report.Explain(a))
+		}
+	}
+	if len(lines) == 0 {
+		return nil
+	}
+	return exitError{
+		code: exitInconclusive,
+		err:  fmt.Errorf("%s: %s", plural(len(lines), "inconclusive assessment", "inconclusive assessments"), strings.Join(lines, "; ")),
+	}
+}
+
 // parseFailOn resolves the --fail-on value. An empty Severity means no gating.
 func parseFailOn(s string) (model.Severity, error) {
 	if strings.EqualFold(strings.TrimSpace(s), failOnNone) {
@@ -636,6 +666,9 @@ func loadCases(path string) ([]model.AuthorizationTestCase, error) {
 	// so a generated suite runs straight from the repository it lives in.
 	for i := range cases {
 		if err := secretref.ExpandIdentities(cases[i].Identities); err != nil {
+			return nil, fmt.Errorf("case %q: %w", cases[i].ID, err)
+		}
+		if err := secretref.ExpandVerification(cases[i].WriteVerification); err != nil {
 			return nil, fmt.Errorf("case %q: %w", cases[i].ID, err)
 		}
 	}

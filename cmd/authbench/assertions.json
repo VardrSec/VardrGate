@@ -1,0 +1,29 @@
+{
+  "/vulnerable/documents/1": [
+    {"json_pointer":"/secret","equals":"synthetic-tenant-A-data","decision":"allow"},
+    {"json_pointer":"/error","equals":"forbidden","decision":"deny"}
+  ],
+  "/secure/documents/1": [
+    {"json_pointer":"/secret","equals":"synthetic-tenant-A-data","decision":"allow"},
+    {"json_pointer":"/error","equals":"forbidden","decision":"deny"}
+  ],
+  "/vulnerable/admin/export": [
+    {"json_pointer":"/secret","equals":"synthetic-tenant-A-data","decision":"allow"},
+    {"json_pointer":"/error","equals":"forbidden","decision":"deny"}
+  ],
+  "/edge/leak-403": [
+    {"json_pointer":"/secret","equals":"synthetic-tenant-A-data","decision":"allow"},
+    {"json_pointer":"/error","equals":"forbidden","decision":"deny"}
+  ],
+  "/edge/leak-404": [
+    {"json_pointer":"/secret","equals":"synthetic-tenant-A-data","decision":"allow"},
+    {"json_pointer":"/error","equals":"forbidden","decision":"deny"}
+  ],
+  "/edge/soft-denial": [
+    {"json_pointer":"/secret","equals":"synthetic-tenant-A-data","decision":"allow"},
+    {"json_pointer":"/error","equals":"forbidden","decision":"deny"}
+  ],
+  "/edge/empty": [
+    {"json_pointer":"/data","equals":[],"decision":"deny"}
+  ]
+}

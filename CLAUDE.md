@@ -26,6 +26,10 @@ cmd/vardrgate/
 ├── importers.go             gen, coverage
 └── serve.go                 HTTP server, env config, wiring, shutdown
 
+cmd/authbench/               authorization benchmark: vulnerable loopback lab,
+                             versioned corpus, scorer, regression budgets
+benchmarks/                  recorded benchmark reports and methodology
+
 internal/
 ├── api/                     handler.go (health, tests/execute) + jobs.go (queue)
 ├── client/                  HTTP execution, credential application, SSRF protection
@@ -58,7 +62,8 @@ docs/
                              mutation safety · 0009 discovery · 0010 setup steps
                              0011 identity preflight · 0012 binary releases
                              0013 policy suites · 0014 report formats
-                             0015 GitHub Action
+                             0015 GitHub Action · 0016 response assertions
+                             0017 write verification
 
 examples/
 ├── bola_check.json              three-identity unauthorized-access scenario
@@ -138,14 +143,18 @@ Other rules:
 - Execution errors suppress findings for that identity.
 - `decision: skip` records execution but emits no finding.
 - Ambiguous outcomes (undeclared 404, 5xx, 3xx) when expected `deny` produce no authorization finding. A reviewed `deny_status` can explicitly classify 404 as denial.
+- `response_assertions` (`ExpectedAccess.ResponseAssertions`, policy `response.assertions`): JSON Pointer + exact JSON `equals` + the decision a match proves. When an identity has assertions they are authoritative — no status fallback, and they outrank `deny_status`/`deny_when`; unmatched or conflicting evidence is inconclusive. Findings still go through the ADR 0002 categorization (`assertionFinding`). Evidence carries assertion indices only. Evaluator in `engine/assertions.go`; exact, duplicate-key-rejecting JSON decoding in `engine/assertion_json.go`. See ADR 0016 and `docs/response-assertions.md`.
+- `write_verification` (`tc.WriteVerification`, policy `verify` with a role not in `expect`): a separate reader identity, same-origin request (GET unless `allow_unsafe_method`), optional JSON Pointer and `changed_to`. `verifiedExecute` reads twice before and once after each identity's request; unchanged → denied, changed → allowed, every failure or ambiguity → inconclusive with a fixed reason; the request is withheld when the before-state is unreadable. Outranks assertions and status. Observed values never leave memory. Requires `mutating`. In `engine/verify.go`; see ADR 0017.
+- Write-verification denials require a demonstrated allow-expected positive control; missing/failed controls are inconclusive. Unsupported verifier errors and errored writes without observed effects are inconclusive. Successful status changes alone are not mutations. See ADR 0018.
+- Every identity gets an `Assessment` (`allowed`/`denied`/`inconclusive`/`skipped`, source, fixed reason code). Without assertions, findings come from `evaluate` unchanged and the assessment is recorded alongside.
 
 Validation rejects: duplicate identity ids, expected-access references to unknown identities, invalid credential type/header/value combinations, and resource references to unknown owner identities or roles absent from `role_hierarchy`.
 
 The `Executor` interface is defined in the engine package and satisfied by `*client.Client`. Tests use a `stubExecutor`. `Run` executes all identities first, then evaluates findings so it can compare against a baseline.
 
-`engine.Result` has JSON tags (`test_case_id`, `executions`, `findings`). A clean run serializes `findings` as `[]`, not `null`, for Map's import contract. `engine.Validate` is exported so a caller holding a suite can check every case before running any of them.
+`engine.Result` has JSON tags (`test_case_id`, `executions`, `findings`, `assessments`). A clean run serializes `findings` and `assessments` as `[]`, not `null`, for Map's import contract. `engine.Validate` is exported so a caller holding a suite can check every case before running any of them.
 
-`Result.PreflightFailed()` and `Result.Unreached()` are the single definition of "this case tested nothing", shared by the CLI's exit-code gate and every report format. `Result.Error` (`omitempty`) is set only by the CLI, for a suite entry that failed at run time; `Run` never sets it, so `run --job` output is unchanged.
+`Result.PreflightFailed()` and `Result.Unreached()` are the single definition of "this case tested nothing", shared by the CLI's exit-code gate and every report format. `Result.Inconclusive()` is likewise the single definition of "an expectation could not be judged": every report lists those assessments (never as a pass) and `--fail-on-inconclusive` gates on them. `Result.Error` (`omitempty`) is set only by the CLI, for a suite entry that failed at run time; `Run` never sets it, so `run --job` output is unchanged.
 
 ### `internal/suite`
 
@@ -173,7 +182,7 @@ Parses a declarative YAML policy (`api`/`expect`/`response`) and `Compile`s it i
 
 `Compile` carries `response.deny_status` to `tc.DenyStatuses` and `api.resource.tenant_field` to `Resource.TenantField`; both were parsed and dropped before ADR 0007.
 
-`Compile` also carries `response.deny_when` to `tc.DenyWhen`, `api.mutating` (or `Bindings.AllowMutating`) to `tc.Mutating`, and the `setup` block to `tc.Setup`, resolving each step's logical role to a concrete identity id and joining its path to the base URL. `substitutePath` steps over `{{var}}` runtime references so they survive compilation.
+`Compile` carries `api.body` (validated JSON) and `api.headers` to the request under test, defaulting `Content-Type: application/json` when a body is set; error messages never echo the body. `Compile` also carries `response.deny_when` to `tc.DenyWhen`, `api.mutating` (or `Bindings.AllowMutating`) to `tc.Mutating`, and the `setup` block to `tc.Setup`, resolving each step's logical role to a concrete identity id and joining its path to the base URL. `substitutePath` steps over `{{var}}` runtime references so they survive compilation.
 
 `DraftMarker` (`TODO`) is rejected by `toDecision` — this is what makes a `discover` draft inert. See ADR 0009.
 
@@ -235,7 +244,7 @@ Exposes the HTTP API. No business logic.
 
 Subcommand dispatch (`main.go`). A bare invocation serves, which is the documented default; **any unrecognized argument is an error**, not a fallthrough to `serve` — that fallthrough is why `vardrgate --help` used to start a web server.
 
-Exit codes are shared by every command that executes a test case: `0` ran clean, `1` usage or input error, `2` findings at or above `--fail-on`, `3` a case reached nothing. `exitError` carries the code out of a subcommand; `gate` decides it. Exit 3 is not gated on the threshold and outranks findings — zero findings means nothing when no request succeeded — and it is evaluated **per case**, so a target that dies partway through a suite still fails the run.
+Exit codes are shared by every command that executes a test case: `0` ran clean, `1` usage or input error, `2` findings at or above `--fail-on`, `3` a case reached nothing, `4` (only with `--fail-on-inconclusive`) an expectation could not be judged. `gateInconclusive` runs after `gate`, so 3 and 2 keep precedence. `exitError` carries the code out of a subcommand; `gate` decides it. Exit 3 is not gated on the threshold and outranks findings — zero findings means nothing when no request succeeded — and it is evaluated **per case**, so a target that dies partway through a suite still fails the run.
 
 | Command | Purpose |
 |---|---|

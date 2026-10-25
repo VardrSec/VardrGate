@@ -1,0 +1,89 @@
+{
+  "gate_revision": "a5c5fab11ef86935095ed6a39ef94f98ee27b737",
+  "lab_revision": "5ab4c59866294daaf74798111f7217c833c9598a",
+  "inputs_sha256": {
+    "verifier-mistakes.json": "779b93488350a975f9a001edac1cefb474e9f5dc43c81cc82f6a54e6191b031b"
+  },
+  "experiments": [
+    {
+      "id": "path-typo",
+      "exit_code": 3,
+      "outcomes": {
+        "bob": "inconclusive:verifier_baseline_missing"
+      },
+      "acceptable": true,
+      "validation_error": ""
+    },
+    {
+      "id": "wrong-victim-password",
+      "exit_code": 0,
+      "outcomes": {
+        "bob": "denied"
+      },
+      "acceptable": false,
+      "validation_error": ""
+    },
+    {
+      "id": "wrong-victim-password-with-control",
+      "exit_code": 3,
+      "outcomes": {
+        "alice": "inconclusive:target_value_already_present",
+        "bob": "inconclusive:target_value_already_present"
+      },
+      "acceptable": true,
+      "validation_error": ""
+    },
+    {
+      "id": "untouched-field",
+      "exit_code": 0,
+      "outcomes": {
+        "bob": "denied"
+      },
+      "acceptable": false,
+      "validation_error": ""
+    },
+    {
+      "id": "untouched-field-with-control",
+      "exit_code": 0,
+      "outcomes": {
+        "alice": "finding:authorization_mismatch",
+        "bob": "denied"
+      },
+      "acceptable": true,
+      "validation_error": ""
+    },
+    {
+      "id": "shared-body-correct-oracle",
+      "exit_code": 0,
+      "outcomes": {
+        "alice": "inconclusive:target_value_already_present",
+        "bob": "finding:unexpected_access"
+      },
+      "acceptable": true,
+      "validation_error": ""
+    },
+    {
+      "id": "shared-body-correct-oracle-protected",
+      "exit_code": 0,
+      "outcomes": {
+        "alice": "allowed",
+        "bob": "denied"
+      },
+      "acceptable": true,
+      "validation_error": ""
+    },
+    {
+      "id": "shared-body-without-changed-to",
+      "exit_code": 1,
+      "outcomes": {
+        "alice": "rejected",
+        "bob": "rejected"
+      },
+      "acceptable": true,
+      "validation_error": "error: 1 case could not be run:\n  shared-body-without-changed-to: write_verification of more than one identity requires changed_to\n\nCases from `vardrgate gen` are scaffolds \u00e2\u20ac\u201d fill in the credential values before running them."
+    }
+  ],
+  "gate_binary_sha256": "0abd9fb70441391ef9960a8922edd466ec4c01eb0287429ffe1bd011cf80b682",
+  "gate_source_sha256": "e0c6d4a5a9c7fdb53b1e0b97bf89695c698dd22d14951a5a4227e31e5dcb2426",
+  "harness_sha256": "0d51ab71c5040ecd3a37ccf6f05f3ff4f6005a280e579fe19929364712bbc3ee"
+}

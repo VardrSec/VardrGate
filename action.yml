@@ -37,7 +37,7 @@ inputs:
 
 outputs:
   exit-code:
-    description: "vardrgate's exit code: 0 clean, 1 usage error, 2 findings at or above --fail-on, 3 nothing tested."
+    description: "vardrgate's exit code: 0 clean, 1 usage error, 2 findings at or above --fail-on, 3 nothing tested, 4 inconclusive with --fail-on-inconclusive."
     value: ${{ steps.run.outputs.exit-code }}
 
 runs:

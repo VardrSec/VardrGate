@@ -232,6 +232,14 @@ func TestSARIF_EveryEngineCategoryHasARule(t *testing.T) {
 	}
 }
 
+func TestEveryInconclusiveReasonIsExplained(t *testing.T) {
+	for _, reason := range engine.InconclusiveReasons() {
+		if _, ok := inconclusiveReasons[reason]; !ok {
+			t.Errorf("no operator explanation for inconclusive reason %s", reason)
+		}
+	}
+}
+
 func TestSARIF_UnknownCategoryStillReported(t *testing.T) {
 	c := clean()
 	c.Result.Findings = []model.Finding{{Category: "future_category", Severity: model.SeverityMedium, IdentityID: "x", Message: "m"}}
@@ -265,5 +273,40 @@ func TestEveryFormat_ReportsACaseThatCouldNotRun(t *testing.T) {
 	}
 	if inv := decodeSARIF(t, []Case{c}).Runs[0].Invocations[0]; inv.ExecutionSuccessful || len(inv.Notifications) != 1 {
 		t.Errorf("sarif invocation = %+v", inv)
+	}
+}
+
+func inconclusive() Case {
+	return Case{Source: "policies/stale.yaml", Result: engine.Result{
+		TestCaseID: "stale",
+		Executions: []model.ExecutionResult{{IdentityID: "peer", StatusCode: 200, ObservedOutcome: model.OutcomeAllow}},
+		Findings:   []model.Finding{},
+		Assessments: []model.Assessment{{IdentityID: "peer", ExpectedAccess: model.AccessDecisionDeny,
+			Decision: model.AssessmentInconclusive, Source: "response_assertion", Reason: "no_assertion_matched"}},
+	}}
+}
+
+// An inconclusive assessment produces no finding; every format must still say
+// the case is not a pass.
+func TestInconclusiveIsNeverRenderedAsPass(t *testing.T) {
+	var text, mdown, sarif bytes.Buffer
+	if err := Text(&text, []Case{inconclusive()}); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(text.String(), "No findings.") || !strings.Contains(text.String(), "not a pass") ||
+		!strings.Contains(text.String(), "may be stale") || !strings.Contains(text.String(), "1 inconclusive assessment") {
+		t.Fatalf("text:\n%s", text.String())
+	}
+	if err := Markdown(&mdown, []Case{inconclusive()}); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(mdown.String(), "✅") || !strings.Contains(mdown.String(), "Inconclusive assessments") {
+		t.Fatalf("markdown:\n%s", mdown.String())
+	}
+	if err := SARIF(&sarif, []Case{inconclusive()}, "test"); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(sarif.String(), `"level": "warning"`) || !strings.Contains(sarif.String(), "inconclusive") {
+		t.Fatalf("sarif:\n%s", sarif.String())
 	}
 }

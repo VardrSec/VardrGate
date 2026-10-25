@@ -66,6 +66,7 @@ type wireCase struct {
 	DenyStatuses    []int                  `json:"deny_status,omitempty"`
 	DenyWhen        *model.DenyCondition   `json:"deny_when,omitempty"`
 	Mutating        bool                   `json:"mutating,omitempty"`
+	Verification    *wireVerification      `json:"write_verification,omitempty"`
 	Setup           []model.SetupStep      `json:"setup,omitempty"`
 	CORS            *model.CORSCheck       `json:"cors,omitempty"`
 	ExpectedAccess  []model.ExpectedAccess `json:"expected_access"`
@@ -81,6 +82,16 @@ type wireIdentity struct {
 	Preflight   *model.IdentityPreflight `json:"preflight,omitempty"`
 }
 
+// wireVerification carries the verifier's identity through wireIdentity so its
+// credential gets the same placeholder treatment as every other identity.
+type wireVerification struct {
+	Identity          wireIdentity          `json:"identity"`
+	Request           model.RequestTemplate `json:"request"`
+	AllowUnsafeMethod bool                  `json:"allow_unsafe_method,omitempty"`
+	JSONPointer       string                `json:"json_pointer,omitempty"`
+	ChangedTo         json.RawMessage       `json:"changed_to,omitempty"`
+}
+
 type wireCredential struct {
 	Type   model.CredentialType `json:"type"`
 	Header string               `json:"header,omitempty"`
@@ -90,19 +101,17 @@ type wireCredential struct {
 func toWire(tc model.AuthorizationTestCase) wireCase {
 	ids := make([]wireIdentity, 0, len(tc.Identities))
 	for _, id := range tc.Identities {
-		ids = append(ids, wireIdentity{
-			ID:          id.ID,
-			Name:        id.Name,
-			Role:        id.Role,
-			TenantID:    id.TenantID,
-			Description: id.Description,
-			Preflight:   id.Preflight,
-			Credential: wireCredential{
-				Type:   id.Credential.Type,
-				Header: id.Credential.Header,
-				Value:  placeholder(id),
-			},
-		})
+		ids = append(ids, toWireIdentity(id))
+	}
+	var verification *wireVerification
+	if wv := tc.WriteVerification; wv != nil {
+		verification = &wireVerification{
+			Identity:          toWireIdentity(wv.Identity),
+			Request:           wv.Request,
+			AllowUnsafeMethod: wv.AllowUnsafeMethod,
+			JSONPointer:       wv.JSONPointer,
+			ChangedTo:         wv.ChangedTo,
+		}
 	}
 	return wireCase{
 		ID:              tc.ID,
@@ -115,9 +124,26 @@ func toWire(tc model.AuthorizationTestCase) wireCase {
 		DenyStatuses:    tc.DenyStatuses,
 		DenyWhen:        tc.DenyWhen,
 		Mutating:        tc.Mutating,
+		Verification:    verification,
 		Setup:           tc.Setup,
 		CORS:            tc.CORS,
 		ExpectedAccess:  tc.ExpectedAccess,
+	}
+}
+
+func toWireIdentity(id model.Identity) wireIdentity {
+	return wireIdentity{
+		ID:          id.ID,
+		Name:        id.Name,
+		Role:        id.Role,
+		TenantID:    id.TenantID,
+		Description: id.Description,
+		Preflight:   id.Preflight,
+		Credential: wireCredential{
+			Type:   id.Credential.Type,
+			Header: id.Credential.Header,
+			Value:  placeholder(id),
+		},
 	}
 }
 

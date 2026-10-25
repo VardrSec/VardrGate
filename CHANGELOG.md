@@ -8,6 +8,39 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Response assertions.** Policy `response.assertions`, and
+  `expected_access[].response_assertions` in the HTTP API, declare JSON values
+  (by JSON Pointer) that prove an allow or a deny. This catches protected data
+  returned with 403, 404 or 500, and refusals returned with 200. When
+  configured, assertions decide the result with no status fallback, and they
+  outrank `deny_status`/`deny_when`. Unmatched or conflicting evidence is
+  inconclusive. Evidence carries assertion indices only. See
+  [ADR 0016](docs/adr/0016-response-assertions.md) and
+  `docs/response-assertions.md`.
+- **Write verification.** Policy `verify` and `write_verification` in the HTTP
+  API name a separate reader that observes the target's state before and after
+  each identity's request. An unchanged state is a denial, and a changed state
+  is access, whatever the write's own status says. Failed or refused reads,
+  concurrent changes, an already-present target value and unexpected changes
+  are inconclusive. The request is withheld when its before-state cannot be
+  read. Only reason codes are reported. See
+  [ADR 0017](docs/adr/0017-write-verification.md) and
+  `docs/write-verification.md`.
+- **Request body in policies.** `api.body` (JSON) and `api.headers` are sent
+  by every identity, so a policy can test a write endpoint that reads JSON.
+  Content-Type defaults to `application/json` when a body is set.
+- **Assessments.** Every result has an `assessments` array: `allowed`,
+  `denied`, `inconclusive` or `skipped` per identity, with a source and a reason
+  code. The field is additive.
+- **Inconclusive is never a pass.** Text, Markdown and SARIF reports list
+  inconclusive assessments with an explanation. Markdown shows ⚠️ rather than
+  ✅, and SARIF adds a warning notification. `--fail-on-inconclusive` exits 4.
+- **Authorization benchmark.** `go run ./cmd/authbench` scores Gate against a
+  deliberately vulnerable loopback API, with recorded reports under
+  `benchmarks/`. CI runs both modes, retains the reports, and enforces
+  regression budgets in `go test`.
+
+
 - **Policy suites.** `vardrgate policy run --suite <file>` runs many policies
   against one environment as one command with one exit code. Each entry names a
   policy and its path parameters, with an optional tenant, id and identities
@@ -37,6 +70,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Reports now show status-only ambiguous outcomes (for example, an undeclared
+  404 on an expected denial) as inconclusive. Findings and exit codes are
+  unchanged.
 - README leads with the problem, the demo, single-endpoint and suite usage, and
   CI. Reference material (policy features, spec importers, HTTP API, queue and
   Map integration) follows, and session cookies are documented as a
@@ -48,6 +84,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Write verification no longer treats verifier redirects or unsupported client
+  errors as changed state, or a successful status change alone as a mutation.
+- An errored write with no observed effect is inconclusive. Independently
+  observed effects still prove access even when the write reports an error.
+- Unchanged deny-expected writes require a demonstrated allow-expected positive
+  control; missing or failed controls are explicit inconclusive assessments.
+  See [ADR 0018](docs/adr/0018-verifier-confidence.md).
+- Reports now explain the four ADR 0018 inconclusive reasons
+  (`no_positive_control`, `positive_control_failed`, `write_execution_error`,
+  `verifier_unexpected_status`) instead of printing the bare code. A test now
+  fails if any engine inconclusive reason lacks an explanation.
+
+- Sensitive query parameters (`token`, `api_key`, ...) are now redacted from
+  finding evidence regardless of case; `?Token=` or `?API_KEY=` previously
+  passed through.
 - `tenant_field` now matches the response field regardless of separators, as
   sensitive-field matching already did: `tenant_id` finds `tenantId` and
   `tenant-id`. A tenant-isolation break against a camelCase API was previously

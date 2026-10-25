@@ -299,3 +299,30 @@ func TestGate_CaseThatCouldNotRunIsNotExecuted(t *testing.T) {
 		t.Errorf("message does not name the case: %v", err)
 	}
 }
+
+func inconclusiveResult() engine.Result {
+	return engine.Result{
+		TestCaseID: "stale",
+		Executions: []model.ExecutionResult{{IdentityID: "a", StatusCode: 200, ObservedOutcome: model.OutcomeAllow}},
+		Findings:   []model.Finding{},
+		Assessments: []model.Assessment{{IdentityID: "a", ExpectedAccess: model.AccessDecisionDeny,
+			Decision: model.AssessmentInconclusive, Source: "response_assertion", Reason: "no_assertion_matched"}},
+	}
+}
+
+func TestGateInconclusiveIsOptIn(t *testing.T) {
+	res := []engine.Result{inconclusiveResult()}
+	if code := exitCode(t, gateInconclusive(res, false)); code != exitOK {
+		t.Fatalf("without the flag: exit %d", code)
+	}
+	err := gateInconclusive(res, true)
+	if code := exitCode(t, err); code != exitInconclusive {
+		t.Fatalf("with the flag: exit %d", code)
+	}
+	if !strings.Contains(err.Error(), "stale") || !strings.Contains(err.Error(), "may be stale") {
+		t.Fatalf("message lacks case and explanation: %v", err)
+	}
+	if code := exitCode(t, gateInconclusive([]engine.Result{resultWith()}, true)); code != exitOK {
+		t.Fatalf("conclusive run: exit %d", code)
+	}
+}

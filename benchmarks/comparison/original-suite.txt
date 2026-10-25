@@ -1,0 +1,7 @@
+?   	github.com/VardrSec/vardrgate/cmd/vardrgate	[no test files]
+ok  	github.com/VardrSec/vardrgate/internal/api	0.875s
+ok  	github.com/VardrSec/vardrgate/internal/client	1.100s
+ok  	github.com/VardrSec/vardrgate/internal/compare	0.472s
+ok  	github.com/VardrSec/vardrgate/internal/engine	0.504s
+ok  	github.com/VardrSec/vardrgate/internal/model	0.441s
+ok  	github.com/VardrSec/vardrgate/internal/urlcheck	0.458s

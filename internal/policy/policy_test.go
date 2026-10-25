@@ -472,3 +472,195 @@ func TestSubstitutePath_LeavesRuntimeReferencesAlone(t *testing.T) {
 		t.Errorf("got %q", got)
 	}
 }
+
+const assertionPolicy = `
+api:
+  endpoint: GET /books/{title}
+expect:
+  owner: allow
+  peer: deny
+  anonymous: deny
+response:
+  assertions:
+    - json_pointer: /secret
+      equals: owner-secret
+      decision: allow
+    - json_pointer: /status
+      equals: fail
+      decision: deny
+      roles: [peer]
+    - json_pointer: /id
+      equals: 9007199254740993
+      decision: allow
+      roles: [owner]
+`
+
+func assertionBindings() Bindings {
+	return Bindings{BaseURL: "http://localhost:5000", PathParams: map[string]string{"title": "b1"}, Identities: []model.Identity{
+		{ID: "o", Role: "owner", Credential: model.Credential{Type: model.CredentialTypeBearer, Value: "t1"}},
+		{ID: "p", Role: "peer", Credential: model.Credential{Type: model.CredentialTypeBearer, Value: "t2"}},
+		{ID: "a", Role: "anonymous", Credential: model.Credential{Type: model.CredentialTypeBearer, Value: "t3"}},
+	}}
+}
+
+func TestCompile_ResponseAssertions(t *testing.T) {
+	p, err := Parse([]byte(assertionPolicy))
+	if err != nil {
+		t.Fatal(err)
+	}
+	tc, err := p.Compile(assertionBindings())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := engine.Validate(tc); err != nil {
+		t.Fatalf("compiled assertions do not validate: %v", err)
+	}
+	got := map[string][]string{}
+	for _, ea := range tc.ExpectedAccess {
+		for _, r := range ea.ResponseAssertions {
+			got[ea.IdentityID] = append(got[ea.IdentityID], r.JSONPointer+"="+string(r.Equals)+":"+string(r.Decision))
+		}
+	}
+	want := map[string][]string{
+		"o": {`/secret="owner-secret":allow`, `/id=9007199254740993:allow`},
+		"p": {`/secret="owner-secret":allow`, `/status="fail":deny`},
+		"a": {`/secret="owner-secret":allow`},
+	}
+	for id, w := range want {
+		if strings.Join(got[id], " ") != strings.Join(w, " ") {
+			t.Errorf("%s: got %v, want %v", id, got[id], w)
+		}
+	}
+}
+
+func TestCompile_RejectsBadAssertions(t *testing.T) {
+	for name, tail := range map[string]string{
+		"missing equals": "    - json_pointer: /x\n      decision: allow\n",
+		"bad decision":   "    - json_pointer: /x\n      equals: 1\n      decision: skip\n",
+		"unknown role":   "    - json_pointer: /x\n      equals: 1\n      decision: deny\n      roles: [admin]\n",
+		"bad pointer":    "    - json_pointer: x\n      equals: 1\n      decision: deny\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			doc := "api:\n  endpoint: GET /x\nexpect:\n  owner: allow\nresponse:\n  assertions:\n" + tail
+			p, err := Parse([]byte(doc))
+			if err != nil {
+				t.Fatal(err)
+			}
+			b := assertionBindings()
+			b.Identities = b.Identities[:1]
+			tc, err := p.Compile(b)
+			if err == nil {
+				err = engine.Validate(tc)
+			}
+			if err == nil {
+				t.Fatal("expected an error")
+			}
+		})
+	}
+}
+
+func TestCompile_RequestBodyAndHeaders(t *testing.T) {
+	doc := "api:\n  endpoint: PUT /users/{user_id}/email\n  mutating: true\n  body: '{\"email\": \"new@example.com\"}'\n  headers:\n    X-Trace: gate\nexpect:\n  owner: allow\n"
+	p, err := Parse([]byte(doc))
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := bindings()
+	b.Identities = b.Identities[:1]
+	tc, err := p.Compile(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(tc.Request.Body) != `{"email": "new@example.com"}` {
+		t.Errorf("body = %s", tc.Request.Body)
+	}
+	if tc.Request.Headers["Content-Type"] != "application/json" || tc.Request.Headers["X-Trace"] != "gate" {
+		t.Errorf("headers = %v", tc.Request.Headers)
+	}
+
+	bad := strings.Replace(doc, `'{"email": "new@example.com"}'`, "not json", 1)
+	p, err = Parse([]byte(bad))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.Compile(b); err == nil || strings.Contains(err.Error(), "not json") {
+		t.Fatalf("want an error that does not echo the body, got %v", err)
+	}
+}
+
+const verifyPolicy = `
+api:
+  endpoint: PUT /users/{username}/email
+  mutating: true
+  body: '{"email": "taken@example.io"}'
+expect:
+  owner: allow
+  peer: deny
+verify:
+  as: auditor
+  request:
+    method: GET
+    path: /users/{username}
+  json_pointer: /email
+  changed_to: taken@example.io
+`
+
+func verifyBindings() Bindings {
+	return Bindings{BaseURL: "http://localhost:5000", PathParams: map[string]string{"username": "alice"}, Identities: []model.Identity{
+		{ID: "o", Role: "owner", Credential: model.Credential{Type: model.CredentialTypeBearer, Value: "t1"}},
+		{ID: "p", Role: "peer", Credential: model.Credential{Type: model.CredentialTypeBearer, Value: "t2"}},
+		{ID: "aud", Role: "auditor", Credential: model.Credential{Type: model.CredentialTypeStaticHeader}},
+	}}
+}
+
+func TestCompile_Verify(t *testing.T) {
+	p, err := Parse([]byte(verifyPolicy))
+	if err != nil {
+		t.Fatal(err)
+	}
+	tc, err := p.Compile(verifyBindings())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := engine.Validate(tc); err != nil {
+		t.Fatalf("compiled verification does not validate: %v", err)
+	}
+	for _, id := range tc.Identities {
+		if id.ID == "aud" {
+			t.Fatal("the verifier must not be executed")
+		}
+	}
+	wv := tc.WriteVerification
+	if wv == nil || wv.Identity.ID != "aud" || wv.Request.URL != "http://localhost:5000/users/alice" ||
+		wv.JSONPointer != "/email" || string(wv.ChangedTo) != `"taken@example.io"` {
+		t.Fatalf("verification = %+v", wv)
+	}
+}
+
+func TestCompile_VerifyErrors(t *testing.T) {
+	for name, tt := range map[string]struct {
+		doc string
+		ids func([]model.Identity) []model.Identity
+	}{
+		"verifier role in expect": {strings.Replace(verifyPolicy, "as: auditor", "as: peer", 1), nil},
+		"no verifier identity":    {verifyPolicy, func(ids []model.Identity) []model.Identity { return ids[:2] }},
+		"two verifier identities": {verifyPolicy, func(ids []model.Identity) []model.Identity {
+			return append(ids, model.Identity{ID: "aud2", Role: "auditor", Credential: model.Credential{Type: model.CredentialTypeStaticHeader}})
+		}},
+		"missing as": {strings.Replace(verifyPolicy, "as: auditor", "as: ''", 1), nil},
+	} {
+		t.Run(name, func(t *testing.T) {
+			p, err := Parse([]byte(tt.doc))
+			if err != nil {
+				t.Fatal(err)
+			}
+			b := verifyBindings()
+			if tt.ids != nil {
+				b.Identities = tt.ids(b.Identities)
+			}
+			if _, err := p.Compile(b); err == nil {
+				t.Fatal("expected an error")
+			}
+		})
+	}
+}

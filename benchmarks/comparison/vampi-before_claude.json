@@ -1,0 +1,909 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-10-24T19:28:25Z",
+  "gate_revision": "3de1d0c6adc7a01512a5f884184f19b3467f3dea",
+  "gate_tree_clean": true,
+  "lab_revision": "5ab4c59866294daaf74798111f7217c833c9598a",
+  "lab_tree_status": "",
+  "target": {
+    "name": "VAmPI",
+    "repository": "https://github.com/erev0s/VAmPI",
+    "commit": "f16052dce83f05847133ec98f01c5193a41de7d8",
+    "modes": {
+      "vulnerable": {
+        "env": {
+          "vulnerable": "1",
+          "tokentimetolive": "3600"
+        }
+      },
+      "protected": {
+        "env": {
+          "vulnerable": "0",
+          "tokentimetolive": "3600"
+        }
+      }
+    }
+  },
+  "image_id": "sha256:88a18820b9871efc68e06c6dd23486d8ca04deb970c9b57eb1b064ce7c7c271c",
+  "inputs_sha256": {
+    "corpus.json": "55729e2ba5d5bebb1a4310a72a6fb98c893fc2d8ed548c6b55c70678b1eada47",
+    "profiles.json": "4f98b0e7785f836fb07578aa74ed8f52f2614aed0ed0a06df41901cdc8baf4bf",
+    "mistakes.json": "8a5044a44726e602b232a6455c3671ac2e7a7c1e77c2862a31d13e65bf17f3c0",
+    "verification.json": "1bee46730adbd7dfda04da6d612cc1fe74ae64231288eb857a85bdcf2f90dcfb"
+  },
+  "repeat": 3,
+  "verifier": true,
+  "ground_truth": [
+    {
+      "mode": "vulnerable",
+      "case": "book-owner",
+      "status": 200,
+      "violation": false
+    },
+    {
+      "mode": "vulnerable",
+      "case": "book-peer",
+      "status": 200,
+      "violation": true
+    },
+    {
+      "mode": "vulnerable",
+      "case": "book-admin",
+      "status": 200,
+      "violation": true
+    },
+    {
+      "mode": "vulnerable",
+      "case": "book-anonymous",
+      "status": 401,
+      "violation": false
+    },
+    {
+      "mode": "vulnerable",
+      "case": "users-public",
+      "status": 200,
+      "violation": false
+    },
+    {
+      "mode": "vulnerable",
+      "case": "debug-anonymous",
+      "status": 200,
+      "violation": true
+    },
+    {
+      "mode": "vulnerable",
+      "case": "debug-peer",
+      "status": 200,
+      "violation": true
+    },
+    {
+      "mode": "vulnerable",
+      "case": "password-peer",
+      "status": 204,
+      "violation": true
+    },
+    {
+      "mode": "vulnerable",
+      "case": "password-owner",
+      "status": 204,
+      "violation": false
+    },
+    {
+      "mode": "vulnerable",
+      "case": "password-anonymous",
+      "status": 401,
+      "violation": false
+    },
+    {
+      "mode": "vulnerable",
+      "case": "email-peer",
+      "status": 204,
+      "violation": false
+    },
+    {
+      "mode": "vulnerable",
+      "case": "email-owner",
+      "status": 204,
+      "violation": false
+    },
+    {
+      "mode": "vulnerable",
+      "case": "delete-peer",
+      "status": 401,
+      "violation": false
+    },
+    {
+      "mode": "vulnerable",
+      "case": "delete-admin",
+      "status": 200,
+      "violation": false
+    },
+    {
+      "mode": "protected",
+      "case": "book-owner",
+      "status": 200,
+      "violation": false
+    },
+    {
+      "mode": "protected",
+      "case": "book-peer",
+      "status": 404,
+      "violation": false
+    },
+    {
+      "mode": "protected",
+      "case": "book-admin",
+      "status": 404,
+      "violation": false
+    },
+    {
+      "mode": "protected",
+      "case": "book-anonymous",
+      "status": 401,
+      "violation": false
+    },
+    {
+      "mode": "protected",
+      "case": "users-public",
+      "status": 200,
+      "violation": false
+    },
+    {
+      "mode": "protected",
+      "case": "debug-anonymous",
+      "status": 200,
+      "violation": true
+    },
+    {
+      "mode": "protected",
+      "case": "debug-peer",
+      "status": 200,
+      "violation": true
+    },
+    {
+      "mode": "protected",
+      "case": "password-peer",
+      "status": 204,
+      "violation": false
+    },
+    {
+      "mode": "protected",
+      "case": "password-owner",
+      "status": 204,
+      "violation": false
+    },
+    {
+      "mode": "protected",
+      "case": "password-anonymous",
+      "status": 401,
+      "violation": false
+    },
+    {
+      "mode": "protected",
+      "case": "email-peer",
+      "status": 204,
+      "violation": false
+    },
+    {
+      "mode": "protected",
+      "case": "email-owner",
+      "status": 204,
+      "violation": false
+    },
+    {
+      "mode": "protected",
+      "case": "delete-peer",
+      "status": 401,
+      "violation": false
+    },
+    {
+      "mode": "protected",
+      "case": "delete-admin",
+      "status": 200,
+      "violation": false
+    }
+  ],
+  "results": {
+    "status/vulnerable": {
+      "metrics": {
+        "true_positive": 5,
+        "false_positive": 1,
+        "false_negative": 0,
+        "true_negative": 8,
+        "inconclusive_control": 0,
+        "inconclusive_assessments": 0,
+        "inconclusive_known_failures": 0,
+        "precision": 0.8333333333333334,
+        "recall": 1.0,
+        "known_failures": 5,
+        "total": 14
+      },
+      "cases": [
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": null,
+          "findings": [],
+          "case": "book-owner"
+        },
+        {
+          "verdict": "true_positive",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": null,
+          "findings": [
+            [
+              "unexpected_access",
+              "high"
+            ]
+          ],
+          "case": "book-peer"
+        },
+        {
+          "verdict": "true_positive",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": null,
+          "findings": [
+            [
+              "unexpected_access",
+              "high"
+            ]
+          ],
+          "case": "book-admin"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": null,
+          "findings": [],
+          "case": "book-anonymous"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": null,
+          "findings": [],
+          "case": "users-public"
+        },
+        {
+          "verdict": "true_positive",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": null,
+          "findings": [
+            [
+              "missing_authentication",
+              "critical"
+            ]
+          ],
+          "case": "debug-anonymous"
+        },
+        {
+          "verdict": "true_positive",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": null,
+          "findings": [
+            [
+              "unexpected_access",
+              "high"
+            ]
+          ],
+          "case": "debug-peer"
+        },
+        {
+          "verdict": "true_positive",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": null,
+          "findings": [
+            [
+              "unexpected_access",
+              "high"
+            ]
+          ],
+          "case": "password-peer"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": null,
+          "findings": [],
+          "case": "password-owner"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": null,
+          "findings": [],
+          "case": "password-anonymous"
+        },
+        {
+          "verdict": "false_positive",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": null,
+          "findings": [
+            [
+              "unexpected_access",
+              "high"
+            ]
+          ],
+          "case": "email-peer"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": null,
+          "findings": [],
+          "case": "email-owner"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": null,
+          "findings": [],
+          "case": "delete-peer"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": null,
+          "findings": [],
+          "case": "delete-admin"
+        }
+      ]
+    },
+    "status/protected": {
+      "metrics": {
+        "true_positive": 2,
+        "false_positive": 2,
+        "false_negative": 0,
+        "true_negative": 10,
+        "inconclusive_control": 0,
+        "inconclusive_assessments": 0,
+        "inconclusive_known_failures": 0,
+        "precision": 0.5,
+        "recall": 1.0,
+        "known_failures": 2,
+        "total": 14
+      },
+      "cases": [
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": null,
+          "findings": [],
+          "case": "book-owner"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": null,
+          "findings": [],
+          "case": "book-peer"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": null,
+          "findings": [],
+          "case": "book-admin"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": null,
+          "findings": [],
+          "case": "book-anonymous"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": null,
+          "findings": [],
+          "case": "users-public"
+        },
+        {
+          "verdict": "true_positive",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": null,
+          "findings": [
+            [
+              "missing_authentication",
+              "critical"
+            ]
+          ],
+          "case": "debug-anonymous"
+        },
+        {
+          "verdict": "true_positive",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": null,
+          "findings": [
+            [
+              "unexpected_access",
+              "high"
+            ]
+          ],
+          "case": "debug-peer"
+        },
+        {
+          "verdict": "false_positive",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": null,
+          "findings": [
+            [
+              "unexpected_access",
+              "high"
+            ]
+          ],
+          "case": "password-peer"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": null,
+          "findings": [],
+          "case": "password-owner"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": null,
+          "findings": [],
+          "case": "password-anonymous"
+        },
+        {
+          "verdict": "false_positive",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": null,
+          "findings": [
+            [
+              "unexpected_access",
+              "high"
+            ]
+          ],
+          "case": "email-peer"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": null,
+          "findings": [],
+          "case": "email-owner"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": null,
+          "findings": [],
+          "case": "delete-peer"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": null,
+          "findings": [],
+          "case": "delete-admin"
+        }
+      ]
+    },
+    "assertions/vulnerable": {
+      "metrics": {
+        "true_positive": 5,
+        "false_positive": 1,
+        "false_negative": 0,
+        "true_negative": 8,
+        "inconclusive_control": 0,
+        "inconclusive_assessments": 0,
+        "inconclusive_known_failures": 0,
+        "precision": 0.8333333333333334,
+        "recall": 1.0,
+        "known_failures": 5,
+        "total": 14
+      },
+      "cases": [
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": null,
+          "findings": [],
+          "case": "book-owner"
+        },
+        {
+          "verdict": "true_positive",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": null,
+          "findings": [
+            [
+              "unexpected_access",
+              "high"
+            ]
+          ],
+          "case": "book-peer"
+        },
+        {
+          "verdict": "true_positive",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": null,
+          "findings": [
+            [
+              "unexpected_access",
+              "high"
+            ]
+          ],
+          "case": "book-admin"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": null,
+          "findings": [],
+          "case": "book-anonymous"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": null,
+          "findings": [],
+          "case": "users-public"
+        },
+        {
+          "verdict": "true_positive",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": null,
+          "findings": [
+            [
+              "missing_authentication",
+              "critical"
+            ]
+          ],
+          "case": "debug-anonymous"
+        },
+        {
+          "verdict": "true_positive",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": null,
+          "findings": [
+            [
+              "unexpected_access",
+              "high"
+            ]
+          ],
+          "case": "debug-peer"
+        },
+        {
+          "verdict": "true_positive",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": null,
+          "findings": [
+            [
+              "unexpected_access",
+              "high"
+            ]
+          ],
+          "case": "password-peer"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": null,
+          "findings": [],
+          "case": "password-owner"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": null,
+          "findings": [],
+          "case": "password-anonymous"
+        },
+        {
+          "verdict": "false_positive",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": null,
+          "findings": [
+            [
+              "unexpected_access",
+              "high"
+            ]
+          ],
+          "case": "email-peer"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": null,
+          "findings": [],
+          "case": "email-owner"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": null,
+          "findings": [],
+          "case": "delete-peer"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": null,
+          "findings": [],
+          "case": "delete-admin"
+        }
+      ]
+    },
+    "assertions/protected": {
+      "metrics": {
+        "true_positive": 2,
+        "false_positive": 2,
+        "false_negative": 0,
+        "true_negative": 10,
+        "inconclusive_control": 0,
+        "inconclusive_assessments": 0,
+        "inconclusive_known_failures": 0,
+        "precision": 0.5,
+        "recall": 1.0,
+        "known_failures": 2,
+        "total": 14
+      },
+      "cases": [
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": null,
+          "findings": [],
+          "case": "book-owner"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": null,
+          "findings": [],
+          "case": "book-peer"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": null,
+          "findings": [],
+          "case": "book-admin"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": null,
+          "findings": [],
+          "case": "book-anonymous"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": null,
+          "findings": [],
+          "case": "users-public"
+        },
+        {
+          "verdict": "true_positive",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": null,
+          "findings": [
+            [
+              "missing_authentication",
+              "critical"
+            ]
+          ],
+          "case": "debug-anonymous"
+        },
+        {
+          "verdict": "true_positive",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": null,
+          "findings": [
+            [
+              "unexpected_access",
+              "high"
+            ]
+          ],
+          "case": "debug-peer"
+        },
+        {
+          "verdict": "false_positive",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": null,
+          "findings": [
+            [
+              "unexpected_access",
+              "high"
+            ]
+          ],
+          "case": "password-peer"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": null,
+          "findings": [],
+          "case": "password-owner"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": null,
+          "findings": [],
+          "case": "password-anonymous"
+        },
+        {
+          "verdict": "false_positive",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": null,
+          "findings": [
+            [
+              "unexpected_access",
+              "high"
+            ]
+          ],
+          "case": "email-peer"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": null,
+          "findings": [],
+          "case": "email-owner"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": null,
+          "findings": [],
+          "case": "delete-peer"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": null,
+          "findings": [],
+          "case": "delete-admin"
+        }
+      ]
+    }
+  },
+  "mistakes": [
+    {
+      "id": "stale-secret",
+      "outcome": "finding:unexpected_access",
+      "acceptable": false,
+      "exit_code": 0,
+      "assessment": null,
+      "preflight": null
+    },
+    {
+      "id": "stale-secret-owner",
+      "outcome": "silent_pass",
+      "acceptable": false,
+      "exit_code": 0,
+      "assessment": null,
+      "preflight": null
+    },
+    {
+      "id": "changed-format",
+      "outcome": "finding:unexpected_access",
+      "acceptable": false,
+      "exit_code": 0,
+      "assessment": null,
+      "preflight": null
+    },
+    {
+      "id": "conflicting-evidence",
+      "outcome": "finding:unexpected_access",
+      "acceptable": false,
+      "exit_code": 0,
+      "assessment": null,
+      "preflight": null
+    },
+    {
+      "id": "wrong-expectation",
+      "outcome": "finding:authorization_mismatch",
+      "acceptable": true,
+      "exit_code": 0,
+      "assessment": null,
+      "preflight": null
+    },
+    {
+      "id": "dead-token-status",
+      "outcome": "silent_pass",
+      "acceptable": false,
+      "exit_code": 0,
+      "assessment": null,
+      "preflight": null
+    },
+    {
+      "id": "dead-token-generic-deny",
+      "outcome": "silent_pass",
+      "acceptable": false,
+      "exit_code": 0,
+      "assessment": null,
+      "preflight": null
+    },
+    {
+      "id": "dead-token-specific-deny",
+      "outcome": "silent_pass",
+      "acceptable": false,
+      "exit_code": 0,
+      "assessment": null,
+      "preflight": null
+    },
+    {
+      "id": "dead-token-preflight",
+      "outcome": "not_tested",
+      "acceptable": true,
+      "exit_code": 3,
+      "assessment": null,
+      "preflight": [
+        {
+          "identity_id": "bob",
+          "status": "failed",
+          "reason": "credential_rejected",
+          "status_code": 401
+        }
+      ]
+    }
+  ],
+  "gate_source_sha256": "72f4f76446c20c458bdcd36fb1ace97511d09b528c81c409b328f3cc9cba9b55",
+  "gate_binary_sha256": "84a19fc6f91c0bf55c68922ad5315706896d8181c3be50e25e6098d5db0f0275",
+  "gate_working_tree": false,
+  "harness_sha256": "e77c602d35b32e8c1c00ccb9d9d42b2c9cf1b4563005b9e1d1175a37b671d012"
+}

@@ -22,10 +22,11 @@ var version = ""
 // "found something", and "did not run" — a CI job needs to tell a real failure
 // apart from a target it never reached.
 const (
-	exitOK          = 0 // ran; nothing at or above the --fail-on threshold
-	exitUsage       = 1 // bad arguments, unreadable input, malformed document
-	exitFindings    = 2 // findings at or above the --fail-on threshold
-	exitNotExecuted = 3 // every identity errored; nothing was actually tested
+	exitOK           = 0 // ran; nothing at or above the --fail-on threshold
+	exitUsage        = 1 // bad arguments, unreadable input, malformed document
+	exitFindings     = 2 // findings at or above the --fail-on threshold
+	exitNotExecuted  = 3 // every identity errored; nothing was actually tested
+	exitInconclusive = 4 // --fail-on-inconclusive: an expectation could not be judged
 )
 
 // exitError carries a specific exit code out of a subcommand.
@@ -131,6 +132,7 @@ Exit codes for commands that execute a test:
   1  usage or input error
   2  findings at or above --fail-on
   3  every identity errored; nothing was tested
+  4  --fail-on-inconclusive and an expectation could not be judged
 
 Output (policy run, run):
   --format json|text|markdown   stdout format (default json)

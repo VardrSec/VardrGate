@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/VardrSec/vardrgate/internal/model"
+	"github.com/VardrSec/vardrgate/internal/secretref"
 	"gopkg.in/yaml.v3"
 )
 
@@ -25,6 +26,27 @@ type Policy struct {
 	Setup    []SetupSpec       `yaml:"setup"`
 	Expect   map[string]string `yaml:"expect"`
 	Response ResponseSpec      `yaml:"response"`
+	Verify   *VerifySpec       `yaml:"verify"`
+}
+
+// VerifySpec declares a write verifier: a separate reader, bound by role, that
+// observes the target's state before and after each identity's request. The
+// role must not appear in expect, so the reader never performs the write.
+type VerifySpec struct {
+	As                string           `yaml:"as"`
+	Request           SetupRequestSpec `yaml:"request"`
+	AllowUnsafeMethod bool             `yaml:"allow_unsafe_method"`
+	JSONPointer       string           `yaml:"json_pointer"`
+	ChangedTo         yaml.Node        `yaml:"changed_to"`
+}
+
+// VerifierRole is the role whose identity reads state for write verification,
+// or "" when the policy declares none. Suites bind it alongside expect roles.
+func (p Policy) VerifierRole() string {
+	if p.Verify == nil {
+		return ""
+	}
+	return strings.TrimSpace(p.Verify.As)
 }
 
 // APISpec identifies the endpoint under test and its ownership model.
@@ -37,6 +59,12 @@ type APISpec struct {
 	// Mutating acknowledges that this endpoint changes state and that replaying
 	// it once per identity is intended.
 	Mutating bool `yaml:"mutating"`
+	// Body is the JSON request body sent by every identity. Without it a policy
+	// cannot exercise a write endpoint that reads JSON.
+	Body string `yaml:"body"`
+	// Headers are sent by every identity; Content-Type defaults to
+	// application/json when Body is set.
+	Headers map[string]string `yaml:"headers"`
 }
 
 // SetupSpec is a request run before the one under test, whose response can
@@ -72,6 +100,20 @@ type ResponseSpec struct {
 	DenyStatus      []int         `yaml:"deny_status"`
 	DenyWhen        *DenyWhenSpec `yaml:"deny_when"`
 	SensitiveFields SensitiveSpec `yaml:"sensitive_fields"`
+	// Assertions recognize access from response content rather than status.
+	Assertions []AssertionSpec `yaml:"assertions"`
+}
+
+// AssertionSpec declares one JSON value that proves an access decision, such as
+// a private field only an authorized caller should receive, or an error code
+// the API returns with HTTP 200 when it refuses. It describes the endpoint's
+// response format, so it applies to every role with an allow or deny
+// expectation unless Roles narrows it.
+type AssertionSpec struct {
+	JSONPointer string    `yaml:"json_pointer"`
+	Equals      yaml.Node `yaml:"equals"`
+	Decision    string    `yaml:"decision"`
+	Roles       []string  `yaml:"roles"`
 }
 
 // DenyWhenSpec declares a refusal expressed in the response body rather than
@@ -199,9 +241,20 @@ func (p Policy) Compile(b Bindings) (model.AuthorizationTestCase, error) {
 	}
 	url := strings.TrimRight(b.BaseURL, "/") + path
 
+	executed, verification, err := p.compileVerify(b)
+	if err != nil {
+		return model.AuthorizationTestCase{}, err
+	}
+	b.Identities = executed
+
 	forbidden := make(map[string]struct{}, len(p.Response.SensitiveFields.ForbiddenFor))
 	for _, role := range p.Response.SensitiveFields.ForbiddenFor {
 		forbidden[role] = struct{}{}
+	}
+
+	compiledAssertions, err := p.compileAssertions()
+	if err != nil {
+		return model.AuthorizationTestCase{}, err
 	}
 
 	expected := make([]model.ExpectedAccess, 0, len(b.Identities))
@@ -221,6 +274,7 @@ func (p Policy) Compile(b Bindings) (model.AuthorizationTestCase, error) {
 			IdentityID:          id.ID,
 			Decision:            decision,
 			ForbidSensitiveData: forbidSensitive,
+			ResponseAssertions:  assertionsFor(compiledAssertions, id.Role),
 		})
 		if ownerRole != "" && id.Role == ownerRole {
 			ownerIdentity = id.ID
@@ -232,15 +286,21 @@ func (p Policy) Compile(b Bindings) (model.AuthorizationTestCase, error) {
 		return model.AuthorizationTestCase{}, err
 	}
 
+	request, err := p.request(method, url)
+	if err != nil {
+		return model.AuthorizationTestCase{}, err
+	}
+
 	tc := model.AuthorizationTestCase{
-		ID:             defaultID(b.TestCaseID, method, path),
-		Identities:     b.Identities,
-		Request:        model.RequestTemplate{Method: method, URL: url},
-		ExpectedAccess: expected,
-		DenyStatuses:   p.Response.DenyStatus,
-		DenyWhen:       p.Response.DenyWhen.condition(),
-		Mutating:       p.API.Mutating || b.AllowMutating,
-		Setup:          setup,
+		ID:                defaultID(b.TestCaseID, method, path),
+		Identities:        b.Identities,
+		Request:           request,
+		ExpectedAccess:    expected,
+		DenyStatuses:      p.Response.DenyStatus,
+		DenyWhen:          p.Response.DenyWhen.condition(),
+		Mutating:          p.API.Mutating || b.AllowMutating,
+		WriteVerification: verification,
+		Setup:             setup,
 	}
 
 	if res := p.resource(b, ownerIdentity); res != nil {
@@ -398,4 +458,208 @@ func defaultID(explicit, method, path string) string {
 	slug := strings.ToLower(method + path)
 	slug = strings.NewReplacer("/", "-", "{", "", "}", "", " ", "-").Replace(slug)
 	return strings.Trim(slug, "-")
+}
+
+// roleAssertion is a compiled assertion with the roles it applies to; an empty
+// role set means every role.
+type roleAssertion struct {
+	rule  model.ResponseAssertion
+	roles map[string]struct{}
+}
+
+// compileAssertions converts response.assertions to the engine's form. Pointer
+// syntax and value limits are checked by engine validation before any request.
+func (p Policy) compileAssertions() ([]roleAssertion, error) {
+	out := make([]roleAssertion, 0, len(p.Response.Assertions))
+	for i, a := range p.Response.Assertions {
+		decision := model.AccessDecision(strings.ToLower(strings.TrimSpace(a.Decision)))
+		if decision != model.AccessDecisionAllow && decision != model.AccessDecisionDeny {
+			return nil, fmt.Errorf("response.assertions[%d]: decision must be allow or deny, got %q", i, a.Decision)
+		}
+		if a.Equals.Kind == 0 {
+			return nil, fmt.Errorf("response.assertions[%d]: equals is required (use null to match JSON null)", i)
+		}
+		raw, err := nodeJSON(&a.Equals)
+		if err != nil {
+			return nil, fmt.Errorf("response.assertions[%d].equals: %w", i, err)
+		}
+		roles := make(map[string]struct{}, len(a.Roles))
+		for _, role := range a.Roles {
+			if _, ok := p.Expect[role]; !ok {
+				return nil, fmt.Errorf("response.assertions[%d]: role %q is not in the policy's expect map", i, role)
+			}
+			roles[role] = struct{}{}
+		}
+		out = append(out, roleAssertion{
+			rule:  model.ResponseAssertion{JSONPointer: a.JSONPointer, Equals: raw, Decision: decision},
+			roles: roles,
+		})
+	}
+	return out, nil
+}
+
+func assertionsFor(all []roleAssertion, role string) []model.ResponseAssertion {
+	var out []model.ResponseAssertion
+	for _, a := range all {
+		if _, ok := a.roles[role]; len(a.roles) == 0 || ok {
+			out = append(out, a.rule)
+		}
+	}
+	return out
+}
+
+// nodeJSON renders a YAML value as JSON. Numbers keep their literal text so an
+// object id beyond float64 precision is compared exactly.
+func nodeJSON(n *yaml.Node) (json.RawMessage, error) {
+	switch n.Kind {
+	case yaml.ScalarNode:
+		switch n.Tag {
+		case "!!null":
+			return json.RawMessage("null"), nil
+		case "!!bool":
+			var v bool
+			if err := n.Decode(&v); err != nil {
+				return nil, err
+			}
+			return json.Marshal(v)
+		case "!!int", "!!float":
+			if !json.Valid([]byte(n.Value)) {
+				return nil, fmt.Errorf("number %q is not valid JSON; quote it to compare a string", n.Value)
+			}
+			return json.RawMessage(n.Value), nil
+		default:
+			return json.Marshal(n.Value)
+		}
+	case yaml.SequenceNode:
+		parts := make([]string, 0, len(n.Content))
+		for _, c := range n.Content {
+			v, err := nodeJSON(c)
+			if err != nil {
+				return nil, err
+			}
+			parts = append(parts, string(v))
+		}
+		return json.RawMessage("[" + strings.Join(parts, ",") + "]"), nil
+	case yaml.MappingNode:
+		parts := make([]string, 0, len(n.Content)/2)
+		for i := 0; i+1 < len(n.Content); i += 2 {
+			k, err := json.Marshal(n.Content[i].Value)
+			if err != nil {
+				return nil, err
+			}
+			v, err := nodeJSON(n.Content[i+1])
+			if err != nil {
+				return nil, err
+			}
+			parts = append(parts, string(k)+":"+string(v))
+		}
+		return json.RawMessage("{" + strings.Join(parts, ",") + "}"), nil
+	case yaml.AliasNode:
+		return nodeJSON(n.Alias)
+	default:
+		return nil, fmt.Errorf("unsupported YAML value")
+	}
+}
+
+// request builds the request under test, carrying api.body and api.headers.
+func (p Policy) request(method, url string) (model.RequestTemplate, error) {
+	req := model.RequestTemplate{Method: method, URL: url}
+	if len(p.API.Headers) > 0 {
+		req.Headers = make(map[string]string, len(p.API.Headers))
+		for k, v := range p.API.Headers {
+			req.Headers[k] = v
+		}
+	}
+	body := strings.TrimSpace(p.API.Body)
+	if body == "" {
+		return req, nil
+	}
+	if !json.Valid([]byte(body)) {
+		return model.RequestTemplate{}, fmt.Errorf("compile: api.body is not valid JSON")
+	}
+	req.Body = json.RawMessage(body)
+	if !hasHeader(req.Headers, "Content-Type") {
+		if req.Headers == nil {
+			req.Headers = map[string]string{}
+		}
+		req.Headers["Content-Type"] = "application/json"
+	}
+	return req, nil
+}
+
+func hasHeader(h map[string]string, name string) bool {
+	for k := range h {
+		if strings.EqualFold(k, name) {
+			return true
+		}
+	}
+	return false
+}
+
+// compileVerify separates the verifier identity from the identities under test
+// and builds the engine's WriteVerification. Same-origin, method and pointer
+// rules are enforced by engine validation.
+func (p Policy) compileVerify(b Bindings) ([]model.Identity, *model.WriteVerification, error) {
+	role := p.VerifierRole()
+	if p.Verify == nil {
+		return b.Identities, nil, nil
+	}
+	if role == "" {
+		return nil, nil, fmt.Errorf("compile: verify.as must name the role that reads state")
+	}
+	if _, ok := p.Expect[role]; ok {
+		return nil, nil, fmt.Errorf("compile: verify.as role %q is also in expect; the verifier must not perform the write", role)
+	}
+	var executed []model.Identity
+	var verifier *model.Identity
+	for i, id := range b.Identities {
+		if id.Role != role {
+			executed = append(executed, id)
+			continue
+		}
+		if verifier != nil {
+			return nil, nil, fmt.Errorf("compile: more than one identity has verifier role %q", role)
+		}
+		verifier = &b.Identities[i]
+	}
+	if verifier == nil {
+		return nil, nil, fmt.Errorf("compile: no identity has verifier role %q", role)
+	}
+	vpath, err := substitutePath(p.Verify.Request.Path, b.PathParams)
+	if err != nil {
+		return nil, nil, fmt.Errorf("compile: verify.request.path: %w", err)
+	}
+	vreq := model.RequestTemplate{
+		Method:  strings.ToUpper(strings.TrimSpace(p.Verify.Request.Method)),
+		URL:     strings.TrimRight(b.BaseURL, "/") + vpath,
+		Headers: p.Verify.Request.Headers,
+	}
+	if body := strings.TrimSpace(p.Verify.Request.Body); body != "" {
+		if !json.Valid([]byte(body)) {
+			return nil, nil, fmt.Errorf("compile: verify.request.body is not valid JSON")
+		}
+		vreq.Body = json.RawMessage(body)
+		if !hasHeader(vreq.Headers, "Content-Type") {
+			h := map[string]string{"Content-Type": "application/json"}
+			for k, v := range vreq.Headers {
+				h[k] = v
+			}
+			vreq.Headers = h
+		}
+	}
+	wv := &model.WriteVerification{
+		Identity:          *verifier,
+		Request:           vreq,
+		AllowUnsafeMethod: p.Verify.AllowUnsafeMethod,
+		JSONPointer:       p.Verify.JSONPointer,
+	}
+	if p.Verify.ChangedTo.Kind != 0 {
+		if wv.ChangedTo, err = nodeJSON(&p.Verify.ChangedTo); err != nil {
+			return nil, nil, fmt.Errorf("compile: verify.changed_to: %w", err)
+		}
+	}
+	if err := secretref.ExpandVerification(wv); err != nil {
+		return nil, nil, fmt.Errorf("compile: %w", err)
+	}
+	return executed, wv, nil
 }

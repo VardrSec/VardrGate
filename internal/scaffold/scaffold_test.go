@@ -111,6 +111,7 @@ func TestEnvSlug(t *testing.T) {
 func TestWireTypesMirrorTheModel(t *testing.T) {
 	compareJSONFields(t, "AuthorizationTestCase", reflect.TypeOf(model.AuthorizationTestCase{}), reflect.TypeOf(wireCase{}))
 	compareJSONFields(t, "Identity", reflect.TypeOf(model.Identity{}), reflect.TypeOf(wireIdentity{}))
+	compareJSONFields(t, "WriteVerification", reflect.TypeOf(model.WriteVerification{}), reflect.TypeOf(wireVerification{}))
 }
 
 func compareJSONFields(t *testing.T, name string, model, wire reflect.Type) {

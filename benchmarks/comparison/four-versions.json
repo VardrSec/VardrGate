@@ -1,0 +1,1639 @@
+{
+  "contract": {
+    "cases_sha256": "f11e5c5ccc22a7504524b61e10e5af578f7019890c83a9bcc367dc63b39e3133",
+    "profiles_sha256": "c37d71c6c0df0f35ec01eaafa8e4f46ecaec7d19480a2144dc4f454c4ebb8fc5",
+    "driver_sha256": "370d711877944878d5098112e882a52ae7e24861edc4c2d75e11482eb2131e9c"
+  },
+  "versions": {
+    "original": {
+      "metrics": {
+        "TP": 6,
+        "FP": 2,
+        "FN": 3,
+        "TN": 6,
+        "IC": 5,
+        "inconclusive": 7,
+        "precision": 0.75,
+        "recall": 0.6666666666666666
+      },
+      "stable_repeats": 3,
+      "rows": [
+        {
+          "id": "bola-owner",
+          "verdict": "TN",
+          "inconclusive": false,
+          "assessment": null,
+          "status": 200,
+          "categories": [],
+          "oracle": {
+            "actor": "alice",
+            "accessed": true,
+            "status": 200
+          }
+        },
+        {
+          "id": "bola-peer",
+          "verdict": "TP",
+          "inconclusive": false,
+          "assessment": null,
+          "status": 200,
+          "categories": [
+            "unexpected_access"
+          ],
+          "oracle": {
+            "actor": "bob",
+            "accessed": true,
+            "status": 200
+          }
+        },
+        {
+          "id": "bola-cross-tenant",
+          "verdict": "TP",
+          "inconclusive": false,
+          "assessment": null,
+          "status": 200,
+          "categories": [
+            "unexpected_access"
+          ],
+          "oracle": {
+            "actor": "mallory",
+            "accessed": true,
+            "status": 200
+          }
+        },
+        {
+          "id": "bola-anonymous",
+          "verdict": "TP",
+          "inconclusive": false,
+          "assessment": null,
+          "status": 200,
+          "categories": [
+            "unexpected_access"
+          ],
+          "oracle": {
+            "actor": "anonymous",
+            "accessed": true,
+            "status": 200
+          }
+        },
+        {
+          "id": "secure-owner",
+          "verdict": "TN",
+          "inconclusive": false,
+          "assessment": null,
+          "status": 200,
+          "categories": [],
+          "oracle": {
+            "actor": "alice",
+            "accessed": true,
+            "status": 200
+          }
+        },
+        {
+          "id": "secure-peer",
+          "verdict": "TN",
+          "inconclusive": false,
+          "assessment": null,
+          "status": 403,
+          "categories": [],
+          "oracle": {
+            "actor": "bob",
+            "accessed": false,
+            "status": 403
+          }
+        },
+        {
+          "id": "secure-anonymous",
+          "verdict": "TN",
+          "inconclusive": false,
+          "assessment": null,
+          "status": 401,
+          "categories": [],
+          "oracle": {
+            "actor": "anonymous",
+            "accessed": false,
+            "status": 401
+          }
+        },
+        {
+          "id": "admin-role-bypass",
+          "verdict": "TP",
+          "inconclusive": false,
+          "assessment": null,
+          "status": 200,
+          "categories": [
+            "unexpected_access"
+          ],
+          "oracle": {
+            "actor": "bob",
+            "accessed": true,
+            "status": 200
+          }
+        },
+        {
+          "id": "admin-authorized",
+          "verdict": "TN",
+          "inconclusive": false,
+          "assessment": null,
+          "status": 200,
+          "categories": [],
+          "oracle": {
+            "actor": "admin",
+            "accessed": true,
+            "status": 200
+          }
+        },
+        {
+          "id": "write-bypass",
+          "verdict": "TP",
+          "inconclusive": false,
+          "assessment": null,
+          "status": 204,
+          "categories": [
+            "unexpected_access"
+          ],
+          "oracle": {
+            "actor": "bob",
+            "accessed": true,
+            "status": 204
+          }
+        },
+        {
+          "id": "write-protected",
+          "verdict": "TN",
+          "inconclusive": false,
+          "assessment": null,
+          "status": 403,
+          "categories": [],
+          "oracle": {
+            "actor": "bob",
+            "accessed": false,
+            "status": 403
+          }
+        },
+        {
+          "id": "soft-denial-200",
+          "verdict": "FP",
+          "inconclusive": false,
+          "assessment": null,
+          "status": 200,
+          "categories": [
+            "unexpected_access"
+          ],
+          "oracle": {
+            "actor": "bob",
+            "accessed": false,
+            "status": 200
+          }
+        },
+        {
+          "id": "filtered-empty-200",
+          "verdict": "FP",
+          "inconclusive": false,
+          "assessment": null,
+          "status": 200,
+          "categories": [
+            "unexpected_access"
+          ],
+          "oracle": {
+            "actor": "bob",
+            "accessed": false,
+            "status": 200
+          }
+        },
+        {
+          "id": "secret-in-403",
+          "verdict": "FN",
+          "inconclusive": false,
+          "assessment": null,
+          "status": 403,
+          "categories": [],
+          "oracle": {
+            "actor": "bob",
+            "accessed": true,
+            "status": 403
+          }
+        },
+        {
+          "id": "secret-in-404",
+          "verdict": "FN",
+          "inconclusive": true,
+          "assessment": null,
+          "status": 404,
+          "categories": [],
+          "oracle": {
+            "actor": "bob",
+            "accessed": true,
+            "status": 404
+          }
+        },
+        {
+          "id": "write-before-500",
+          "verdict": "FN",
+          "inconclusive": true,
+          "assessment": null,
+          "status": 500,
+          "categories": [],
+          "oracle": {
+            "actor": "bob",
+            "accessed": true,
+            "status": 500
+          }
+        },
+        {
+          "id": "masked-denial-404",
+          "verdict": "IC",
+          "inconclusive": true,
+          "assessment": null,
+          "status": 404,
+          "categories": [],
+          "oracle": {
+            "actor": "bob",
+            "accessed": false,
+            "status": 404
+          }
+        },
+        {
+          "id": "login-redirect",
+          "verdict": "IC",
+          "inconclusive": true,
+          "assessment": null,
+          "status": 302,
+          "categories": [],
+          "oracle": {
+            "actor": "bob",
+            "accessed": false,
+            "status": 302
+          }
+        },
+        {
+          "id": "rate-limit",
+          "verdict": "IC",
+          "inconclusive": true,
+          "assessment": null,
+          "status": 429,
+          "categories": [],
+          "oracle": {
+            "actor": "bob",
+            "accessed": false,
+            "status": 429
+          }
+        },
+        {
+          "id": "service-unavailable",
+          "verdict": "IC",
+          "inconclusive": true,
+          "assessment": null,
+          "status": 503,
+          "categories": [],
+          "oracle": {
+            "actor": "bob",
+            "accessed": false,
+            "status": 503
+          }
+        },
+        {
+          "id": "connection-aborted",
+          "verdict": "IC",
+          "inconclusive": true,
+          "assessment": null,
+          "status": 0,
+          "categories": [],
+          "oracle": {
+            "actor": "bob",
+            "accessed": false,
+            "status": 0
+          }
+        },
+        {
+          "id": "owner-wrongly-denied",
+          "verdict": "TP",
+          "inconclusive": false,
+          "assessment": null,
+          "status": 403,
+          "categories": [
+            "authorization_mismatch"
+          ],
+          "oracle": {
+            "actor": "alice",
+            "accessed": false,
+            "status": 403
+          }
+        }
+      ],
+      "commit": "17cf541768177a8fe2e580ba84aaf9f1b6f1bb85",
+      "source_sha256": "45edf6d92a4b19d4ecaa2be11479a9583cb5f92eb99d6e92bb774ed97fa02d4e",
+      "binary_sha256": "115913ba1728c1204d6967eba557e78fe9d2a4ab4815e4dba07b4d58df1e1aef",
+      "working_tree": false
+    },
+    "before_claude": {
+      "metrics": {
+        "TP": 6,
+        "FP": 2,
+        "FN": 3,
+        "TN": 6,
+        "IC": 5,
+        "inconclusive": 7,
+        "precision": 0.75,
+        "recall": 0.6666666666666666
+      },
+      "stable_repeats": 3,
+      "rows": [
+        {
+          "id": "bola-owner",
+          "verdict": "TN",
+          "inconclusive": false,
+          "assessment": null,
+          "status": 200,
+          "categories": [],
+          "oracle": {
+            "actor": "alice",
+            "accessed": true,
+            "status": 200
+          }
+        },
+        {
+          "id": "bola-peer",
+          "verdict": "TP",
+          "inconclusive": false,
+          "assessment": null,
+          "status": 200,
+          "categories": [
+            "unexpected_access"
+          ],
+          "oracle": {
+            "actor": "bob",
+            "accessed": true,
+            "status": 200
+          }
+        },
+        {
+          "id": "bola-cross-tenant",
+          "verdict": "TP",
+          "inconclusive": false,
+          "assessment": null,
+          "status": 200,
+          "categories": [
+            "unexpected_access"
+          ],
+          "oracle": {
+            "actor": "mallory",
+            "accessed": true,
+            "status": 200
+          }
+        },
+        {
+          "id": "bola-anonymous",
+          "verdict": "TP",
+          "inconclusive": false,
+          "assessment": null,
+          "status": 200,
+          "categories": [
+            "missing_authentication"
+          ],
+          "oracle": {
+            "actor": "anonymous",
+            "accessed": true,
+            "status": 200
+          }
+        },
+        {
+          "id": "secure-owner",
+          "verdict": "TN",
+          "inconclusive": false,
+          "assessment": null,
+          "status": 200,
+          "categories": [],
+          "oracle": {
+            "actor": "alice",
+            "accessed": true,
+            "status": 200
+          }
+        },
+        {
+          "id": "secure-peer",
+          "verdict": "TN",
+          "inconclusive": false,
+          "assessment": null,
+          "status": 403,
+          "categories": [],
+          "oracle": {
+            "actor": "bob",
+            "accessed": false,
+            "status": 403
+          }
+        },
+        {
+          "id": "secure-anonymous",
+          "verdict": "TN",
+          "inconclusive": false,
+          "assessment": null,
+          "status": 401,
+          "categories": [],
+          "oracle": {
+            "actor": "anonymous",
+            "accessed": false,
+            "status": 401
+          }
+        },
+        {
+          "id": "admin-role-bypass",
+          "verdict": "TP",
+          "inconclusive": false,
+          "assessment": null,
+          "status": 200,
+          "categories": [
+            "unexpected_access"
+          ],
+          "oracle": {
+            "actor": "bob",
+            "accessed": true,
+            "status": 200
+          }
+        },
+        {
+          "id": "admin-authorized",
+          "verdict": "TN",
+          "inconclusive": false,
+          "assessment": null,
+          "status": 200,
+          "categories": [],
+          "oracle": {
+            "actor": "admin",
+            "accessed": true,
+            "status": 200
+          }
+        },
+        {
+          "id": "write-bypass",
+          "verdict": "TP",
+          "inconclusive": false,
+          "assessment": null,
+          "status": 204,
+          "categories": [
+            "unexpected_access"
+          ],
+          "oracle": {
+            "actor": "bob",
+            "accessed": true,
+            "status": 204
+          }
+        },
+        {
+          "id": "write-protected",
+          "verdict": "TN",
+          "inconclusive": false,
+          "assessment": null,
+          "status": 403,
+          "categories": [],
+          "oracle": {
+            "actor": "bob",
+            "accessed": false,
+            "status": 403
+          }
+        },
+        {
+          "id": "soft-denial-200",
+          "verdict": "FP",
+          "inconclusive": false,
+          "assessment": null,
+          "status": 200,
+          "categories": [
+            "unexpected_access"
+          ],
+          "oracle": {
+            "actor": "bob",
+            "accessed": false,
+            "status": 200
+          }
+        },
+        {
+          "id": "filtered-empty-200",
+          "verdict": "FP",
+          "inconclusive": false,
+          "assessment": null,
+          "status": 200,
+          "categories": [
+            "unexpected_access"
+          ],
+          "oracle": {
+            "actor": "bob",
+            "accessed": false,
+            "status": 200
+          }
+        },
+        {
+          "id": "secret-in-403",
+          "verdict": "FN",
+          "inconclusive": false,
+          "assessment": null,
+          "status": 403,
+          "categories": [],
+          "oracle": {
+            "actor": "bob",
+            "accessed": true,
+            "status": 403
+          }
+        },
+        {
+          "id": "secret-in-404",
+          "verdict": "FN",
+          "inconclusive": true,
+          "assessment": null,
+          "status": 404,
+          "categories": [],
+          "oracle": {
+            "actor": "bob",
+            "accessed": true,
+            "status": 404
+          }
+        },
+        {
+          "id": "write-before-500",
+          "verdict": "FN",
+          "inconclusive": true,
+          "assessment": null,
+          "status": 500,
+          "categories": [],
+          "oracle": {
+            "actor": "bob",
+            "accessed": true,
+            "status": 500
+          }
+        },
+        {
+          "id": "masked-denial-404",
+          "verdict": "IC",
+          "inconclusive": true,
+          "assessment": null,
+          "status": 404,
+          "categories": [],
+          "oracle": {
+            "actor": "bob",
+            "accessed": false,
+            "status": 404
+          }
+        },
+        {
+          "id": "login-redirect",
+          "verdict": "IC",
+          "inconclusive": true,
+          "assessment": null,
+          "status": 302,
+          "categories": [],
+          "oracle": {
+            "actor": "bob",
+            "accessed": false,
+            "status": 302
+          }
+        },
+        {
+          "id": "rate-limit",
+          "verdict": "IC",
+          "inconclusive": true,
+          "assessment": null,
+          "status": 429,
+          "categories": [],
+          "oracle": {
+            "actor": "bob",
+            "accessed": false,
+            "status": 429
+          }
+        },
+        {
+          "id": "service-unavailable",
+          "verdict": "IC",
+          "inconclusive": true,
+          "assessment": null,
+          "status": 503,
+          "categories": [],
+          "oracle": {
+            "actor": "bob",
+            "accessed": false,
+            "status": 503
+          }
+        },
+        {
+          "id": "connection-aborted",
+          "verdict": "IC",
+          "inconclusive": true,
+          "assessment": null,
+          "status": 0,
+          "categories": [],
+          "oracle": {
+            "actor": "bob",
+            "accessed": false,
+            "status": 0
+          }
+        },
+        {
+          "id": "owner-wrongly-denied",
+          "verdict": "TP",
+          "inconclusive": false,
+          "assessment": null,
+          "status": 403,
+          "categories": [
+            "authorization_mismatch"
+          ],
+          "oracle": {
+            "actor": "alice",
+            "accessed": false,
+            "status": 403
+          }
+        }
+      ],
+      "commit": "3de1d0c6adc7a01512a5f884184f19b3467f3dea",
+      "source_sha256": "72f4f76446c20c458bdcd36fb1ace97511d09b528c81c409b328f3cc9cba9b55",
+      "binary_sha256": "84a19fc6f91c0bf55c68922ad5315706896d8181c3be50e25e6098d5db0f0275",
+      "working_tree": false
+    },
+    "claude": {
+      "metrics": {
+        "TP": 9,
+        "FP": 0,
+        "FN": 0,
+        "TN": 8,
+        "IC": 5,
+        "inconclusive": 5,
+        "precision": 1.0,
+        "recall": 1.0
+      },
+      "stable_repeats": 3,
+      "rows": [
+        {
+          "id": "bola-owner",
+          "verdict": "TN",
+          "inconclusive": false,
+          "assessment": {
+            "identity_id": "alice",
+            "expected_access": "allow",
+            "decision": "allowed",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              0
+            ]
+          },
+          "status": 200,
+          "categories": [],
+          "oracle": {
+            "actor": "alice",
+            "accessed": true,
+            "status": 200
+          }
+        },
+        {
+          "id": "bola-peer",
+          "verdict": "TP",
+          "inconclusive": false,
+          "assessment": {
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "allowed",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              0
+            ]
+          },
+          "status": 200,
+          "categories": [
+            "unexpected_access"
+          ],
+          "oracle": {
+            "actor": "bob",
+            "accessed": true,
+            "status": 200
+          }
+        },
+        {
+          "id": "bola-cross-tenant",
+          "verdict": "TP",
+          "inconclusive": false,
+          "assessment": {
+            "identity_id": "mallory",
+            "expected_access": "deny",
+            "decision": "allowed",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              0
+            ]
+          },
+          "status": 200,
+          "categories": [
+            "unexpected_access"
+          ],
+          "oracle": {
+            "actor": "mallory",
+            "accessed": true,
+            "status": 200
+          }
+        },
+        {
+          "id": "bola-anonymous",
+          "verdict": "TP",
+          "inconclusive": false,
+          "assessment": {
+            "identity_id": "anonymous",
+            "expected_access": "deny",
+            "decision": "allowed",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              0
+            ]
+          },
+          "status": 200,
+          "categories": [
+            "missing_authentication"
+          ],
+          "oracle": {
+            "actor": "anonymous",
+            "accessed": true,
+            "status": 200
+          }
+        },
+        {
+          "id": "secure-owner",
+          "verdict": "TN",
+          "inconclusive": false,
+          "assessment": {
+            "identity_id": "alice",
+            "expected_access": "allow",
+            "decision": "allowed",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              0
+            ]
+          },
+          "status": 200,
+          "categories": [],
+          "oracle": {
+            "actor": "alice",
+            "accessed": true,
+            "status": 200
+          }
+        },
+        {
+          "id": "secure-peer",
+          "verdict": "TN",
+          "inconclusive": false,
+          "assessment": {
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "denied",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              1
+            ]
+          },
+          "status": 403,
+          "categories": [],
+          "oracle": {
+            "actor": "bob",
+            "accessed": false,
+            "status": 403
+          }
+        },
+        {
+          "id": "secure-anonymous",
+          "verdict": "TN",
+          "inconclusive": false,
+          "assessment": {
+            "identity_id": "anonymous",
+            "expected_access": "deny",
+            "decision": "denied",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              1
+            ]
+          },
+          "status": 401,
+          "categories": [],
+          "oracle": {
+            "actor": "anonymous",
+            "accessed": false,
+            "status": 401
+          }
+        },
+        {
+          "id": "admin-role-bypass",
+          "verdict": "TP",
+          "inconclusive": false,
+          "assessment": {
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "allowed",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              0
+            ]
+          },
+          "status": 200,
+          "categories": [
+            "unexpected_access"
+          ],
+          "oracle": {
+            "actor": "bob",
+            "accessed": true,
+            "status": 200
+          }
+        },
+        {
+          "id": "admin-authorized",
+          "verdict": "TN",
+          "inconclusive": false,
+          "assessment": {
+            "identity_id": "admin",
+            "expected_access": "allow",
+            "decision": "allowed",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              0
+            ]
+          },
+          "status": 200,
+          "categories": [],
+          "oracle": {
+            "actor": "admin",
+            "accessed": true,
+            "status": 200
+          }
+        },
+        {
+          "id": "write-bypass",
+          "verdict": "TP",
+          "inconclusive": false,
+          "assessment": {
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "allowed",
+            "source": "write_verification",
+            "reason": "state_changed"
+          },
+          "status": 204,
+          "categories": [
+            "unexpected_access"
+          ],
+          "oracle": {
+            "actor": "bob",
+            "accessed": true,
+            "status": 204
+          }
+        },
+        {
+          "id": "write-protected",
+          "verdict": "TN",
+          "inconclusive": false,
+          "assessment": {
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "denied",
+            "source": "write_verification",
+            "reason": "state_unchanged"
+          },
+          "status": 403,
+          "categories": [],
+          "oracle": {
+            "actor": "bob",
+            "accessed": false,
+            "status": 403
+          }
+        },
+        {
+          "id": "soft-denial-200",
+          "verdict": "TN",
+          "inconclusive": false,
+          "assessment": {
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "denied",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              1
+            ]
+          },
+          "status": 200,
+          "categories": [],
+          "oracle": {
+            "actor": "bob",
+            "accessed": false,
+            "status": 200
+          }
+        },
+        {
+          "id": "filtered-empty-200",
+          "verdict": "TN",
+          "inconclusive": false,
+          "assessment": {
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "denied",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              0
+            ]
+          },
+          "status": 200,
+          "categories": [],
+          "oracle": {
+            "actor": "bob",
+            "accessed": false,
+            "status": 200
+          }
+        },
+        {
+          "id": "secret-in-403",
+          "verdict": "TP",
+          "inconclusive": false,
+          "assessment": {
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "allowed",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              0
+            ]
+          },
+          "status": 403,
+          "categories": [
+            "unexpected_access"
+          ],
+          "oracle": {
+            "actor": "bob",
+            "accessed": true,
+            "status": 403
+          }
+        },
+        {
+          "id": "secret-in-404",
+          "verdict": "TP",
+          "inconclusive": false,
+          "assessment": {
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "allowed",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              0
+            ]
+          },
+          "status": 404,
+          "categories": [
+            "unexpected_access"
+          ],
+          "oracle": {
+            "actor": "bob",
+            "accessed": true,
+            "status": 404
+          }
+        },
+        {
+          "id": "write-before-500",
+          "verdict": "TP",
+          "inconclusive": false,
+          "assessment": {
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "allowed",
+            "source": "write_verification",
+            "reason": "state_changed"
+          },
+          "status": 500,
+          "categories": [
+            "unexpected_access"
+          ],
+          "oracle": {
+            "actor": "bob",
+            "accessed": true,
+            "status": 500
+          }
+        },
+        {
+          "id": "masked-denial-404",
+          "verdict": "IC",
+          "inconclusive": true,
+          "assessment": {
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "inconclusive",
+            "source": "http_status",
+            "reason": "ambiguous_http_outcome"
+          },
+          "status": 404,
+          "categories": [],
+          "oracle": {
+            "actor": "bob",
+            "accessed": false,
+            "status": 404
+          }
+        },
+        {
+          "id": "login-redirect",
+          "verdict": "IC",
+          "inconclusive": true,
+          "assessment": {
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "inconclusive",
+            "source": "http_status",
+            "reason": "ambiguous_http_outcome"
+          },
+          "status": 302,
+          "categories": [],
+          "oracle": {
+            "actor": "bob",
+            "accessed": false,
+            "status": 302
+          }
+        },
+        {
+          "id": "rate-limit",
+          "verdict": "IC",
+          "inconclusive": true,
+          "assessment": {
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "inconclusive",
+            "source": "http_status",
+            "reason": "ambiguous_http_outcome"
+          },
+          "status": 429,
+          "categories": [],
+          "oracle": {
+            "actor": "bob",
+            "accessed": false,
+            "status": 429
+          }
+        },
+        {
+          "id": "service-unavailable",
+          "verdict": "IC",
+          "inconclusive": true,
+          "assessment": {
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "inconclusive",
+            "source": "http_status",
+            "reason": "ambiguous_http_outcome"
+          },
+          "status": 503,
+          "categories": [],
+          "oracle": {
+            "actor": "bob",
+            "accessed": false,
+            "status": 503
+          }
+        },
+        {
+          "id": "connection-aborted",
+          "verdict": "IC",
+          "inconclusive": true,
+          "assessment": {
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "inconclusive",
+            "source": "none",
+            "reason": "execution_error"
+          },
+          "status": 0,
+          "categories": [],
+          "oracle": {
+            "actor": "bob",
+            "accessed": false,
+            "status": 0
+          }
+        },
+        {
+          "id": "owner-wrongly-denied",
+          "verdict": "TP",
+          "inconclusive": false,
+          "assessment": {
+            "identity_id": "alice",
+            "expected_access": "allow",
+            "decision": "denied",
+            "source": "http_status",
+            "reason": "status_only"
+          },
+          "status": 403,
+          "categories": [
+            "authorization_mismatch"
+          ],
+          "oracle": {
+            "actor": "alice",
+            "accessed": false,
+            "status": 403
+          }
+        }
+      ],
+      "commit": "a5c5fab11ef86935095ed6a39ef94f98ee27b737",
+      "source_sha256": "e0c6d4a5a9c7fdb53b1e0b97bf89695c698dd22d14951a5a4227e31e5dcb2426",
+      "binary_sha256": "0abd9fb70441391ef9960a8922edd466ec4c01eb0287429ffe1bd011cf80b682",
+      "working_tree": false
+    },
+    "fixed": {
+      "metrics": {
+        "TP": 9,
+        "FP": 0,
+        "FN": 0,
+        "TN": 7,
+        "IC": 6,
+        "inconclusive": 6,
+        "precision": 1.0,
+        "recall": 1.0
+      },
+      "stable_repeats": 3,
+      "rows": [
+        {
+          "id": "bola-owner",
+          "verdict": "TN",
+          "inconclusive": false,
+          "assessment": {
+            "identity_id": "alice",
+            "expected_access": "allow",
+            "decision": "allowed",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              0
+            ]
+          },
+          "status": 200,
+          "categories": [],
+          "oracle": {
+            "actor": "alice",
+            "accessed": true,
+            "status": 200
+          }
+        },
+        {
+          "id": "bola-peer",
+          "verdict": "TP",
+          "inconclusive": false,
+          "assessment": {
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "allowed",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              0
+            ]
+          },
+          "status": 200,
+          "categories": [
+            "unexpected_access"
+          ],
+          "oracle": {
+            "actor": "bob",
+            "accessed": true,
+            "status": 200
+          }
+        },
+        {
+          "id": "bola-cross-tenant",
+          "verdict": "TP",
+          "inconclusive": false,
+          "assessment": {
+            "identity_id": "mallory",
+            "expected_access": "deny",
+            "decision": "allowed",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              0
+            ]
+          },
+          "status": 200,
+          "categories": [
+            "unexpected_access"
+          ],
+          "oracle": {
+            "actor": "mallory",
+            "accessed": true,
+            "status": 200
+          }
+        },
+        {
+          "id": "bola-anonymous",
+          "verdict": "TP",
+          "inconclusive": false,
+          "assessment": {
+            "identity_id": "anonymous",
+            "expected_access": "deny",
+            "decision": "allowed",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              0
+            ]
+          },
+          "status": 200,
+          "categories": [
+            "missing_authentication"
+          ],
+          "oracle": {
+            "actor": "anonymous",
+            "accessed": true,
+            "status": 200
+          }
+        },
+        {
+          "id": "secure-owner",
+          "verdict": "TN",
+          "inconclusive": false,
+          "assessment": {
+            "identity_id": "alice",
+            "expected_access": "allow",
+            "decision": "allowed",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              0
+            ]
+          },
+          "status": 200,
+          "categories": [],
+          "oracle": {
+            "actor": "alice",
+            "accessed": true,
+            "status": 200
+          }
+        },
+        {
+          "id": "secure-peer",
+          "verdict": "TN",
+          "inconclusive": false,
+          "assessment": {
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "denied",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              1
+            ]
+          },
+          "status": 403,
+          "categories": [],
+          "oracle": {
+            "actor": "bob",
+            "accessed": false,
+            "status": 403
+          }
+        },
+        {
+          "id": "secure-anonymous",
+          "verdict": "TN",
+          "inconclusive": false,
+          "assessment": {
+            "identity_id": "anonymous",
+            "expected_access": "deny",
+            "decision": "denied",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              1
+            ]
+          },
+          "status": 401,
+          "categories": [],
+          "oracle": {
+            "actor": "anonymous",
+            "accessed": false,
+            "status": 401
+          }
+        },
+        {
+          "id": "admin-role-bypass",
+          "verdict": "TP",
+          "inconclusive": false,
+          "assessment": {
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "allowed",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              0
+            ]
+          },
+          "status": 200,
+          "categories": [
+            "unexpected_access"
+          ],
+          "oracle": {
+            "actor": "bob",
+            "accessed": true,
+            "status": 200
+          }
+        },
+        {
+          "id": "admin-authorized",
+          "verdict": "TN",
+          "inconclusive": false,
+          "assessment": {
+            "identity_id": "admin",
+            "expected_access": "allow",
+            "decision": "allowed",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              0
+            ]
+          },
+          "status": 200,
+          "categories": [],
+          "oracle": {
+            "actor": "admin",
+            "accessed": true,
+            "status": 200
+          }
+        },
+        {
+          "id": "write-bypass",
+          "verdict": "TP",
+          "inconclusive": false,
+          "assessment": {
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "allowed",
+            "source": "write_verification",
+            "reason": "state_changed"
+          },
+          "status": 204,
+          "categories": [
+            "unexpected_access"
+          ],
+          "oracle": {
+            "actor": "bob",
+            "accessed": true,
+            "status": 204
+          }
+        },
+        {
+          "id": "write-protected",
+          "verdict": "IC",
+          "inconclusive": true,
+          "assessment": {
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "inconclusive",
+            "source": "write_verification",
+            "reason": "no_positive_control"
+          },
+          "status": 403,
+          "categories": [],
+          "oracle": {
+            "actor": "bob",
+            "accessed": false,
+            "status": 403
+          }
+        },
+        {
+          "id": "soft-denial-200",
+          "verdict": "TN",
+          "inconclusive": false,
+          "assessment": {
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "denied",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              1
+            ]
+          },
+          "status": 200,
+          "categories": [],
+          "oracle": {
+            "actor": "bob",
+            "accessed": false,
+            "status": 200
+          }
+        },
+        {
+          "id": "filtered-empty-200",
+          "verdict": "TN",
+          "inconclusive": false,
+          "assessment": {
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "denied",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              0
+            ]
+          },
+          "status": 200,
+          "categories": [],
+          "oracle": {
+            "actor": "bob",
+            "accessed": false,
+            "status": 200
+          }
+        },
+        {
+          "id": "secret-in-403",
+          "verdict": "TP",
+          "inconclusive": false,
+          "assessment": {
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "allowed",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              0
+            ]
+          },
+          "status": 403,
+          "categories": [
+            "unexpected_access"
+          ],
+          "oracle": {
+            "actor": "bob",
+            "accessed": true,
+            "status": 403
+          }
+        },
+        {
+          "id": "secret-in-404",
+          "verdict": "TP",
+          "inconclusive": false,
+          "assessment": {
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "allowed",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              0
+            ]
+          },
+          "status": 404,
+          "categories": [
+            "unexpected_access"
+          ],
+          "oracle": {
+            "actor": "bob",
+            "accessed": true,
+            "status": 404
+          }
+        },
+        {
+          "id": "write-before-500",
+          "verdict": "TP",
+          "inconclusive": false,
+          "assessment": {
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "allowed",
+            "source": "write_verification",
+            "reason": "state_changed"
+          },
+          "status": 500,
+          "categories": [
+            "unexpected_access"
+          ],
+          "oracle": {
+            "actor": "bob",
+            "accessed": true,
+            "status": 500
+          }
+        },
+        {
+          "id": "masked-denial-404",
+          "verdict": "IC",
+          "inconclusive": true,
+          "assessment": {
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "inconclusive",
+            "source": "http_status",
+            "reason": "ambiguous_http_outcome"
+          },
+          "status": 404,
+          "categories": [],
+          "oracle": {
+            "actor": "bob",
+            "accessed": false,
+            "status": 404
+          }
+        },
+        {
+          "id": "login-redirect",
+          "verdict": "IC",
+          "inconclusive": true,
+          "assessment": {
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "inconclusive",
+            "source": "http_status",
+            "reason": "ambiguous_http_outcome"
+          },
+          "status": 302,
+          "categories": [],
+          "oracle": {
+            "actor": "bob",
+            "accessed": false,
+            "status": 302
+          }
+        },
+        {
+          "id": "rate-limit",
+          "verdict": "IC",
+          "inconclusive": true,
+          "assessment": {
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "inconclusive",
+            "source": "http_status",
+            "reason": "ambiguous_http_outcome"
+          },
+          "status": 429,
+          "categories": [],
+          "oracle": {
+            "actor": "bob",
+            "accessed": false,
+            "status": 429
+          }
+        },
+        {
+          "id": "service-unavailable",
+          "verdict": "IC",
+          "inconclusive": true,
+          "assessment": {
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "inconclusive",
+            "source": "http_status",
+            "reason": "ambiguous_http_outcome"
+          },
+          "status": 503,
+          "categories": [],
+          "oracle": {
+            "actor": "bob",
+            "accessed": false,
+            "status": 503
+          }
+        },
+        {
+          "id": "connection-aborted",
+          "verdict": "IC",
+          "inconclusive": true,
+          "assessment": {
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "inconclusive",
+            "source": "none",
+            "reason": "execution_error"
+          },
+          "status": 0,
+          "categories": [],
+          "oracle": {
+            "actor": "bob",
+            "accessed": false,
+            "status": 0
+          }
+        },
+        {
+          "id": "owner-wrongly-denied",
+          "verdict": "TP",
+          "inconclusive": false,
+          "assessment": {
+            "identity_id": "alice",
+            "expected_access": "allow",
+            "decision": "denied",
+            "source": "http_status",
+            "reason": "status_only"
+          },
+          "status": 403,
+          "categories": [
+            "authorization_mismatch"
+          ],
+          "oracle": {
+            "actor": "alice",
+            "accessed": false,
+            "status": 403
+          }
+        }
+      ],
+      "commit": "7eada03534be600ae091b75d47513236ec00b502",
+      "source_sha256": "d37552807d87dc767298da674149bdffd9d24526ce73aaa9fcf67fb48ca15f61",
+      "binary_sha256": "9bdad43a234b7bfcb277f1f3807cb14e29302bf230a5a7b8a05f046e43972b18",
+      "working_tree": false
+    }
+  }
+}

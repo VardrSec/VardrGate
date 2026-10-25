@@ -1,0 +1,1306 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-10-24T19:36:10Z",
+  "gate_revision": "7eada03534be600ae091b75d47513236ec00b502",
+  "gate_tree_clean": true,
+  "lab_revision": "5ab4c59866294daaf74798111f7217c833c9598a",
+  "lab_tree_status": "",
+  "target": {
+    "name": "VAmPI",
+    "repository": "https://github.com/erev0s/VAmPI",
+    "commit": "f16052dce83f05847133ec98f01c5193a41de7d8",
+    "modes": {
+      "vulnerable": {
+        "env": {
+          "vulnerable": "1",
+          "tokentimetolive": "3600"
+        }
+      },
+      "protected": {
+        "env": {
+          "vulnerable": "0",
+          "tokentimetolive": "3600"
+        }
+      }
+    }
+  },
+  "image_id": "sha256:88a18820b9871efc68e06c6dd23486d8ca04deb970c9b57eb1b064ce7c7c271c",
+  "inputs_sha256": {
+    "corpus.json": "55729e2ba5d5bebb1a4310a72a6fb98c893fc2d8ed548c6b55c70678b1eada47",
+    "profiles.json": "4f98b0e7785f836fb07578aa74ed8f52f2614aed0ed0a06df41901cdc8baf4bf",
+    "mistakes.json": "8a5044a44726e602b232a6455c3671ac2e7a7c1e77c2862a31d13e65bf17f3c0",
+    "verification.json": "1bee46730adbd7dfda04da6d612cc1fe74ae64231288eb857a85bdcf2f90dcfb"
+  },
+  "repeat": 3,
+  "verifier": true,
+  "ground_truth": [
+    {
+      "mode": "vulnerable",
+      "case": "book-owner",
+      "status": 200,
+      "violation": false
+    },
+    {
+      "mode": "vulnerable",
+      "case": "book-peer",
+      "status": 200,
+      "violation": true
+    },
+    {
+      "mode": "vulnerable",
+      "case": "book-admin",
+      "status": 200,
+      "violation": true
+    },
+    {
+      "mode": "vulnerable",
+      "case": "book-anonymous",
+      "status": 401,
+      "violation": false
+    },
+    {
+      "mode": "vulnerable",
+      "case": "users-public",
+      "status": 200,
+      "violation": false
+    },
+    {
+      "mode": "vulnerable",
+      "case": "debug-anonymous",
+      "status": 200,
+      "violation": true
+    },
+    {
+      "mode": "vulnerable",
+      "case": "debug-peer",
+      "status": 200,
+      "violation": true
+    },
+    {
+      "mode": "vulnerable",
+      "case": "password-peer",
+      "status": 204,
+      "violation": true
+    },
+    {
+      "mode": "vulnerable",
+      "case": "password-owner",
+      "status": 204,
+      "violation": false
+    },
+    {
+      "mode": "vulnerable",
+      "case": "password-anonymous",
+      "status": 401,
+      "violation": false
+    },
+    {
+      "mode": "vulnerable",
+      "case": "email-peer",
+      "status": 204,
+      "violation": false
+    },
+    {
+      "mode": "vulnerable",
+      "case": "email-owner",
+      "status": 204,
+      "violation": false
+    },
+    {
+      "mode": "vulnerable",
+      "case": "delete-peer",
+      "status": 401,
+      "violation": false
+    },
+    {
+      "mode": "vulnerable",
+      "case": "delete-admin",
+      "status": 200,
+      "violation": false
+    },
+    {
+      "mode": "protected",
+      "case": "book-owner",
+      "status": 200,
+      "violation": false
+    },
+    {
+      "mode": "protected",
+      "case": "book-peer",
+      "status": 404,
+      "violation": false
+    },
+    {
+      "mode": "protected",
+      "case": "book-admin",
+      "status": 404,
+      "violation": false
+    },
+    {
+      "mode": "protected",
+      "case": "book-anonymous",
+      "status": 401,
+      "violation": false
+    },
+    {
+      "mode": "protected",
+      "case": "users-public",
+      "status": 200,
+      "violation": false
+    },
+    {
+      "mode": "protected",
+      "case": "debug-anonymous",
+      "status": 200,
+      "violation": true
+    },
+    {
+      "mode": "protected",
+      "case": "debug-peer",
+      "status": 200,
+      "violation": true
+    },
+    {
+      "mode": "protected",
+      "case": "password-peer",
+      "status": 204,
+      "violation": false
+    },
+    {
+      "mode": "protected",
+      "case": "password-owner",
+      "status": 204,
+      "violation": false
+    },
+    {
+      "mode": "protected",
+      "case": "password-anonymous",
+      "status": 401,
+      "violation": false
+    },
+    {
+      "mode": "protected",
+      "case": "email-peer",
+      "status": 204,
+      "violation": false
+    },
+    {
+      "mode": "protected",
+      "case": "email-owner",
+      "status": 204,
+      "violation": false
+    },
+    {
+      "mode": "protected",
+      "case": "delete-peer",
+      "status": 401,
+      "violation": false
+    },
+    {
+      "mode": "protected",
+      "case": "delete-admin",
+      "status": 200,
+      "violation": false
+    }
+  ],
+  "results": {
+    "status/vulnerable": {
+      "metrics": {
+        "true_positive": 5,
+        "false_positive": 0,
+        "false_negative": 0,
+        "true_negative": 6,
+        "inconclusive_control": 3,
+        "inconclusive_assessments": 3,
+        "inconclusive_known_failures": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "known_failures": 5,
+        "total": 14
+      },
+      "cases": [
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": {
+            "identity_id": "alice",
+            "expected_access": "allow",
+            "decision": "allowed",
+            "source": "http_status",
+            "reason": "status_only"
+          },
+          "findings": [],
+          "case": "book-owner"
+        },
+        {
+          "verdict": "true_positive",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": {
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "allowed",
+            "source": "http_status",
+            "reason": "status_only"
+          },
+          "findings": [
+            [
+              "unexpected_access",
+              "high"
+            ]
+          ],
+          "case": "book-peer"
+        },
+        {
+          "verdict": "true_positive",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": {
+            "identity_id": "admin",
+            "expected_access": "deny",
+            "decision": "allowed",
+            "source": "http_status",
+            "reason": "status_only"
+          },
+          "findings": [
+            [
+              "unexpected_access",
+              "high"
+            ]
+          ],
+          "case": "book-admin"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": {
+            "identity_id": "anonymous",
+            "expected_access": "deny",
+            "decision": "denied",
+            "source": "http_status",
+            "reason": "status_only"
+          },
+          "findings": [],
+          "case": "book-anonymous"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": {
+            "identity_id": "anonymous",
+            "expected_access": "allow",
+            "decision": "allowed",
+            "source": "http_status",
+            "reason": "status_only"
+          },
+          "findings": [],
+          "case": "users-public"
+        },
+        {
+          "verdict": "true_positive",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": {
+            "identity_id": "anonymous",
+            "expected_access": "deny",
+            "decision": "allowed",
+            "source": "http_status",
+            "reason": "status_only"
+          },
+          "findings": [
+            [
+              "missing_authentication",
+              "critical"
+            ]
+          ],
+          "case": "debug-anonymous"
+        },
+        {
+          "verdict": "true_positive",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": {
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "allowed",
+            "source": "http_status",
+            "reason": "status_only"
+          },
+          "findings": [
+            [
+              "unexpected_access",
+              "high"
+            ]
+          ],
+          "case": "debug-peer"
+        },
+        {
+          "verdict": "true_positive",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": {
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "allowed",
+            "source": "write_verification",
+            "reason": "state_changed"
+          },
+          "findings": [
+            [
+              "unexpected_access",
+              "high"
+            ]
+          ],
+          "case": "password-peer"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": {
+            "identity_id": "alice",
+            "expected_access": "allow",
+            "decision": "allowed",
+            "source": "write_verification",
+            "reason": "state_changed"
+          },
+          "findings": [],
+          "case": "password-owner"
+        },
+        {
+          "verdict": "inconclusive_control",
+          "inconclusive": true,
+          "not_tested": false,
+          "assessment": {
+            "identity_id": "anonymous",
+            "expected_access": "deny",
+            "decision": "inconclusive",
+            "source": "write_verification",
+            "reason": "no_positive_control"
+          },
+          "findings": [],
+          "case": "password-anonymous"
+        },
+        {
+          "verdict": "inconclusive_control",
+          "inconclusive": true,
+          "not_tested": false,
+          "assessment": {
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "inconclusive",
+            "source": "write_verification",
+            "reason": "no_positive_control"
+          },
+          "findings": [],
+          "case": "email-peer"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": {
+            "identity_id": "alice",
+            "expected_access": "allow",
+            "decision": "allowed",
+            "source": "write_verification",
+            "reason": "state_changed"
+          },
+          "findings": [],
+          "case": "email-owner"
+        },
+        {
+          "verdict": "inconclusive_control",
+          "inconclusive": true,
+          "not_tested": false,
+          "assessment": {
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "inconclusive",
+            "source": "write_verification",
+            "reason": "no_positive_control"
+          },
+          "findings": [],
+          "case": "delete-peer"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": {
+            "identity_id": "admin",
+            "expected_access": "allow",
+            "decision": "allowed",
+            "source": "write_verification",
+            "reason": "state_changed"
+          },
+          "findings": [],
+          "case": "delete-admin"
+        }
+      ]
+    },
+    "status/protected": {
+      "metrics": {
+        "true_positive": 2,
+        "false_positive": 0,
+        "false_negative": 0,
+        "true_negative": 6,
+        "inconclusive_control": 6,
+        "inconclusive_assessments": 6,
+        "inconclusive_known_failures": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "known_failures": 2,
+        "total": 14
+      },
+      "cases": [
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": {
+            "identity_id": "alice",
+            "expected_access": "allow",
+            "decision": "allowed",
+            "source": "http_status",
+            "reason": "status_only"
+          },
+          "findings": [],
+          "case": "book-owner"
+        },
+        {
+          "verdict": "inconclusive_control",
+          "inconclusive": true,
+          "not_tested": false,
+          "assessment": {
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "inconclusive",
+            "source": "http_status",
+            "reason": "ambiguous_http_outcome"
+          },
+          "findings": [],
+          "case": "book-peer"
+        },
+        {
+          "verdict": "inconclusive_control",
+          "inconclusive": true,
+          "not_tested": false,
+          "assessment": {
+            "identity_id": "admin",
+            "expected_access": "deny",
+            "decision": "inconclusive",
+            "source": "http_status",
+            "reason": "ambiguous_http_outcome"
+          },
+          "findings": [],
+          "case": "book-admin"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": {
+            "identity_id": "anonymous",
+            "expected_access": "deny",
+            "decision": "denied",
+            "source": "http_status",
+            "reason": "status_only"
+          },
+          "findings": [],
+          "case": "book-anonymous"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": {
+            "identity_id": "anonymous",
+            "expected_access": "allow",
+            "decision": "allowed",
+            "source": "http_status",
+            "reason": "status_only"
+          },
+          "findings": [],
+          "case": "users-public"
+        },
+        {
+          "verdict": "true_positive",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": {
+            "identity_id": "anonymous",
+            "expected_access": "deny",
+            "decision": "allowed",
+            "source": "http_status",
+            "reason": "status_only"
+          },
+          "findings": [
+            [
+              "missing_authentication",
+              "critical"
+            ]
+          ],
+          "case": "debug-anonymous"
+        },
+        {
+          "verdict": "true_positive",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": {
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "allowed",
+            "source": "http_status",
+            "reason": "status_only"
+          },
+          "findings": [
+            [
+              "unexpected_access",
+              "high"
+            ]
+          ],
+          "case": "debug-peer"
+        },
+        {
+          "verdict": "inconclusive_control",
+          "inconclusive": true,
+          "not_tested": false,
+          "assessment": {
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "inconclusive",
+            "source": "write_verification",
+            "reason": "no_positive_control"
+          },
+          "findings": [],
+          "case": "password-peer"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": {
+            "identity_id": "alice",
+            "expected_access": "allow",
+            "decision": "allowed",
+            "source": "write_verification",
+            "reason": "state_changed"
+          },
+          "findings": [],
+          "case": "password-owner"
+        },
+        {
+          "verdict": "inconclusive_control",
+          "inconclusive": true,
+          "not_tested": false,
+          "assessment": {
+            "identity_id": "anonymous",
+            "expected_access": "deny",
+            "decision": "inconclusive",
+            "source": "write_verification",
+            "reason": "no_positive_control"
+          },
+          "findings": [],
+          "case": "password-anonymous"
+        },
+        {
+          "verdict": "inconclusive_control",
+          "inconclusive": true,
+          "not_tested": false,
+          "assessment": {
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "inconclusive",
+            "source": "write_verification",
+            "reason": "no_positive_control"
+          },
+          "findings": [],
+          "case": "email-peer"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": {
+            "identity_id": "alice",
+            "expected_access": "allow",
+            "decision": "allowed",
+            "source": "write_verification",
+            "reason": "state_changed"
+          },
+          "findings": [],
+          "case": "email-owner"
+        },
+        {
+          "verdict": "inconclusive_control",
+          "inconclusive": true,
+          "not_tested": false,
+          "assessment": {
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "inconclusive",
+            "source": "write_verification",
+            "reason": "no_positive_control"
+          },
+          "findings": [],
+          "case": "delete-peer"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": {
+            "identity_id": "admin",
+            "expected_access": "allow",
+            "decision": "allowed",
+            "source": "write_verification",
+            "reason": "state_changed"
+          },
+          "findings": [],
+          "case": "delete-admin"
+        }
+      ]
+    },
+    "assertions/vulnerable": {
+      "metrics": {
+        "true_positive": 5,
+        "false_positive": 0,
+        "false_negative": 0,
+        "true_negative": 5,
+        "inconclusive_control": 4,
+        "inconclusive_assessments": 4,
+        "inconclusive_known_failures": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "known_failures": 5,
+        "total": 14
+      },
+      "cases": [
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": {
+            "identity_id": "alice",
+            "expected_access": "allow",
+            "decision": "allowed",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              0
+            ]
+          },
+          "findings": [],
+          "case": "book-owner"
+        },
+        {
+          "verdict": "true_positive",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": {
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "allowed",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              0
+            ]
+          },
+          "findings": [
+            [
+              "unexpected_access",
+              "high"
+            ]
+          ],
+          "case": "book-peer"
+        },
+        {
+          "verdict": "true_positive",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": {
+            "identity_id": "admin",
+            "expected_access": "deny",
+            "decision": "allowed",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              0
+            ]
+          },
+          "findings": [
+            [
+              "unexpected_access",
+              "high"
+            ]
+          ],
+          "case": "book-admin"
+        },
+        {
+          "verdict": "inconclusive_control",
+          "inconclusive": true,
+          "not_tested": false,
+          "assessment": {
+            "identity_id": "anonymous",
+            "expected_access": "deny",
+            "decision": "inconclusive",
+            "source": "response_assertion",
+            "reason": "no_assertion_matched"
+          },
+          "findings": [],
+          "case": "book-anonymous"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": {
+            "identity_id": "anonymous",
+            "expected_access": "allow",
+            "decision": "allowed",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              0
+            ]
+          },
+          "findings": [],
+          "case": "users-public"
+        },
+        {
+          "verdict": "true_positive",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": {
+            "identity_id": "anonymous",
+            "expected_access": "deny",
+            "decision": "allowed",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              0
+            ]
+          },
+          "findings": [
+            [
+              "missing_authentication",
+              "critical"
+            ]
+          ],
+          "case": "debug-anonymous"
+        },
+        {
+          "verdict": "true_positive",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": {
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "allowed",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              0
+            ]
+          },
+          "findings": [
+            [
+              "unexpected_access",
+              "high"
+            ]
+          ],
+          "case": "debug-peer"
+        },
+        {
+          "verdict": "true_positive",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": {
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "allowed",
+            "source": "write_verification",
+            "reason": "state_changed"
+          },
+          "findings": [
+            [
+              "unexpected_access",
+              "high"
+            ]
+          ],
+          "case": "password-peer"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": {
+            "identity_id": "alice",
+            "expected_access": "allow",
+            "decision": "allowed",
+            "source": "write_verification",
+            "reason": "state_changed"
+          },
+          "findings": [],
+          "case": "password-owner"
+        },
+        {
+          "verdict": "inconclusive_control",
+          "inconclusive": true,
+          "not_tested": false,
+          "assessment": {
+            "identity_id": "anonymous",
+            "expected_access": "deny",
+            "decision": "inconclusive",
+            "source": "write_verification",
+            "reason": "no_positive_control"
+          },
+          "findings": [],
+          "case": "password-anonymous"
+        },
+        {
+          "verdict": "inconclusive_control",
+          "inconclusive": true,
+          "not_tested": false,
+          "assessment": {
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "inconclusive",
+            "source": "write_verification",
+            "reason": "no_positive_control"
+          },
+          "findings": [],
+          "case": "email-peer"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": {
+            "identity_id": "alice",
+            "expected_access": "allow",
+            "decision": "allowed",
+            "source": "write_verification",
+            "reason": "state_changed"
+          },
+          "findings": [],
+          "case": "email-owner"
+        },
+        {
+          "verdict": "inconclusive_control",
+          "inconclusive": true,
+          "not_tested": false,
+          "assessment": {
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "inconclusive",
+            "source": "write_verification",
+            "reason": "no_positive_control"
+          },
+          "findings": [],
+          "case": "delete-peer"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": {
+            "identity_id": "admin",
+            "expected_access": "allow",
+            "decision": "allowed",
+            "source": "write_verification",
+            "reason": "state_changed"
+          },
+          "findings": [],
+          "case": "delete-admin"
+        }
+      ]
+    },
+    "assertions/protected": {
+      "metrics": {
+        "true_positive": 2,
+        "false_positive": 0,
+        "false_negative": 0,
+        "true_negative": 7,
+        "inconclusive_control": 5,
+        "inconclusive_assessments": 5,
+        "inconclusive_known_failures": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "known_failures": 2,
+        "total": 14
+      },
+      "cases": [
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": {
+            "identity_id": "alice",
+            "expected_access": "allow",
+            "decision": "allowed",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              0
+            ]
+          },
+          "findings": [],
+          "case": "book-owner"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": {
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "denied",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              1
+            ]
+          },
+          "findings": [],
+          "case": "book-peer"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": {
+            "identity_id": "admin",
+            "expected_access": "deny",
+            "decision": "denied",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              1
+            ]
+          },
+          "findings": [],
+          "case": "book-admin"
+        },
+        {
+          "verdict": "inconclusive_control",
+          "inconclusive": true,
+          "not_tested": false,
+          "assessment": {
+            "identity_id": "anonymous",
+            "expected_access": "deny",
+            "decision": "inconclusive",
+            "source": "response_assertion",
+            "reason": "no_assertion_matched"
+          },
+          "findings": [],
+          "case": "book-anonymous"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": {
+            "identity_id": "anonymous",
+            "expected_access": "allow",
+            "decision": "allowed",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              0
+            ]
+          },
+          "findings": [],
+          "case": "users-public"
+        },
+        {
+          "verdict": "true_positive",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": {
+            "identity_id": "anonymous",
+            "expected_access": "deny",
+            "decision": "allowed",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              0
+            ]
+          },
+          "findings": [
+            [
+              "missing_authentication",
+              "critical"
+            ]
+          ],
+          "case": "debug-anonymous"
+        },
+        {
+          "verdict": "true_positive",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": {
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "allowed",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              0
+            ]
+          },
+          "findings": [
+            [
+              "unexpected_access",
+              "high"
+            ]
+          ],
+          "case": "debug-peer"
+        },
+        {
+          "verdict": "inconclusive_control",
+          "inconclusive": true,
+          "not_tested": false,
+          "assessment": {
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "inconclusive",
+            "source": "write_verification",
+            "reason": "no_positive_control"
+          },
+          "findings": [],
+          "case": "password-peer"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": {
+            "identity_id": "alice",
+            "expected_access": "allow",
+            "decision": "allowed",
+            "source": "write_verification",
+            "reason": "state_changed"
+          },
+          "findings": [],
+          "case": "password-owner"
+        },
+        {
+          "verdict": "inconclusive_control",
+          "inconclusive": true,
+          "not_tested": false,
+          "assessment": {
+            "identity_id": "anonymous",
+            "expected_access": "deny",
+            "decision": "inconclusive",
+            "source": "write_verification",
+            "reason": "no_positive_control"
+          },
+          "findings": [],
+          "case": "password-anonymous"
+        },
+        {
+          "verdict": "inconclusive_control",
+          "inconclusive": true,
+          "not_tested": false,
+          "assessment": {
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "inconclusive",
+            "source": "write_verification",
+            "reason": "no_positive_control"
+          },
+          "findings": [],
+          "case": "email-peer"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": {
+            "identity_id": "alice",
+            "expected_access": "allow",
+            "decision": "allowed",
+            "source": "write_verification",
+            "reason": "state_changed"
+          },
+          "findings": [],
+          "case": "email-owner"
+        },
+        {
+          "verdict": "inconclusive_control",
+          "inconclusive": true,
+          "not_tested": false,
+          "assessment": {
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "inconclusive",
+            "source": "write_verification",
+            "reason": "no_positive_control"
+          },
+          "findings": [],
+          "case": "delete-peer"
+        },
+        {
+          "verdict": "true_negative",
+          "inconclusive": false,
+          "not_tested": false,
+          "assessment": {
+            "identity_id": "admin",
+            "expected_access": "allow",
+            "decision": "allowed",
+            "source": "write_verification",
+            "reason": "state_changed"
+          },
+          "findings": [],
+          "case": "delete-admin"
+        }
+      ]
+    }
+  },
+  "mistakes": [
+    {
+      "id": "stale-secret",
+      "outcome": "inconclusive:no_assertion_matched",
+      "acceptable": true,
+      "exit_code": 0,
+      "assessment": {
+        "identity_id": "bob",
+        "expected_access": "deny",
+        "decision": "inconclusive",
+        "source": "response_assertion",
+        "reason": "no_assertion_matched"
+      },
+      "preflight": null
+    },
+    {
+      "id": "stale-secret-owner",
+      "outcome": "inconclusive:no_assertion_matched",
+      "acceptable": true,
+      "exit_code": 0,
+      "assessment": {
+        "identity_id": "alice",
+        "expected_access": "allow",
+        "decision": "inconclusive",
+        "source": "response_assertion",
+        "reason": "no_assertion_matched"
+      },
+      "preflight": null
+    },
+    {
+      "id": "changed-format",
+      "outcome": "inconclusive:no_assertion_matched",
+      "acceptable": true,
+      "exit_code": 0,
+      "assessment": {
+        "identity_id": "bob",
+        "expected_access": "deny",
+        "decision": "inconclusive",
+        "source": "response_assertion",
+        "reason": "no_assertion_matched"
+      },
+      "preflight": null
+    },
+    {
+      "id": "conflicting-evidence",
+      "outcome": "inconclusive:conflicting_assertions",
+      "acceptable": true,
+      "exit_code": 0,
+      "assessment": {
+        "identity_id": "bob",
+        "expected_access": "deny",
+        "decision": "inconclusive",
+        "source": "response_assertion",
+        "reason": "conflicting_assertions",
+        "matched_assertions": [
+          0,
+          1
+        ]
+      },
+      "preflight": null
+    },
+    {
+      "id": "wrong-expectation",
+      "outcome": "finding:authorization_mismatch",
+      "acceptable": true,
+      "exit_code": 0,
+      "assessment": {
+        "identity_id": "bob",
+        "expected_access": "allow",
+        "decision": "denied",
+        "source": "http_status",
+        "reason": "status_only"
+      },
+      "preflight": null
+    },
+    {
+      "id": "dead-token-status",
+      "outcome": "silent_pass",
+      "acceptable": false,
+      "exit_code": 0,
+      "assessment": {
+        "identity_id": "bob",
+        "expected_access": "deny",
+        "decision": "denied",
+        "source": "http_status",
+        "reason": "status_only"
+      },
+      "preflight": null
+    },
+    {
+      "id": "dead-token-generic-deny",
+      "outcome": "silent_pass",
+      "acceptable": false,
+      "exit_code": 0,
+      "assessment": {
+        "identity_id": "bob",
+        "expected_access": "deny",
+        "decision": "denied",
+        "source": "response_assertion",
+        "reason": "assertion_matched",
+        "matched_assertions": [
+          1
+        ]
+      },
+      "preflight": null
+    },
+    {
+      "id": "dead-token-specific-deny",
+      "outcome": "inconclusive:no_assertion_matched",
+      "acceptable": true,
+      "exit_code": 0,
+      "assessment": {
+        "identity_id": "bob",
+        "expected_access": "deny",
+        "decision": "inconclusive",
+        "source": "response_assertion",
+        "reason": "no_assertion_matched"
+      },
+      "preflight": null
+    },
+    {
+      "id": "dead-token-preflight",
+      "outcome": "not_tested",
+      "acceptable": true,
+      "exit_code": 3,
+      "assessment": null,
+      "preflight": [
+        {
+          "identity_id": "bob",
+          "status": "failed",
+          "reason": "credential_rejected",
+          "status_code": 401
+        }
+      ]
+    }
+  ],
+  "gate_source_sha256": "d37552807d87dc767298da674149bdffd9d24526ce73aaa9fcf67fb48ca15f61",
+  "gate_binary_sha256": "9bdad43a234b7bfcb277f1f3807cb14e29302bf230a5a7b8a05f046e43972b18",
+  "gate_working_tree": false,
+  "harness_sha256": "e77c602d35b32e8c1c00ccb9d9d42b2c9cf1b4563005b9e1d1175a37b671d012"
+}

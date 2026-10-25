@@ -40,7 +40,11 @@ type Result struct {
 	TestCaseID string                  `json:"test_case_id"`
 	Executions []model.ExecutionResult `json:"executions"`
 	Findings   []model.Finding         `json:"findings"`
-	Preflight  []model.PreflightResult `json:"preflight,omitempty"`
+	// Assessments records the semantic access conclusion per evaluated identity,
+	// separate from the raw HTTP outcome. An inconclusive entry is how a
+	// stale assertion or a dead token surfaces instead of passing silently.
+	Assessments []model.Assessment      `json:"assessments"`
+	Preflight   []model.PreflightResult `json:"preflight,omitempty"`
 	// Error records why a case in a suite could not run, such as a failed
 	// setup step, so the rest of the suite still runs and reports. Run never
 	// sets it; a single case returns its error instead.
@@ -74,6 +78,34 @@ func (r Result) Unreached() bool {
 	return true
 }
 
+// Inconclusive returns the assessments for identities that carried an allow or
+// deny expectation but could not be judged: an unmatched or conflicting
+// assertion, an unusable body, an execution error, or an ambiguous status.
+// They emit no finding, so every report lists them; otherwise a stale
+// assertion or a dead token would read as a clean result.
+func (r Result) Inconclusive() []model.Assessment {
+	var out []model.Assessment
+	for _, a := range r.Assessments {
+		if a.Decision == model.AssessmentInconclusive {
+			out = append(out, a)
+		}
+	}
+	return out
+}
+
+// InconclusiveReasons lists every reason an inconclusive assessment can carry,
+// so report explanations cannot silently fall behind the engine.
+func InconclusiveReasons() []string {
+	return []string{
+		"execution_error", "ambiguous_http_outcome", "invalid_or_unsupported_json",
+		"conflicting_assertions", "no_assertion_matched",
+		reasonVerifierReadFailed, reasonVerifierDenied, reasonVerifierValueMissing,
+		reasonBaselineMissing, reasonConcurrentChange, reasonTargetAlreadyPresent,
+		reasonChangedUnexpectedly, reasonVerifierStatus, reasonWriteFailed,
+		reasonNoPositiveControl, reasonPositiveControlFailed,
+	}
+}
+
 // Run validates the test case, executes the request for each identity,
 // evaluates expected versus observed access, and returns findings.
 func (e *Engine) Run(ctx context.Context, tc model.AuthorizationTestCase) (Result, error) {
@@ -92,7 +124,7 @@ func (e *Engine) Run(ctx context.Context, tc model.AuthorizationTestCase) (Resul
 		return Result{}, fmt.Errorf("%w: %s", ErrSetupFailed, err)
 	}
 
-	result := Result{TestCaseID: tc.ID, Executions: make([]model.ExecutionResult, 0), Findings: make([]model.Finding, 0)}
+	result := Result{TestCaseID: tc.ID, Executions: make([]model.ExecutionResult, 0), Findings: make([]model.Finding, 0), Assessments: make([]model.Assessment, 0)}
 	var ready bool
 	result.Preflight, ready = e.runPreflight(ctx, tc)
 	if !ready {
@@ -114,8 +146,16 @@ func (e *Engine) Run(ctx context.Context, tc model.AuthorizationTestCase) (Resul
 	// First pass: execute every identity and index the results so finding
 	// evaluation can compare an offending response against a legitimate baseline.
 	execByID := make(map[string]model.ExecutionResult, len(tc.Identities))
-	for _, identity := range tc.Identities {
-		exec := e.exec.Execute(ctx, identity, req)
+	verified := make(map[string]model.Assessment)
+	for _, identity := range executionOrder(tc) {
+		var exec model.ExecutionResult
+		if ea, ok := expectedFor(tc, identity.ID); ok && tc.WriteVerification != nil && ea.Decision != model.AccessDecisionSkip {
+			var a model.Assessment
+			exec, a = e.verifiedExecute(ctx, tc.WriteVerification, identity, req, ea)
+			verified[identity.ID] = a
+		} else {
+			exec = e.exec.Execute(ctx, identity, req)
+		}
 		exec.ResponseProfile = compare.Profile(exec.Body)
 		// The executor classifies against the default status mapping; it knows
 		// nothing about a policy-declared deny convention. Reclassify here so
@@ -124,9 +164,12 @@ func (e *Engine) Run(ctx context.Context, tc model.AuthorizationTestCase) (Resul
 		if exec.Error == "" {
 			exec.ObservedOutcome, _ = classify(tc, exec)
 		}
-		result.Executions = append(result.Executions, exec)
 		execByID[identity.ID] = exec
 	}
+	for _, identity := range tc.Identities {
+		result.Executions = append(result.Executions, execByID[identity.ID])
+	}
+	guardVerifiedDenials(tc, verified)
 
 	// CORS policy is endpoint-level, so evaluate it once from the first usable
 	// response.
@@ -143,12 +186,30 @@ func (e *Engine) Run(ctx context.Context, tc model.AuthorizationTestCase) (Resul
 	}
 	for _, identity := range tc.Identities {
 		ea, hasExpected := expectedByID[identity.ID]
+
+		assessment, isVerified := verified[identity.ID]
+		if !isVerified {
+			assessment = assess(identity.ID, execByID[identity.ID], ea, hasExpected)
+		}
+		result.Assessments = append(result.Assessments, assessment)
+
 		if !hasExpected || ea.Decision == model.AccessDecisionSkip {
 			continue
 		}
-		if finding, ok := e.evaluate(tc, identity, execByID, ea.Decision); ok {
+
+		if isVerified || len(ea.ResponseAssertions) > 0 {
+			// Explicit assertions are authoritative: the decision comes from
+			// response content, so a denial sent with HTTP 200 or protected
+			// data leaked in an error body is judged correctly. An inconclusive
+			// assessment (no match, conflict, unusable body) emits no finding
+			// but is recorded, never a silent pass.
+			if finding, ok := assessmentFinding(tc, identity, execByID, ea, assessment); ok {
+				result.Findings = append(result.Findings, finding)
+			}
+		} else if finding, ok := e.evaluate(tc, identity, execByID, ea.Decision); ok {
 			result.Findings = append(result.Findings, finding)
 		}
+
 		// Sensitive-data exposure is independent of the allow/deny decision: an
 		// identity may be permitted to call the endpoint yet still must not
 		// receive certain fields.
@@ -260,6 +321,32 @@ func (e *Engine) evaluate(tc model.AuthorizationTestCase, identity model.Identit
 		// are not sufficient to classify an authorization finding alone.
 		return model.Finding{}, false
 	}
+}
+
+// assessmentFinding turns an assertion- or verification-derived assessment into a finding, reusing
+// the same categorization as the status path (ownership, tenant, role). It fires
+// only when the explicit assessment contradicts the expectation; a matching or
+// inconclusive assessment yields no finding. The attached evidence names the
+// matched assertion indices, never their values or the response body.
+func assessmentFinding(tc model.AuthorizationTestCase, identity model.Identity, execByID map[string]model.ExecutionResult, ea model.ExpectedAccess, a model.Assessment) (model.Finding, bool) {
+	exec := execByID[identity.ID]
+	var f model.Finding
+	switch {
+	case a.Decision == model.AssessmentAllowed && ea.Decision == model.AccessDecisionDeny:
+		f = unexpectedAccessFinding(tc, identity, exec, model.OutcomeAllow, execByID)
+	case a.Decision == model.AssessmentDenied && ea.Decision == model.AccessDecisionAllow:
+		f = accessDeniedFinding(tc, identity, exec, model.OutcomeDeny, a.Reason)
+	default:
+		return model.Finding{}, false
+	}
+	f.Confidence = model.ConfidenceHigh
+	f.Evidence = append(f.Evidence, "assessment="+string(a.Decision), "source="+a.Source)
+	if a.Source == sourceWriteVerification {
+		f.Evidence = append(f.Evidence, "verification="+a.Reason)
+	} else {
+		f.Evidence = append(f.Evidence, fmt.Sprintf("matched_assertions=%v", a.MatchedAssertions))
+	}
+	return f, true
 }
 
 // unexpectedAccessFinding classifies an identity that reached a resource it
@@ -571,6 +658,17 @@ var sensitiveQueryParams = []string{
 	"secret", "key", "password", "auth", "authorization",
 }
 
+// isSensitiveQueryParam matches case-insensitively: servers commonly accept
+// ?Token= or ?API_KEY=, and evidence must not carry them either.
+func isSensitiveQueryParam(key string) bool {
+	for _, p := range sensitiveQueryParams {
+		if strings.EqualFold(key, p) {
+			return true
+		}
+	}
+	return false
+}
+
 // sanitizeURL removes credentials from URLs before they are written into
 // evidence: userinfo (user:pass@host) is stripped entirely and known sensitive
 // query parameters are redacted.
@@ -584,9 +682,9 @@ func sanitizeURL(rawURL string) string {
 	}
 	q := u.Query()
 	redacted := false
-	for _, p := range sensitiveQueryParams {
-		if q.Has(p) {
-			q.Set(p, "[REDACTED]")
+	for key := range q {
+		if isSensitiveQueryParam(key) {
+			q.Set(key, "[REDACTED]")
 			redacted = true
 		}
 	}
@@ -654,6 +752,12 @@ func validate(tc model.AuthorizationTestCase) error {
 		default:
 			return fmt.Errorf("expected_access[%d] has invalid decision %q", i, ea.Decision)
 		}
+		if err := validateAssertions(ea.ResponseAssertions); err != nil {
+			return fmt.Errorf("expected_access[%d]: %w", i, err)
+		}
+	}
+	if err := validateVerification(tc, ids); err != nil {
+		return err
 	}
 
 	if err := validateSetup(tc); err != nil {
@@ -710,4 +814,13 @@ func validateCredential(identity model.Identity) error {
 		return fmt.Errorf("identity %q: unknown credential type %q", identity.ID, cred.Type)
 	}
 	return nil
+}
+
+func expectedFor(tc model.AuthorizationTestCase, identityID string) (model.ExpectedAccess, bool) {
+	for _, ea := range tc.ExpectedAccess {
+		if ea.IdentityID == identityID {
+			return ea, true
+		}
+	}
+	return model.ExpectedAccess{}, false
 }

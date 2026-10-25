@@ -51,6 +51,9 @@ const (
 	ErrorKindNetwork          ExecutionErrorKind = "network"
 	ErrorKindBodySizeExceeded ExecutionErrorKind = "body_size_exceeded"
 	ErrorKindBodyRead         ExecutionErrorKind = "body_read"
+	// ErrorKindVerification: the request was withheld because write
+	// verification could not establish the state before it.
+	ErrorKindVerification ExecutionErrorKind = "verification_unavailable"
 
 	ConfidenceLow    Confidence = "low"
 	ConfidenceMedium Confidence = "medium"
@@ -232,6 +235,42 @@ type ExpectedAccess struct {
 	// ForbidSensitiveData marks an identity that must never receive sensitive
 	// fields in the response body, even when it is allowed to call the endpoint.
 	ForbidSensitiveData bool `json:"forbid_sensitive_data,omitempty"`
+	// ResponseAssertions supply explicit JSON evidence for the access decision,
+	// so a denial returned with HTTP 200 or protected data leaked in an error
+	// body is judged by content rather than status alone. When empty, the
+	// status-based evaluation is used unchanged.
+	ResponseAssertions []ResponseAssertion `json:"response_assertions,omitempty"`
+}
+
+// ResponseAssertion supplies explicit evidence for an access decision. Equals
+// must be present (JSON null is valid). JSONPointer uses /-separated JSON keys
+// or array indices; an empty pointer selects the complete document.
+type ResponseAssertion struct {
+	JSONPointer string          `json:"json_pointer"`
+	Equals      json.RawMessage `json:"equals"`
+	Decision    AccessDecision  `json:"decision"`
+}
+
+// AssessmentDecision is the semantic access conclusion for one identity,
+// separate from the raw HTTP outcome.
+type AssessmentDecision string
+
+const (
+	AssessmentAllowed      AssessmentDecision = "allowed"
+	AssessmentDenied       AssessmentDecision = "denied"
+	AssessmentInconclusive AssessmentDecision = "inconclusive"
+	AssessmentSkipped      AssessmentDecision = "skipped"
+)
+
+// Assessment separates semantic access evidence from the raw HTTP outcome.
+// Assertion indices are safe to return; response data and asserted values are not.
+type Assessment struct {
+	IdentityID        string             `json:"identity_id"`
+	ExpectedAccess    AccessDecision     `json:"expected_access,omitempty"`
+	Decision          AssessmentDecision `json:"decision"`
+	Source            string             `json:"source"`
+	Reason            string             `json:"reason"`
+	MatchedAssertions []int              `json:"matched_assertions,omitempty"`
 }
 
 // ExecutionResult captures the HTTP response for one identity.
@@ -447,10 +486,33 @@ type AuthorizationTestCase struct {
 	// Mutating acknowledges that the request changes server state. Required
 	// before the engine will replay an unsafe method once per identity.
 	Mutating bool `json:"mutating,omitempty"`
+	// WriteVerification reads the target's state before and after each
+	// identity's request, so a write is judged by its effect rather than by
+	// its own response. Requires Mutating.
+	WriteVerification *WriteVerification `json:"write_verification,omitempty"`
 	// Setup runs before the request under test, in order, so an authorization
 	// test can log in or create the object it is about to probe.
 	Setup []SetupStep `json:"setup,omitempty"`
 	// CORS, when set, enables cross-origin misconfiguration probing.
 	CORS           *CORSCheck       `json:"cors,omitempty"`
 	ExpectedAccess []ExpectedAccess `json:"expected_access"`
+}
+
+// WriteVerification observes whether a write took effect. Its identity is a
+// separate reader, never one of the identities under test, so it cannot
+// perform the mutation itself. Only the comparison outcome is reported:
+// observed values stay in memory and never reach results or evidence.
+type WriteVerification struct {
+	Identity Identity        `json:"identity"`
+	Request  RequestTemplate `json:"request"`
+	// AllowUnsafeMethod acknowledges a verifier that uses POST or similar,
+	// such as logging in as the victim, and asserts it changes no state.
+	AllowUnsafeMethod bool `json:"allow_unsafe_method,omitempty"`
+	// JSONPointer selects the observed value in a 2xx response. Successful
+	// statuses are equivalent; a 404 after a delete represents absent state.
+	JSONPointer string `json:"json_pointer,omitempty"`
+	// ChangedTo is the value the attempted write would set, when known. A
+	// change to anything else is inconclusive, and a state that already holds
+	// it cannot show a change.
+	ChangedTo json.RawMessage `json:"changed_to,omitempty"`
 }

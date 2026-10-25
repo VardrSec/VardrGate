@@ -73,6 +73,9 @@ func Parse(data []byte) (Envelope, error) {
 	// policy binding or a generated suite. Without this, a job envelope written
 	// with ${TOKEN} would send those characters as the bearer token and the
 	// resulting 401s would read as authorization findings.
+	if err := secretref.ExpandVerification(e.Config.TestCase.WriteVerification); err != nil {
+		return Envelope{}, err
+	}
 	if err := secretref.ExpandIdentities(e.Config.TestCase.Identities); err != nil {
 		return Envelope{}, err
 	}

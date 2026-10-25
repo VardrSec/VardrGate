@@ -41,8 +41,8 @@ func notTested(r engine.Result) string {
 
 // summary counts what a set of cases produced.
 type summary struct {
-	cases, findings, untested int
-	bySeverity                map[model.Severity]int
+	cases, findings, untested, inconclusive int
+	bySeverity                              map[model.Severity]int
 }
 
 func summarize(cases []Case) summary {
@@ -51,6 +51,7 @@ func summarize(cases []Case) summary {
 		if notTested(c.Result) != "" {
 			s.untested++
 		}
+		s.inconclusive += len(c.Result.Inconclusive())
 		for _, f := range c.Result.Findings {
 			s.findings++
 			s.bySeverity[f.Severity]++
@@ -80,7 +81,41 @@ func (s summary) headline() string {
 	if b := s.severityBreakdown(); b != "" {
 		line += " (" + b + ")"
 	}
-	return line + fmt.Sprintf(", %d not tested", s.untested)
+	line += fmt.Sprintf(", %d not tested", s.untested)
+	if s.inconclusive > 0 {
+		line += fmt.Sprintf(", %s", plural(s.inconclusive, "inconclusive assessment", "inconclusive assessments"))
+	}
+	return line
+}
+
+// inconclusiveReasons explains each assessment reason in terms an operator can
+// act on. Reasons are fixed codes from the engine, never response content.
+var inconclusiveReasons = map[string]string{
+	"no_assertion_matched":         "no response assertion matched; the assertion may be stale or the response format changed",
+	"conflicting_assertions":       "both an allow and a deny assertion matched; the assertions contradict each other",
+	"invalid_or_unsupported_json":  "response assertions are configured but the body is not usable JSON",
+	"execution_error":              "the request failed before a usable response arrived",
+	"ambiguous_http_outcome":       "the status is neither a success nor a declared denial; declare deny_status or add response assertions",
+	"verifier_read_failed":         "the write verifier could not read the target state; the request was withheld if this happened before it",
+	"verifier_denied":              "the write verifier was refused; check its credential",
+	"verifier_value_unavailable":   "the write verifier's response has no value at its json_pointer; the pointer may be stale",
+	"state_changing_concurrently":  "the target state changed between two reads before the request; something else is writing to it",
+	"target_value_already_present": "the target already holds the value the write would set, so a change cannot be observed; reset the fixture",
+	"verifier_baseline_missing":    "the write verifier's first read was not a success; check its path, or the resource does not exist",
+	"state_changed_unexpectedly":   "the target state changed, but not to the value this write attempts",
+	"verifier_unexpected_status":   "the write verifier's response after the request was neither a success nor an absent resource",
+	"write_execution_error":        "the write request failed and no change was observed, so it shows nothing about authorization",
+	"no_positive_control":          "the state was unchanged but no allow-expected identity shows the verifier can see a write; add the owner to the case",
+	"positive_control_failed":      "the state was unchanged, and the allow-expected identity's own write was not observed either; check the verifier path and pointer",
+}
+
+// Explain renders an inconclusive assessment as one line of operator guidance.
+func Explain(a model.Assessment) string {
+	why, ok := inconclusiveReasons[a.Reason]
+	if !ok {
+		why = a.Reason
+	}
+	return fmt.Sprintf("%s expected %s: inconclusive — %s", a.IdentityID, a.ExpectedAccess, why)
 }
 
 // Text writes every case followed by a one-line summary.
@@ -123,8 +158,15 @@ func TextCase(b *strings.Builder, res engine.Result) {
 		}
 		fmt.Fprintf(b, "  %-12s %d %s\n", ex.IdentityID, ex.StatusCode, ex.ObservedOutcome)
 	}
+	inc := res.Inconclusive()
+	if len(inc) > 0 {
+		fmt.Fprintf(b, "\n%s (not a pass):\n", plural(len(inc), "inconclusive assessment", "inconclusive assessments"))
+		for _, a := range inc {
+			fmt.Fprintf(b, "  %s\n", Explain(a))
+		}
+	}
 	if len(res.Findings) == 0 {
-		if notTested(res) == "" {
+		if notTested(res) == "" && len(inc) == 0 {
 			b.WriteString("No findings.\n")
 		}
 		return
@@ -168,6 +210,19 @@ func Markdown(w io.Writer, cases []Case) error {
 			}
 		}
 	}
+	if s.inconclusive > 0 {
+		b.WriteString("\n### Inconclusive assessments\n\n| Case | Identity | Expected | Reason |\n|---|---|---|---|\n")
+		for _, c := range cases {
+			for _, a := range c.Result.Inconclusive() {
+				why, ok := inconclusiveReasons[a.Reason]
+				if !ok {
+					why = a.Reason
+				}
+				fmt.Fprintf(&b, "| %s | %s | %s | %s |\n", md(c.Result.TestCaseID), md(a.IdentityID), md(string(a.ExpectedAccess)), md(why))
+			}
+		}
+		b.WriteString("\n> [!WARNING]\n> Inconclusive assessments produced no finding and are not passes.\n")
+	}
 	if s.untested > 0 {
 		b.WriteString("\n> [!WARNING]\n> Cases marked not tested sent no successful request. Zero findings for them is not a clean result.\n")
 	}
@@ -180,6 +235,9 @@ func caseVerdict(res engine.Result) string {
 		return "⚠️ Not tested: " + md(reason)
 	}
 	if len(res.Findings) == 0 {
+		if n := len(res.Inconclusive()); n > 0 {
+			return fmt.Sprintf("⚠️ No findings; %s", plural(n, "inconclusive assessment", "inconclusive assessments"))
+		}
 		return "✅ No findings"
 	}
 	worst := SortedBySeverity(res.Findings)[0].Severity
