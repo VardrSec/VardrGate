@@ -232,6 +232,14 @@ func TestSARIF_EveryEngineCategoryHasARule(t *testing.T) {
 	}
 }
 
+func TestEveryInconclusiveReasonIsExplained(t *testing.T) {
+	for _, reason := range engine.InconclusiveReasons() {
+		if _, ok := inconclusiveReasons[reason]; !ok {
+			t.Errorf("no operator explanation for inconclusive reason %s", reason)
+		}
+	}
+}
+
 func TestSARIF_UnknownCategoryStillReported(t *testing.T) {
 	c := clean()
 	c.Result.Findings = []model.Finding{{Category: "future_category", Severity: model.SeverityMedium, IdentityID: "x", Message: "m"}}

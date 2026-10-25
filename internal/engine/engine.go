@@ -93,6 +93,19 @@ func (r Result) Inconclusive() []model.Assessment {
 	return out
 }
 
+// InconclusiveReasons lists every reason an inconclusive assessment can carry,
+// so report explanations cannot silently fall behind the engine.
+func InconclusiveReasons() []string {
+	return []string{
+		"execution_error", "ambiguous_http_outcome", "invalid_or_unsupported_json",
+		"conflicting_assertions", "no_assertion_matched",
+		reasonVerifierReadFailed, reasonVerifierDenied, reasonVerifierValueMissing,
+		reasonBaselineMissing, reasonConcurrentChange, reasonTargetAlreadyPresent,
+		reasonChangedUnexpectedly, reasonVerifierStatus, reasonWriteFailed,
+		reasonNoPositiveControl, reasonPositiveControlFailed,
+	}
+}
+
 // Run validates the test case, executes the request for each identity,
 // evaluates expected versus observed access, and returns findings.
 func (e *Engine) Run(ctx context.Context, tc model.AuthorizationTestCase) (Result, error) {

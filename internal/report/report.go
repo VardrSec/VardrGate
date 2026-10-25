@@ -103,6 +103,10 @@ var inconclusiveReasons = map[string]string{
 	"target_value_already_present": "the target already holds the value the write would set, so a change cannot be observed; reset the fixture",
 	"verifier_baseline_missing":    "the write verifier's first read was not a success; check its path, or the resource does not exist",
 	"state_changed_unexpectedly":   "the target state changed, but not to the value this write attempts",
+	"verifier_unexpected_status":   "the write verifier's response after the request was neither a success nor an absent resource",
+	"write_execution_error":        "the write request failed and no change was observed, so it shows nothing about authorization",
+	"no_positive_control":          "the state was unchanged but no allow-expected identity shows the verifier can see a write; add the owner to the case",
+	"positive_control_failed":      "the state was unchanged, and the allow-expected identity's own write was not observed either; check the verifier path and pointer",
 }
 
 // Explain renders an inconclusive assessment as one line of operator guidance.

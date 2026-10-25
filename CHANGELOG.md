@@ -91,6 +91,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Unchanged deny-expected writes require a demonstrated allow-expected positive
   control; missing or failed controls are explicit inconclusive assessments.
   See [ADR 0018](docs/adr/0018-verifier-confidence.md).
+- Reports now explain the four ADR 0018 inconclusive reasons
+  (`no_positive_control`, `positive_control_failed`, `write_execution_error`,
+  `verifier_unexpected_status`) instead of printing the bare code. A test now
+  fails if any engine inconclusive reason lacks an explanation.
 
 - Sensitive query parameters (`token`, `api_key`, ...) are now redacted from
   finding evidence regardless of case; `?Token=` or `?API_KEY=` previously
