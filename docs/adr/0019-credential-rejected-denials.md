@@ -45,7 +45,10 @@ inconclusive.
 
 ## Consequences and limits
 
-Measured on the pinned VAmPI lab against PR #8's build (`5eb6cc6`):
+Measured with `a39db28` against its parent `5eb6cc6`, clean trees, three
+repeats with identical classifications. Reports are in the validation lab's
+`reports/` as `vampi-nover-*`, `vampi-verified-*` and `juiceshop-*`, one per
+commit:
 
 - Both recorded dead-token silent passes become `inconclusive:credential_rejected`;
   all nine configuration-mistake experiments are now acceptable (were seven).
