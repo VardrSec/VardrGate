@@ -103,6 +103,7 @@ func InconclusiveReasons() []string {
 		reasonBaselineMissing, reasonConcurrentChange, reasonTargetAlreadyPresent,
 		reasonChangedUnexpectedly, reasonVerifierStatus, reasonWriteFailed,
 		reasonNoPositiveControl, reasonPositiveControlFailed, reasonCredentialRejected,
+		reasonWritePending, reasonWriteEnvironment,
 	}
 }
 

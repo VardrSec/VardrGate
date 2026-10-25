@@ -33,6 +33,7 @@ type Policy struct {
 // observes the target's state before and after each identity's request. The
 // role must not appear in expect, so the reader never performs the write.
 type VerifySpec struct {
+	Environment       string           `yaml:"environment"`
 	As                string           `yaml:"as"`
 	Request           SetupRequestSpec `yaml:"request"`
 	AllowUnsafeMethod bool             `yaml:"allow_unsafe_method"`
@@ -654,6 +655,7 @@ func (p Policy) compileVerify(b Bindings) ([]model.Identity, *model.WriteVerific
 		}
 	}
 	wv := &model.WriteVerification{
+		Environment:       p.Verify.Environment,
 		Identity:          *verifier,
 		Request:           vreq,
 		AllowUnsafeMethod: p.Verify.AllowUnsafeMethod,

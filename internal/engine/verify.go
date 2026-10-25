@@ -32,12 +32,19 @@ const (
 	reasonWriteFailed           = "write_execution_error"
 	reasonNoPositiveControl     = "no_positive_control"
 	reasonPositiveControlFailed = "positive_control_failed"
+	reasonWritePending          = "write_completion_unconfirmed"
+	reasonWriteEnvironment      = "write_environment_unverified"
 )
 
 func validateVerification(tc model.AuthorizationTestCase, ids map[string]struct{}) error {
 	wv := tc.WriteVerification
 	if wv == nil {
 		return nil
+	}
+	switch wv.Environment {
+	case "", "unknown", "synchronous_isolated":
+	default:
+		return fmt.Errorf("write_verification.environment must be unknown or synchronous_isolated (or omitted for legacy behavior)")
 	}
 	if !tc.Mutating {
 		return fmt.Errorf("write_verification applies to a request that changes state; set mutating: true")
@@ -193,14 +200,20 @@ func (e *Engine) verifiedExecute(ctx context.Context, wv *model.WriteVerificatio
 	switch {
 	case reason != "":
 		a.Reason = reason
-	case after.equal(before):
-		if exec.Error != "" || exec.ErrorKind != "" {
-			a.Reason = reasonWriteFailed
-		} else {
-			a.Decision, a.Reason = model.AssessmentDenied, reasonStateUnchanged
-		}
-	case hasTarget && !(after.hasValue && reflect.DeepEqual(after.value, target)):
+	case after.equal(before) && (exec.Error != "" || exec.ErrorKind != ""):
+		a.Reason = reasonWriteFailed
+	case after.equal(before) && exec.StatusCode == 202:
+		// Accepted does not establish completion, even when an owner control
+		// succeeds or the environment was declared synchronous.
+		a.Reason = reasonWritePending
+	case !after.equal(before) && hasTarget && !(after.hasValue && reflect.DeepEqual(after.value, target)):
 		a.Reason = reasonChangedUnexpectedly
+	case wv.Environment == "unknown":
+		// Two stable baseline reads cannot establish completion or exclude an
+		// unrelated writer after the baseline. Do not attribute either outcome.
+		a.Reason = reasonWriteEnvironment
+	case after.equal(before):
+		a.Decision, a.Reason = model.AssessmentDenied, reasonStateUnchanged
 	default:
 		a.Decision, a.Reason = model.AssessmentAllowed, reasonStateChanged
 	}

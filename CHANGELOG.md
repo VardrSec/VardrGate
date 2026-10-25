@@ -8,6 +8,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Write-verification `environment` explicitly declares unknown or reviewed
+  synchronous/isolated execution. Unknown environments remain inconclusive;
+  omitted settings retain compatibility. HTTP 202 with no observed effect is
+  now inconclusive in every mode. See ADR 0021.
+
 - Optional strict identity assurance requires preflight for every assessed
   credentialed identity, with anonymous/skip exemptions and no endpoint guessing.
   Suite settings persist this requirement and inconclusive exit gating. Explicit

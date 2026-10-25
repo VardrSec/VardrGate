@@ -20,6 +20,7 @@ def main():
     ap.add_argument("--lab", required=True)
     ap.add_argument("--gate", required=True)
     ap.add_argument("--out", required=True)
+    ap.add_argument("--write-environment", choices=["synchronous_isolated"], help="declare the reviewed disposable fixture's synchronous, exclusive write contract")
     args = ap.parse_args()
     lab, gate = Path(args.lab).resolve(), str(Path(args.gate).resolve())
     spec = importlib.util.spec_from_file_location("vampi_bench", lab / "harness/vampi_bench.py")
@@ -94,6 +95,8 @@ def main():
                     read_body = {"username": alice, "password": password}
                     if entry == "api":
                         tc = {"id": "strict-write", "require_identity_preflight": True, "mutating": True, "identities": ids, "request": {"method": "PUT", "url": fx.base + f"/users/v1/{alice}/password", "body": body}, "expected_access": [{"identity_id": "owner", "decision": "allow"}, {"identity_id": "peer", "decision": "deny"}], "write_verification": {"identity": {"id": "auditor", "credential": {"type": "static_header"}}, "request": {"method": "POST", "url": fx.base + "/users/v1/login", "body": read_body}, "allow_unsafe_method": True, "json_pointer": "/status", "changed_to": "fail"}}
+                        if args.write_environment:
+                            tc["write_verification"]["environment"] = args.write_environment
                         code, response = vb.http("POST", f"http://127.0.0.1:{port}/tests/execute", body=tc)
                         assert code == 200
                         result = json.loads(response)
@@ -102,6 +105,8 @@ def main():
                         identities, policy, out = temp / "ids.json", temp / "policy.yaml", temp / "write.json"
                         identities.write_text(json.dumps(ids))
                         policy.write_text(f"api:\n  endpoint: PUT /users/v1/{alice}/password\n  mutating: true\n  body: '{json.dumps(body)}'\nexpect:\n  owner: allow\n  peer: deny\nverify:\n  as: auditor\n  request:\n    method: POST\n    path: /users/v1/login\n    body: '{json.dumps(read_body)}'\n  allow_unsafe_method: true\n  json_pointer: /status\n  changed_to: fail\n")
+                        if args.write_environment:
+                            policy.write_text(policy.read_text().replace("  as: auditor\n", "  as: auditor\n  environment: " + args.write_environment + "\n", 1))
                         process = subprocess.run([gate, "policy", "run", "--policy", str(policy), "--base", fx.base, "--identities", str(identities), "--strict-identity-preflight", "--allow-private-targets", "--out", str(out)], capture_output=True)
                         assert process.returncode == 0
                         result = json.loads(out.read_text())
@@ -113,6 +118,7 @@ def main():
                     rows.append({"mode": mode, "entry": entry, "case": "verified-write", "assessments": assessments, "categories": sorted(f["category"] for f in result["findings"])})
                 assert write_vectors[0] == write_vectors[1]
         report = {"gate_revision": vb.git(str(Path(__file__).resolve().parents[2]), "rev-parse", "HEAD"), "gate_binary_sha256": hashlib.sha256(Path(gate).read_bytes()).hexdigest(), "lab_revision": vb.git(str(lab), "rev-parse", "HEAD"), "target": corpus["target"], "results": rows}
+        report["write_environment"] = args.write_environment or "legacy"
         Path(args.out).write_text(json.dumps(report, indent=2) + "\n")
         print(f"PASS: {len(rows)} real-app checks; API/JSON/job/YAML parity; strict principal checks; independent peer-write ground truth.")
     finally:
