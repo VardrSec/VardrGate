@@ -15,6 +15,21 @@ import (
 )
 
 func validatePreflight(tc model.AuthorizationTestCase) error {
+	if tc.RequireIdentityPreflight {
+		assessed := 0
+		for _, id := range tc.Identities {
+			ea, ok := expectedFor(tc, id.ID)
+			if ok && ea.Decision != model.AccessDecisionSkip {
+				assessed++
+			}
+			if ok && ea.Decision != model.AccessDecisionSkip && !id.Credential.SendsNoAuth() && id.Preflight == nil {
+				return fmt.Errorf("identity %q requires a declared principal preflight in strict mode", id.ID)
+			}
+		}
+		if assessed == 0 {
+			return errors.New("strict identity assurance requires at least one allow or deny expectation")
+		}
+	}
 	for _, identity := range tc.Identities {
 		p := identity.Preflight
 		if p == nil {

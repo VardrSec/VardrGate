@@ -8,6 +8,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Optional strict identity assurance requires preflight for every assessed
+  credentialed identity, with anonymous/skip exemptions and no endpoint guessing.
+  Suite settings persist this requirement and inconclusive exit gating. Explicit
+  CLI booleans override suite configuration. See ADR 0020 and docs/strict-ci.md.
+
 - **Response assertions.** Policy `response.assertions`, and
   `expected_access[].response_assertions` in the HTTP API, declare JSON values
   (by JSON Pointer) that prove an allow or a deny. This catches protected data

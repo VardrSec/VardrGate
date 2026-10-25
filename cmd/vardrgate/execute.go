@@ -156,6 +156,7 @@ Flags:
 	allowPrivate := fs.Bool("allow-private-targets", false, "permit loopback and private-network targets (--cases only; a job envelope carries its own setting)")
 	allowMutating := fs.Bool("allow-mutating", false, "confirm that replaying an unsafe method (POST/PUT/PATCH/DELETE) once per identity is intended")
 	requirePreflight := fs.Bool("require-identity-preflight", false, "require at least one declared identity preflight (Runner compatibility guard)")
+	strictPreflight := fs.Bool("strict-identity-preflight", false, "require principal preflight for every assessed credentialed identity")
 	timeout := fs.Duration("timeout", 0, "per-request timeout (--cases only; 0 uses the client default)")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -183,6 +184,9 @@ Flags:
 			return err
 		}
 		tc := env.TestCase()
+		if flagProvided(fs, "strict-identity-preflight") {
+			tc.RequireIdentityPreflight = *strictPreflight
+		}
 		if *requirePreflight && !hasPreflight(tc) {
 			return errors.New("identity preflight required but not declared")
 		}
@@ -206,6 +210,11 @@ Flags:
 		if *allowMutating {
 			for i := range cases {
 				cases[i].Mutating = true
+			}
+		}
+		if flagProvided(fs, "strict-identity-preflight") {
+			for i := range cases {
+				cases[i].RequireIdentityPreflight = *strictPreflight
 			}
 		}
 		if err := validateSuite(cases, genScaffoldHint); err != nil {
@@ -298,6 +307,7 @@ Flags:
 	failOn := fs.String("fail-on", failOnNone, "exit 2 when a finding at or above this severity is reported (none, info, low, medium, high, critical)")
 	failOnInconclusive := fs.Bool("fail-on-inconclusive", false, "exit 4 when an identity with an allow or deny expectation could not be judged")
 	allowPrivate := fs.Bool("allow-private-targets", false, "permit loopback and private-network targets")
+	strictPreflight := fs.Bool("strict-identity-preflight", false, "require principal preflight for every assessed credentialed identity")
 	timeout := fs.Duration("timeout", 0, "per-request timeout (0 uses the client default)")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -326,7 +336,14 @@ Flags:
 		if err != nil {
 			return err
 		}
-		cases, err = s.Compile(filepath.Dir(*suitePath), suite.Options{BaseOverride: *baseURL, AllowMutating: *allowMutating})
+		if !flagProvided(fs, "fail-on-inconclusive") {
+			*failOnInconclusive = s.FailOnInconclusive
+		}
+		var strictOverride *bool
+		if flagProvided(fs, "strict-identity-preflight") {
+			strictOverride = strictPreflight
+		}
+		cases, err = s.Compile(filepath.Dir(*suitePath), suite.Options{BaseOverride: *baseURL, AllowMutating: *allowMutating, RequireIdentityPreflight: strictOverride})
 		if err != nil {
 			return err
 		}
@@ -337,11 +354,12 @@ Flags:
 			}
 		}
 		tc, err := compilePolicy(*policyPath, *identitiesPath, policy.Bindings{
-			TestCaseID:       *caseID,
-			BaseURL:          *baseURL,
-			PathParams:       params,
-			ResourceTenantID: *tenant,
-			AllowMutating:    *allowMutating,
+			RequireIdentityPreflight: *strictPreflight,
+			TestCaseID:               *caseID,
+			BaseURL:                  *baseURL,
+			PathParams:               params,
+			ResourceTenantID:         *tenant,
+			AllowMutating:            *allowMutating,
 		})
 		if err != nil {
 			return err
@@ -533,6 +551,16 @@ func hasPreflight(tc model.AuthorizationTestCase) bool {
 		}
 	}
 	return false
+}
+
+func flagProvided(fs *flag.FlagSet, name string) bool {
+	found := false
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == name {
+			found = true
+		}
+	})
+	return found
 }
 
 // runError maps an engine failure to the right exit code. A failed setup step

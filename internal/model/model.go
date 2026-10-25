@@ -464,10 +464,11 @@ func (t SensitivityTier) Category() FindingCategory {
 
 // AuthorizationTestCase is the top-level input to the engine.
 type AuthorizationTestCase struct {
-	ID          string          `json:"id"`
-	Description string          `json:"description,omitempty"`
-	Identities  []Identity      `json:"identities"`
-	Request     RequestTemplate `json:"request"`
+	RequireIdentityPreflight bool            `json:"require_identity_preflight,omitempty"`
+	ID                       string          `json:"id"`
+	Description              string          `json:"description,omitempty"`
+	Identities               []Identity      `json:"identities"`
+	Request                  RequestTemplate `json:"request"`
 	// Resource supplies optional ownership/tenant context for classification.
 	Resource *Resource `json:"resource,omitempty"`
 	// RoleHierarchy lists roles from least to most privileged. It is only used
