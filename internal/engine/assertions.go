@@ -14,6 +14,19 @@ func validateAssertions(rules []model.ResponseAssertion) error {
 		return fmt.Errorf("at most 32 response assertions are supported")
 	}
 	for i, rule := range rules {
+		for _, code := range rule.StatusCodes {
+			if code < 100 || code > 599 {
+				return fmt.Errorf("response_assertions[%d]: invalid status code", i)
+			}
+		}
+		if len(rule.Equals) == 0 && rule.JSONPointer == "" && len(rule.StatusCodes) > 0 && rule.Decision == model.AccessDecisionDeny {
+			for _, code := range rule.StatusCodes {
+				if code < 400 || code > 499 {
+					return fmt.Errorf("response_assertions[%d]: status-only denial requires reviewed 4xx codes", i)
+				}
+			}
+			continue
+		}
 		if rule.Decision != model.AccessDecisionAllow && rule.Decision != model.AccessDecisionDeny {
 			return fmt.Errorf("response_assertions[%d]: decision must be allow or deny", i)
 		}
@@ -68,17 +81,27 @@ func assess(id string, ex model.ExecutionResult, ea model.ExpectedAccess, hasExp
 	}
 	a.Source = "response_assertion"
 	doc, err := decodeAssertionJSON(ex.Body)
-	if err != nil {
-		a.Reason = "invalid_or_unsupported_json"
-		return a
-	}
 	allow, deny := false, false
 	for i, rule := range ea.ResponseAssertions {
-		tokens, _ := pointerTokens(rule.JSONPointer) // Validated before any execution.
-		want, _ := decodeAssertionJSON(rule.Equals)
-		got, exists := pointerValue(doc, tokens)
-		if !exists || !reflect.DeepEqual(got, want) {
-			continue
+		if len(rule.StatusCodes) > 0 {
+			matches := false
+			for _, code := range rule.StatusCodes {
+				matches = matches || ex.StatusCode == code
+			}
+			if !matches {
+				continue
+			}
+		}
+		if len(rule.Equals) > 0 {
+			if err != nil {
+				continue
+			}
+			tokens, _ := pointerTokens(rule.JSONPointer) // Validated before any execution.
+			want, _ := decodeAssertionJSON(rule.Equals)
+			got, exists := pointerValue(doc, tokens)
+			if !exists || !reflect.DeepEqual(got, want) {
+				continue
+			}
 		}
 		a.MatchedAssertions = append(a.MatchedAssertions, i)
 		allow = allow || rule.Decision == model.AccessDecisionAllow
@@ -95,6 +118,9 @@ func assess(id string, ex model.ExecutionResult, ea model.ExpectedAccess, hasExp
 		a.Reason = "assertion_matched"
 	default:
 		a.Reason = "no_assertion_matched"
+		if err != nil {
+			a.Reason = "invalid_or_unsupported_json"
+		}
 	}
 	return a
 }

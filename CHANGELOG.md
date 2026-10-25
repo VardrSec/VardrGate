@@ -8,6 +8,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Confirmed denial profiles in policies/suites, scoped to exact endpoints and
+  compiled into existing assertions with optional conjunctive status checks.
+  Unmatched/conflicting evidence stays inconclusive. See ADR 0023 and
+  [denial profiles](docs/denial-profiles.md).
+
 - Policy-assisted `gen`: review-only permissions and peer/cross-tenant templates,
   with optional origin-scoped offline HAR hypotheses. Captured values are never
   retained; operators must confirm identities, ownership and permissions.

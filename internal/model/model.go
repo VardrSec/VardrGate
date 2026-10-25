@@ -246,6 +246,7 @@ type ExpectedAccess struct {
 // must be present (JSON null is valid). JSONPointer uses /-separated JSON keys
 // or array indices; an empty pointer selects the complete document.
 type ResponseAssertion struct {
+	StatusCodes []int           `json:"status_codes,omitempty"`
 	JSONPointer string          `json:"json_pointer"`
 	Equals      json.RawMessage `json:"equals"`
 	Decision    AccessDecision  `json:"decision"`

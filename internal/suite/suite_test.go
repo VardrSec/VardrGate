@@ -96,6 +96,36 @@ policies:
 	}
 }
 
+func TestCompileSharedDenialProfile(t *testing.T) {
+	dir := writeTree(t, map[string]string{
+		"profile.yaml":    profilePolicy + "response:\n  denial_profiles: [hidden]\n",
+		"identities.json": identities,
+		"suite.yaml": `base: https://api.example.com
+identities: identities.json
+denial_profiles:
+  hidden:
+    confirmed: true
+    endpoints: ["GET /users/{user_id}/profile"]
+    rules:
+      - status_codes: [404]
+        json_pointer: /error
+        equals: hidden
+policies:
+  - policy: profile.yaml
+    params: {user_id: "42"}
+`,
+	})
+	cases, err := load(t, dir).Compile(dir, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, ea := range cases[0].TestCase.ExpectedAccess {
+		if len(ea.ResponseAssertions) != 1 || ea.ResponseAssertions[0].StatusCodes[0] != 404 {
+			t.Fatal("shared profile was dropped")
+		}
+	}
+}
+
 func TestCompile_BaseOverrideWins(t *testing.T) {
 	dir := writeTree(t, map[string]string{
 		"p.yaml":          adminPolicy,

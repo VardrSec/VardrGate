@@ -22,11 +22,12 @@ import (
 
 // Policy is the on-disk representation of an authorization control.
 type Policy struct {
-	API      APISpec           `yaml:"api"`
-	Setup    []SetupSpec       `yaml:"setup"`
-	Expect   map[string]string `yaml:"expect"`
-	Response ResponseSpec      `yaml:"response"`
-	Verify   *VerifySpec       `yaml:"verify"`
+	API            APISpec                  `yaml:"api"`
+	Setup          []SetupSpec              `yaml:"setup"`
+	Expect         map[string]string        `yaml:"expect"`
+	Response       ResponseSpec             `yaml:"response"`
+	Verify         *VerifySpec              `yaml:"verify"`
+	DenialProfiles map[string]DenialProfile `yaml:"denial_profiles"`
 }
 
 // VerifySpec declares a write verifier: a separate reader, bound by role, that
@@ -98,7 +99,8 @@ type ResourceSpec struct {
 
 // ResponseSpec captures expected response constraints.
 type ResponseSpec struct {
-	DenyStatus []int `yaml:"deny_status"`
+	Profiles   []string `yaml:"denial_profiles"`
+	DenyStatus []int    `yaml:"deny_status"`
 	// UnauthorizedIsDenial: this API answers authorization refusals with 401,
 	// so a credentialed 401 is a denial rather than a possibly dead token.
 	UnauthorizedIsDenial bool          `yaml:"unauthorized_is_denial"`
@@ -114,6 +116,7 @@ type ResponseSpec struct {
 // response format, so it applies to every role with an allow or deny
 // expectation unless Roles narrows it.
 type AssertionSpec struct {
+	StatusCodes []int     `yaml:"status_codes"`
 	JSONPointer string    `yaml:"json_pointer"`
 	Equals      yaml.Node `yaml:"equals"`
 	Decision    string    `yaml:"decision"`
@@ -157,6 +160,7 @@ type SensitiveSpec struct {
 // test case: the environment base URL, path parameter values, and the actual
 // identities (each Role set to a logical name that appears in Policy.Expect).
 type Bindings struct {
+	DenialProfiles           map[string]DenialProfile
 	RequireIdentityPreflight bool
 	TestCaseID               string
 	BaseURL                  string
@@ -257,6 +261,11 @@ func (p Policy) Compile(b Bindings) (model.AuthorizationTestCase, error) {
 		forbidden[role] = struct{}{}
 	}
 
+	profileAssertions, err := p.profileAssertions(b.DenialProfiles)
+	if err != nil {
+		return model.AuthorizationTestCase{}, err
+	}
+	p.Response.Assertions = append(append([]AssertionSpec{}, p.Response.Assertions...), profileAssertions...)
 	compiledAssertions, err := p.compileAssertions()
 	if err != nil {
 		return model.AuthorizationTestCase{}, err
@@ -483,12 +492,16 @@ func (p Policy) compileAssertions() ([]roleAssertion, error) {
 		if decision != model.AccessDecisionAllow && decision != model.AccessDecisionDeny {
 			return nil, fmt.Errorf("response.assertions[%d]: decision must be allow or deny, got %q", i, a.Decision)
 		}
-		if a.Equals.Kind == 0 {
+		if a.Equals.Kind == 0 && (len(a.StatusCodes) == 0 || decision != model.AccessDecisionDeny || a.JSONPointer != "") {
 			return nil, fmt.Errorf("response.assertions[%d]: equals is required (use null to match JSON null)", i)
 		}
-		raw, err := nodeJSON(&a.Equals)
-		if err != nil {
-			return nil, fmt.Errorf("response.assertions[%d].equals: %w", i, err)
+		var raw json.RawMessage
+		if a.Equals.Kind != 0 {
+			var err error
+			raw, err = nodeJSON(&a.Equals)
+			if err != nil {
+				return nil, fmt.Errorf("response.assertions[%d].equals: %w", i, err)
+			}
 		}
 		roles := make(map[string]struct{}, len(a.Roles))
 		for _, role := range a.Roles {
@@ -498,7 +511,7 @@ func (p Policy) compileAssertions() ([]roleAssertion, error) {
 			roles[role] = struct{}{}
 		}
 		out = append(out, roleAssertion{
-			rule:  model.ResponseAssertion{JSONPointer: a.JSONPointer, Equals: raw, Decision: decision},
+			rule:  model.ResponseAssertion{StatusCodes: a.StatusCodes, JSONPointer: a.JSONPointer, Equals: raw, Decision: decision},
 			roles: roles,
 		})
 	}
