@@ -545,6 +545,9 @@ func gate(results []engine.Result, threshold model.Severity) error {
 }
 
 func hasPreflight(tc model.AuthorizationTestCase) bool {
+	if tc.WriteVerification != nil && tc.WriteVerification.Identity.Preflight != nil {
+		return true
+	}
 	for _, identity := range tc.Identities {
 		if identity.Preflight != nil {
 			return true

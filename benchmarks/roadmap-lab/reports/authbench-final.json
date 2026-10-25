@@ -1,0 +1,1484 @@
+{
+  "schema_version": 2,
+  "generated_at": "2026-10-25T19:49:12.1990786Z",
+  "go_version": "go1.26.3",
+  "platform": "windows/amd64",
+  "git_revision": "52e8641166ebaa67a7d989e3be037841b948c114",
+  "working_tree_status": "M CHANGELOG.md\n M cmd/authbench/main.go\n M cmd/authbench/main_test.go\n M cmd/vardrgate/execute.go\n M internal/engine/engine.go\n M internal/engine/preflight.go\n M internal/engine/verify.go\n M internal/model/model.go\n M internal/report/report.go\n M internal/secretref/secretref.go\n M internal/secretref/secretref_test.go\n?? benchmarks/roadmap-lab/harness/profiles_bench.py\n?? docs/adr/0026-identity-evidence-reporting.md\n?? docs/identity-evidence.md\n?? internal/engine/validity.go\n?? internal/engine/validity_test.go\n?? internal/report/validity_test.go",
+  "source_sha256": "d2d98a6b54af1d6556f1db57ae17d958631dc0773c598134178a2fa4db643148",
+  "repeat_count": 3,
+  "stable_classifications": true,
+  "metrics": {
+    "total": 22,
+    "known_authorization_failures": 9,
+    "true_positives": 9,
+    "false_positives": 0,
+    "missed_authorization_failures": 0,
+    "true_negatives": 7,
+    "inconclusive_assessments": 6,
+    "inconclusive_known_failures": 0,
+    "inconclusive_controls": 6,
+    "precision": 1,
+    "recall": 1
+  },
+  "assertions_enabled": true,
+  "verification_enabled": true,
+  "by_expectation": {
+    "legitimate_access": {
+      "total": 4,
+      "known_authorization_failures": 1,
+      "true_positives": 1,
+      "false_positives": 0,
+      "missed_authorization_failures": 0,
+      "true_negatives": 3,
+      "inconclusive_assessments": 0,
+      "inconclusive_known_failures": 0,
+      "inconclusive_controls": 0,
+      "precision": 1,
+      "recall": 1
+    },
+    "unauthorized_reads": {
+      "total": 14,
+      "known_authorization_failures": 6,
+      "true_positives": 6,
+      "false_positives": 0,
+      "missed_authorization_failures": 0,
+      "true_negatives": 4,
+      "inconclusive_assessments": 4,
+      "inconclusive_known_failures": 0,
+      "inconclusive_controls": 4,
+      "precision": 1,
+      "recall": 1
+    },
+    "unauthorized_writes": {
+      "total": 4,
+      "known_authorization_failures": 2,
+      "true_positives": 2,
+      "false_positives": 0,
+      "missed_authorization_failures": 0,
+      "true_negatives": 0,
+      "inconclusive_assessments": 2,
+      "inconclusive_known_failures": 0,
+      "inconclusive_controls": 2,
+      "precision": 1,
+      "recall": 1
+    }
+  },
+  "assessments": [
+    {
+      "scenario": {
+        "id": "bola-owner",
+        "path": "/vulnerable/documents/1",
+        "method": "GET",
+        "actor": "alice",
+        "decision": "allow",
+        "violation": false
+      },
+      "oracle": {
+        "actor": "alice",
+        "accessed": true,
+        "writes": 0,
+        "status": 200,
+        "body": "{\"document_id\":1,\"secret\":\"synthetic-tenant-A-data\"}"
+      },
+      "verdict": "true_negative",
+      "inconclusive": false,
+      "gate_response": {
+        "test_case_id": "bola-owner",
+        "executions": [
+          {
+            "identity_id": "alice",
+            "status_code": 200,
+            "observed_outcome": "allow",
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "duration_ms": 0,
+            "response_profile": {
+              "kind": "json",
+              "schema_hash": "67cdb6c9e9245c992dba8d6a0ad41ad72407d6dd4c648da010a7dce7e64fc82e",
+              "fields": [
+                "$",
+                "$.document_id",
+                "$.secret"
+              ]
+            }
+          }
+        ],
+        "findings": [],
+        "assessments": [
+          {
+            "credential_status": "not_checked",
+            "write_verification": "not_configured",
+            "execution_index": 0,
+            "identity_id": "alice",
+            "expected_access": "allow",
+            "decision": "allowed",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "scenario": {
+        "id": "bola-peer",
+        "path": "/vulnerable/documents/1",
+        "method": "GET",
+        "actor": "bob",
+        "decision": "deny",
+        "violation": true
+      },
+      "oracle": {
+        "actor": "bob",
+        "accessed": true,
+        "writes": 0,
+        "status": 200,
+        "body": "{\"document_id\":1,\"secret\":\"synthetic-tenant-A-data\"}"
+      },
+      "verdict": "true_positive",
+      "inconclusive": false,
+      "gate_response": {
+        "test_case_id": "bola-peer",
+        "executions": [
+          {
+            "identity_id": "bob",
+            "status_code": 200,
+            "observed_outcome": "allow",
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "duration_ms": 0,
+            "response_profile": {
+              "kind": "json",
+              "schema_hash": "67cdb6c9e9245c992dba8d6a0ad41ad72407d6dd4c648da010a7dce7e64fc82e",
+              "fields": [
+                "$",
+                "$.document_id",
+                "$.secret"
+              ]
+            }
+          }
+        ],
+        "findings": [
+          {
+            "category": "unexpected_access",
+            "severity": "high",
+            "confidence": "high",
+            "identity_id": "bob",
+            "message": "identity \"bob\" received access that should have been denied",
+            "evidence": [
+              "observed_outcome=allow",
+              "status_code=200",
+              "identity_id=bob",
+              "url=GET http://127.0.0.1:54975/vulnerable/documents/1",
+              "assessment=allowed",
+              "source=response_assertion",
+              "matched_assertions=[0]"
+            ],
+            "detected_at": "2026-10-25T19:49:12.2944506Z"
+          }
+        ],
+        "assessments": [
+          {
+            "credential_status": "not_checked",
+            "write_verification": "not_configured",
+            "execution_index": 0,
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "allowed",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "scenario": {
+        "id": "bola-cross-tenant",
+        "path": "/vulnerable/documents/1",
+        "method": "GET",
+        "actor": "mallory",
+        "decision": "deny",
+        "violation": true
+      },
+      "oracle": {
+        "actor": "mallory",
+        "accessed": true,
+        "writes": 0,
+        "status": 200,
+        "body": "{\"document_id\":1,\"secret\":\"synthetic-tenant-A-data\"}"
+      },
+      "verdict": "true_positive",
+      "inconclusive": false,
+      "gate_response": {
+        "test_case_id": "bola-cross-tenant",
+        "executions": [
+          {
+            "identity_id": "mallory",
+            "status_code": 200,
+            "observed_outcome": "allow",
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "duration_ms": 0,
+            "response_profile": {
+              "kind": "json",
+              "schema_hash": "67cdb6c9e9245c992dba8d6a0ad41ad72407d6dd4c648da010a7dce7e64fc82e",
+              "fields": [
+                "$",
+                "$.document_id",
+                "$.secret"
+              ]
+            }
+          }
+        ],
+        "findings": [
+          {
+            "category": "unexpected_access",
+            "severity": "high",
+            "confidence": "high",
+            "identity_id": "mallory",
+            "message": "identity \"mallory\" received access that should have been denied",
+            "evidence": [
+              "observed_outcome=allow",
+              "status_code=200",
+              "identity_id=mallory",
+              "url=GET http://127.0.0.1:54975/vulnerable/documents/1",
+              "assessment=allowed",
+              "source=response_assertion",
+              "matched_assertions=[0]"
+            ],
+            "detected_at": "2026-10-25T19:49:12.2949683Z"
+          }
+        ],
+        "assessments": [
+          {
+            "credential_status": "not_checked",
+            "write_verification": "not_configured",
+            "execution_index": 0,
+            "identity_id": "mallory",
+            "expected_access": "deny",
+            "decision": "allowed",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "scenario": {
+        "id": "bola-anonymous",
+        "path": "/vulnerable/documents/1",
+        "method": "GET",
+        "actor": "anonymous",
+        "decision": "deny",
+        "violation": true
+      },
+      "oracle": {
+        "actor": "anonymous",
+        "accessed": true,
+        "writes": 0,
+        "status": 200,
+        "body": "{\"document_id\":1,\"secret\":\"synthetic-tenant-A-data\"}"
+      },
+      "verdict": "true_positive",
+      "inconclusive": false,
+      "gate_response": {
+        "test_case_id": "bola-anonymous",
+        "executions": [
+          {
+            "identity_id": "anonymous",
+            "status_code": 200,
+            "observed_outcome": "allow",
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "duration_ms": 0,
+            "response_profile": {
+              "kind": "json",
+              "schema_hash": "67cdb6c9e9245c992dba8d6a0ad41ad72407d6dd4c648da010a7dce7e64fc82e",
+              "fields": [
+                "$",
+                "$.document_id",
+                "$.secret"
+              ]
+            }
+          }
+        ],
+        "findings": [
+          {
+            "category": "missing_authentication",
+            "severity": "critical",
+            "confidence": "high",
+            "identity_id": "anonymous",
+            "message": "identity \"anonymous\" received access that should have been denied",
+            "evidence": [
+              "observed_outcome=allow",
+              "status_code=200",
+              "identity_id=anonymous",
+              "url=GET http://127.0.0.1:54975/vulnerable/documents/1",
+              "unauthenticated_access: request carried no credentials",
+              "assessment=allowed",
+              "source=response_assertion",
+              "matched_assertions=[0]"
+            ],
+            "detected_at": "2026-10-25T19:49:12.2954928Z"
+          }
+        ],
+        "assessments": [
+          {
+            "credential_status": "anonymous_identity",
+            "write_verification": "not_configured",
+            "execution_index": 0,
+            "identity_id": "anonymous",
+            "expected_access": "deny",
+            "decision": "allowed",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "scenario": {
+        "id": "secure-owner",
+        "path": "/secure/documents/1",
+        "method": "GET",
+        "actor": "alice",
+        "decision": "allow",
+        "violation": false
+      },
+      "oracle": {
+        "actor": "alice",
+        "accessed": true,
+        "writes": 0,
+        "status": 200,
+        "body": "{\"document_id\":1,\"secret\":\"synthetic-tenant-A-data\"}"
+      },
+      "verdict": "true_negative",
+      "inconclusive": false,
+      "gate_response": {
+        "test_case_id": "secure-owner",
+        "executions": [
+          {
+            "identity_id": "alice",
+            "status_code": 200,
+            "observed_outcome": "allow",
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "duration_ms": 0,
+            "response_profile": {
+              "kind": "json",
+              "schema_hash": "67cdb6c9e9245c992dba8d6a0ad41ad72407d6dd4c648da010a7dce7e64fc82e",
+              "fields": [
+                "$",
+                "$.document_id",
+                "$.secret"
+              ]
+            }
+          }
+        ],
+        "findings": [],
+        "assessments": [
+          {
+            "credential_status": "not_checked",
+            "write_verification": "not_configured",
+            "execution_index": 0,
+            "identity_id": "alice",
+            "expected_access": "allow",
+            "decision": "allowed",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "scenario": {
+        "id": "secure-peer",
+        "path": "/secure/documents/1",
+        "method": "GET",
+        "actor": "bob",
+        "decision": "deny",
+        "violation": false
+      },
+      "oracle": {
+        "actor": "bob",
+        "accessed": false,
+        "writes": 0,
+        "status": 403,
+        "body": "{\"error\":\"forbidden\"}"
+      },
+      "verdict": "true_negative",
+      "inconclusive": false,
+      "gate_response": {
+        "test_case_id": "secure-peer",
+        "executions": [
+          {
+            "identity_id": "bob",
+            "status_code": 403,
+            "observed_outcome": "deny",
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "duration_ms": 0,
+            "response_profile": {
+              "kind": "json",
+              "schema_hash": "4ef4f60c6e7b227f87734dde18d93dcc0169dc4cd29bcaabfbfd8560053945a5",
+              "fields": [
+                "$",
+                "$.error"
+              ]
+            }
+          }
+        ],
+        "findings": [],
+        "assessments": [
+          {
+            "credential_status": "not_checked",
+            "write_verification": "not_configured",
+            "execution_index": 0,
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "denied",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              1
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "scenario": {
+        "id": "secure-anonymous",
+        "path": "/secure/documents/1",
+        "method": "GET",
+        "actor": "anonymous",
+        "decision": "deny",
+        "violation": false
+      },
+      "oracle": {
+        "actor": "anonymous",
+        "accessed": false,
+        "writes": 0,
+        "status": 401,
+        "body": "{\"error\":\"forbidden\"}"
+      },
+      "verdict": "true_negative",
+      "inconclusive": false,
+      "gate_response": {
+        "test_case_id": "secure-anonymous",
+        "executions": [
+          {
+            "identity_id": "anonymous",
+            "status_code": 401,
+            "observed_outcome": "deny",
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "duration_ms": 0,
+            "response_profile": {
+              "kind": "json",
+              "schema_hash": "4ef4f60c6e7b227f87734dde18d93dcc0169dc4cd29bcaabfbfd8560053945a5",
+              "fields": [
+                "$",
+                "$.error"
+              ]
+            }
+          }
+        ],
+        "findings": [],
+        "assessments": [
+          {
+            "credential_status": "anonymous_identity",
+            "write_verification": "not_configured",
+            "execution_index": 0,
+            "identity_id": "anonymous",
+            "expected_access": "deny",
+            "decision": "denied",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              1
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "scenario": {
+        "id": "admin-role-bypass",
+        "path": "/vulnerable/admin/export",
+        "method": "GET",
+        "actor": "bob",
+        "decision": "deny",
+        "violation": true
+      },
+      "oracle": {
+        "actor": "bob",
+        "accessed": true,
+        "writes": 0,
+        "status": 200,
+        "body": "{\"document_id\":1,\"secret\":\"synthetic-tenant-A-data\"}"
+      },
+      "verdict": "true_positive",
+      "inconclusive": false,
+      "gate_response": {
+        "test_case_id": "admin-role-bypass",
+        "executions": [
+          {
+            "identity_id": "bob",
+            "status_code": 200,
+            "observed_outcome": "allow",
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "duration_ms": 0,
+            "response_profile": {
+              "kind": "json",
+              "schema_hash": "67cdb6c9e9245c992dba8d6a0ad41ad72407d6dd4c648da010a7dce7e64fc82e",
+              "fields": [
+                "$",
+                "$.document_id",
+                "$.secret"
+              ]
+            }
+          }
+        ],
+        "findings": [
+          {
+            "category": "unexpected_access",
+            "severity": "high",
+            "confidence": "high",
+            "identity_id": "bob",
+            "message": "identity \"bob\" received access that should have been denied",
+            "evidence": [
+              "observed_outcome=allow",
+              "status_code=200",
+              "identity_id=bob",
+              "url=GET http://127.0.0.1:54975/vulnerable/admin/export",
+              "assessment=allowed",
+              "source=response_assertion",
+              "matched_assertions=[0]"
+            ],
+            "detected_at": "2026-10-25T19:49:12.2965589Z"
+          }
+        ],
+        "assessments": [
+          {
+            "credential_status": "not_checked",
+            "write_verification": "not_configured",
+            "execution_index": 0,
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "allowed",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "scenario": {
+        "id": "admin-authorized",
+        "path": "/vulnerable/admin/export",
+        "method": "GET",
+        "actor": "admin",
+        "decision": "allow",
+        "violation": false
+      },
+      "oracle": {
+        "actor": "admin",
+        "accessed": true,
+        "writes": 0,
+        "status": 200,
+        "body": "{\"document_id\":1,\"secret\":\"synthetic-tenant-A-data\"}"
+      },
+      "verdict": "true_negative",
+      "inconclusive": false,
+      "gate_response": {
+        "test_case_id": "admin-authorized",
+        "executions": [
+          {
+            "identity_id": "admin",
+            "status_code": 200,
+            "observed_outcome": "allow",
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "duration_ms": 0,
+            "response_profile": {
+              "kind": "json",
+              "schema_hash": "67cdb6c9e9245c992dba8d6a0ad41ad72407d6dd4c648da010a7dce7e64fc82e",
+              "fields": [
+                "$",
+                "$.document_id",
+                "$.secret"
+              ]
+            }
+          }
+        ],
+        "findings": [],
+        "assessments": [
+          {
+            "credential_status": "not_checked",
+            "write_verification": "not_configured",
+            "execution_index": 0,
+            "identity_id": "admin",
+            "expected_access": "allow",
+            "decision": "allowed",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "scenario": {
+        "id": "write-bypass",
+        "path": "/vulnerable/documents/1/update",
+        "method": "POST",
+        "actor": "bob",
+        "decision": "deny",
+        "violation": true
+      },
+      "oracle": {
+        "actor": "bob",
+        "accessed": true,
+        "writes": 1,
+        "status": 204,
+        "body": "",
+        "document_after": "|modified-by-bob"
+      },
+      "verdict": "true_positive",
+      "inconclusive": false,
+      "gate_response": {
+        "test_case_id": "write-bypass",
+        "executions": [
+          {
+            "identity_id": "bob",
+            "status_code": 204,
+            "observed_outcome": "allow",
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "duration_ms": 0
+          }
+        ],
+        "findings": [
+          {
+            "category": "unexpected_access",
+            "severity": "high",
+            "confidence": "high",
+            "identity_id": "bob",
+            "message": "identity \"bob\" received access that should have been denied",
+            "evidence": [
+              "observed_outcome=allow",
+              "status_code=204",
+              "identity_id=bob",
+              "url=POST http://127.0.0.1:54975/vulnerable/documents/1/update",
+              "assessment=allowed",
+              "source=write_verification",
+              "verification=state_changed"
+            ],
+            "detected_at": "2026-10-25T19:49:12.2975996Z"
+          }
+        ],
+        "assessments": [
+          {
+            "credential_status": "not_checked",
+            "write_verification": "verified_effect",
+            "execution_index": 0,
+            "verification": {
+              "strategy": "legacy_change",
+              "environment": "legacy",
+              "reader_identity_id": "verifier",
+              "reader_credential_status": "not_checked",
+              "before_statuses": [
+                200,
+                200
+              ],
+              "after_status": 200
+            },
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "allowed",
+            "source": "write_verification",
+            "reason": "state_changed"
+          }
+        ]
+      }
+    },
+    {
+      "scenario": {
+        "id": "write-protected",
+        "path": "/secure/documents/1/update",
+        "method": "POST",
+        "actor": "bob",
+        "decision": "deny",
+        "violation": false
+      },
+      "oracle": {
+        "actor": "bob",
+        "accessed": false,
+        "writes": 0,
+        "status": 403,
+        "body": "{\"error\":\"forbidden\"}"
+      },
+      "verdict": "inconclusive",
+      "inconclusive": true,
+      "gate_response": {
+        "test_case_id": "write-protected",
+        "executions": [
+          {
+            "identity_id": "bob",
+            "status_code": 403,
+            "observed_outcome": "deny",
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "duration_ms": 0,
+            "response_profile": {
+              "kind": "json",
+              "schema_hash": "4ef4f60c6e7b227f87734dde18d93dcc0169dc4cd29bcaabfbfd8560053945a5",
+              "fields": [
+                "$",
+                "$.error"
+              ]
+            }
+          }
+        ],
+        "findings": [],
+        "assessments": [
+          {
+            "credential_status": "not_checked",
+            "write_verification": "inconclusive",
+            "execution_index": 0,
+            "verification": {
+              "strategy": "legacy_change",
+              "environment": "legacy",
+              "reader_identity_id": "verifier",
+              "reader_credential_status": "not_checked",
+              "before_statuses": [
+                200,
+                200
+              ],
+              "after_status": 200
+            },
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "inconclusive",
+            "source": "write_verification",
+            "reason": "no_positive_control"
+          }
+        ]
+      }
+    },
+    {
+      "scenario": {
+        "id": "soft-denial-200",
+        "path": "/edge/soft-denial",
+        "method": "GET",
+        "actor": "bob",
+        "decision": "deny",
+        "violation": false
+      },
+      "oracle": {
+        "actor": "bob",
+        "accessed": false,
+        "writes": 0,
+        "status": 200,
+        "body": "{\"error\":\"forbidden\"}"
+      },
+      "verdict": "true_negative",
+      "inconclusive": false,
+      "gate_response": {
+        "test_case_id": "soft-denial-200",
+        "executions": [
+          {
+            "identity_id": "bob",
+            "status_code": 200,
+            "observed_outcome": "allow",
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "duration_ms": 0,
+            "response_profile": {
+              "kind": "json",
+              "schema_hash": "4ef4f60c6e7b227f87734dde18d93dcc0169dc4cd29bcaabfbfd8560053945a5",
+              "fields": [
+                "$",
+                "$.error"
+              ]
+            }
+          }
+        ],
+        "findings": [],
+        "assessments": [
+          {
+            "credential_status": "not_checked",
+            "write_verification": "not_configured",
+            "execution_index": 0,
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "denied",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              1
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "scenario": {
+        "id": "filtered-empty-200",
+        "path": "/edge/empty",
+        "method": "GET",
+        "actor": "bob",
+        "decision": "deny",
+        "violation": false
+      },
+      "oracle": {
+        "actor": "bob",
+        "accessed": false,
+        "writes": 0,
+        "status": 200,
+        "body": "{\"data\":[]}"
+      },
+      "verdict": "true_negative",
+      "inconclusive": false,
+      "gate_response": {
+        "test_case_id": "filtered-empty-200",
+        "executions": [
+          {
+            "identity_id": "bob",
+            "status_code": 200,
+            "observed_outcome": "allow",
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "duration_ms": 0,
+            "response_profile": {
+              "kind": "json",
+              "schema_hash": "8a7b3d41e928a2541980873bb06e58cc1f6421c67e1f6cca4ceadcc12faf29c6",
+              "fields": [
+                "$",
+                "$.data"
+              ]
+            }
+          }
+        ],
+        "findings": [],
+        "assessments": [
+          {
+            "credential_status": "not_checked",
+            "write_verification": "not_configured",
+            "execution_index": 0,
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "denied",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "scenario": {
+        "id": "secret-in-403",
+        "path": "/edge/leak-403",
+        "method": "GET",
+        "actor": "bob",
+        "decision": "deny",
+        "violation": true
+      },
+      "oracle": {
+        "actor": "bob",
+        "accessed": true,
+        "writes": 0,
+        "status": 403,
+        "body": "{\"document_id\":1,\"secret\":\"synthetic-tenant-A-data\"}"
+      },
+      "verdict": "true_positive",
+      "inconclusive": false,
+      "gate_response": {
+        "test_case_id": "secret-in-403",
+        "executions": [
+          {
+            "identity_id": "bob",
+            "status_code": 403,
+            "observed_outcome": "deny",
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "duration_ms": 0,
+            "response_profile": {
+              "kind": "json",
+              "schema_hash": "67cdb6c9e9245c992dba8d6a0ad41ad72407d6dd4c648da010a7dce7e64fc82e",
+              "fields": [
+                "$",
+                "$.document_id",
+                "$.secret"
+              ]
+            }
+          }
+        ],
+        "findings": [
+          {
+            "category": "unexpected_access",
+            "severity": "high",
+            "confidence": "high",
+            "identity_id": "bob",
+            "message": "identity \"bob\" received access that should have been denied",
+            "evidence": [
+              "observed_outcome=allow",
+              "status_code=403",
+              "identity_id=bob",
+              "url=GET http://127.0.0.1:54975/edge/leak-403",
+              "assessment=allowed",
+              "source=response_assertion",
+              "matched_assertions=[0]"
+            ],
+            "detected_at": "2026-10-25T19:49:12.2992244Z"
+          }
+        ],
+        "assessments": [
+          {
+            "credential_status": "not_checked",
+            "write_verification": "not_configured",
+            "execution_index": 0,
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "allowed",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "scenario": {
+        "id": "secret-in-404",
+        "path": "/edge/leak-404",
+        "method": "GET",
+        "actor": "bob",
+        "decision": "deny",
+        "violation": true
+      },
+      "oracle": {
+        "actor": "bob",
+        "accessed": true,
+        "writes": 0,
+        "status": 404,
+        "body": "{\"document_id\":1,\"secret\":\"synthetic-tenant-A-data\"}"
+      },
+      "verdict": "true_positive",
+      "inconclusive": false,
+      "gate_response": {
+        "test_case_id": "secret-in-404",
+        "executions": [
+          {
+            "identity_id": "bob",
+            "status_code": 404,
+            "observed_outcome": "not_found",
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "duration_ms": 0,
+            "response_profile": {
+              "kind": "json",
+              "schema_hash": "67cdb6c9e9245c992dba8d6a0ad41ad72407d6dd4c648da010a7dce7e64fc82e",
+              "fields": [
+                "$",
+                "$.document_id",
+                "$.secret"
+              ]
+            }
+          }
+        ],
+        "findings": [
+          {
+            "category": "unexpected_access",
+            "severity": "high",
+            "confidence": "high",
+            "identity_id": "bob",
+            "message": "identity \"bob\" received access that should have been denied",
+            "evidence": [
+              "observed_outcome=allow",
+              "status_code=404",
+              "identity_id=bob",
+              "url=GET http://127.0.0.1:54975/edge/leak-404",
+              "assessment=allowed",
+              "source=response_assertion",
+              "matched_assertions=[0]"
+            ],
+            "detected_at": "2026-10-25T19:49:12.2997466Z"
+          }
+        ],
+        "assessments": [
+          {
+            "credential_status": "not_checked",
+            "write_verification": "not_configured",
+            "execution_index": 0,
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "allowed",
+            "source": "response_assertion",
+            "reason": "assertion_matched",
+            "matched_assertions": [
+              0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "scenario": {
+        "id": "write-before-500",
+        "path": "/edge/write-500",
+        "method": "POST",
+        "actor": "bob",
+        "decision": "deny",
+        "violation": true
+      },
+      "oracle": {
+        "actor": "bob",
+        "accessed": true,
+        "writes": 1,
+        "status": 500,
+        "body": "{\"error\":\"failed after mutation\"}",
+        "document_before": "|modified-by-bob",
+        "document_after": "|modified-by-bob|modified-by-bob"
+      },
+      "verdict": "true_positive",
+      "inconclusive": false,
+      "gate_response": {
+        "test_case_id": "write-before-500",
+        "executions": [
+          {
+            "identity_id": "bob",
+            "status_code": 500,
+            "observed_outcome": "server_error",
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "duration_ms": 0,
+            "response_profile": {
+              "kind": "json",
+              "schema_hash": "4ef4f60c6e7b227f87734dde18d93dcc0169dc4cd29bcaabfbfd8560053945a5",
+              "fields": [
+                "$",
+                "$.error"
+              ]
+            }
+          }
+        ],
+        "findings": [
+          {
+            "category": "unexpected_access",
+            "severity": "high",
+            "confidence": "high",
+            "identity_id": "bob",
+            "message": "identity \"bob\" received access that should have been denied",
+            "evidence": [
+              "observed_outcome=allow",
+              "status_code=500",
+              "identity_id=bob",
+              "url=POST http://127.0.0.1:54975/edge/write-500",
+              "assessment=allowed",
+              "source=write_verification",
+              "verification=state_changed"
+            ],
+            "detected_at": "2026-10-25T19:49:12.3002679Z"
+          }
+        ],
+        "assessments": [
+          {
+            "credential_status": "not_checked",
+            "write_verification": "verified_effect",
+            "execution_index": 0,
+            "verification": {
+              "strategy": "legacy_change",
+              "environment": "legacy",
+              "reader_identity_id": "verifier",
+              "reader_credential_status": "not_checked",
+              "before_statuses": [
+                200,
+                200
+              ],
+              "after_status": 200
+            },
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "allowed",
+            "source": "write_verification",
+            "reason": "state_changed"
+          }
+        ]
+      }
+    },
+    {
+      "scenario": {
+        "id": "masked-denial-404",
+        "path": "/edge/masked",
+        "method": "GET",
+        "actor": "bob",
+        "decision": "deny",
+        "violation": false
+      },
+      "oracle": {
+        "actor": "bob",
+        "accessed": false,
+        "writes": 0,
+        "status": 404,
+        "body": "{\"error\":\"forbidden\"}"
+      },
+      "verdict": "inconclusive",
+      "inconclusive": true,
+      "gate_response": {
+        "test_case_id": "masked-denial-404",
+        "executions": [
+          {
+            "identity_id": "bob",
+            "status_code": 404,
+            "observed_outcome": "not_found",
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "duration_ms": 0,
+            "response_profile": {
+              "kind": "json",
+              "schema_hash": "4ef4f60c6e7b227f87734dde18d93dcc0169dc4cd29bcaabfbfd8560053945a5",
+              "fields": [
+                "$",
+                "$.error"
+              ]
+            }
+          }
+        ],
+        "findings": [],
+        "assessments": [
+          {
+            "credential_status": "not_checked",
+            "write_verification": "not_configured",
+            "execution_index": 0,
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "inconclusive",
+            "source": "http_status",
+            "reason": "ambiguous_http_outcome"
+          }
+        ]
+      }
+    },
+    {
+      "scenario": {
+        "id": "login-redirect",
+        "path": "/edge/redirect",
+        "method": "GET",
+        "actor": "bob",
+        "decision": "deny",
+        "violation": false
+      },
+      "oracle": {
+        "actor": "bob",
+        "accessed": false,
+        "writes": 0,
+        "status": 302,
+        "body": "{\"error\":\"forbidden\"}"
+      },
+      "verdict": "inconclusive",
+      "inconclusive": true,
+      "gate_response": {
+        "test_case_id": "login-redirect",
+        "executions": [
+          {
+            "identity_id": "bob",
+            "status_code": 302,
+            "observed_outcome": "redirect",
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "duration_ms": 0,
+            "response_profile": {
+              "kind": "json",
+              "schema_hash": "4ef4f60c6e7b227f87734dde18d93dcc0169dc4cd29bcaabfbfd8560053945a5",
+              "fields": [
+                "$",
+                "$.error"
+              ]
+            }
+          }
+        ],
+        "findings": [],
+        "assessments": [
+          {
+            "credential_status": "not_checked",
+            "write_verification": "not_configured",
+            "execution_index": 0,
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "inconclusive",
+            "source": "http_status",
+            "reason": "ambiguous_http_outcome"
+          }
+        ]
+      }
+    },
+    {
+      "scenario": {
+        "id": "rate-limit",
+        "path": "/edge/rate-limit",
+        "method": "GET",
+        "actor": "bob",
+        "decision": "deny",
+        "violation": false
+      },
+      "oracle": {
+        "actor": "bob",
+        "accessed": false,
+        "writes": 0,
+        "status": 429,
+        "body": "{\"error\":\"forbidden\"}"
+      },
+      "verdict": "inconclusive",
+      "inconclusive": true,
+      "gate_response": {
+        "test_case_id": "rate-limit",
+        "executions": [
+          {
+            "identity_id": "bob",
+            "status_code": 429,
+            "observed_outcome": "client_error",
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "duration_ms": 0,
+            "response_profile": {
+              "kind": "json",
+              "schema_hash": "4ef4f60c6e7b227f87734dde18d93dcc0169dc4cd29bcaabfbfd8560053945a5",
+              "fields": [
+                "$",
+                "$.error"
+              ]
+            }
+          }
+        ],
+        "findings": [],
+        "assessments": [
+          {
+            "credential_status": "not_checked",
+            "write_verification": "not_configured",
+            "execution_index": 0,
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "inconclusive",
+            "source": "http_status",
+            "reason": "ambiguous_http_outcome"
+          }
+        ]
+      }
+    },
+    {
+      "scenario": {
+        "id": "service-unavailable",
+        "path": "/edge/unavailable",
+        "method": "GET",
+        "actor": "bob",
+        "decision": "deny",
+        "violation": false
+      },
+      "oracle": {
+        "actor": "bob",
+        "accessed": false,
+        "writes": 0,
+        "status": 503,
+        "body": "{\"error\":\"forbidden\"}"
+      },
+      "verdict": "inconclusive",
+      "inconclusive": true,
+      "gate_response": {
+        "test_case_id": "service-unavailable",
+        "executions": [
+          {
+            "identity_id": "bob",
+            "status_code": 503,
+            "observed_outcome": "server_error",
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "duration_ms": 0,
+            "response_profile": {
+              "kind": "json",
+              "schema_hash": "4ef4f60c6e7b227f87734dde18d93dcc0169dc4cd29bcaabfbfd8560053945a5",
+              "fields": [
+                "$",
+                "$.error"
+              ]
+            }
+          }
+        ],
+        "findings": [],
+        "assessments": [
+          {
+            "credential_status": "not_checked",
+            "write_verification": "not_configured",
+            "execution_index": 0,
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "inconclusive",
+            "source": "http_status",
+            "reason": "ambiguous_http_outcome"
+          }
+        ]
+      }
+    },
+    {
+      "scenario": {
+        "id": "connection-aborted",
+        "path": "/edge/disconnect",
+        "method": "POST",
+        "actor": "bob",
+        "decision": "deny",
+        "violation": false
+      },
+      "oracle": {
+        "actor": "bob",
+        "accessed": false,
+        "writes": 0,
+        "status": 0,
+        "body": ""
+      },
+      "verdict": "inconclusive",
+      "inconclusive": true,
+      "gate_response": {
+        "test_case_id": "connection-aborted",
+        "executions": [
+          {
+            "identity_id": "bob",
+            "status_code": 0,
+            "observed_outcome": "error",
+            "duration_ms": 0,
+            "error": "execute request: Post \"http://127.0.0.1:54975/edge/disconnect\": EOF",
+            "error_kind": "network"
+          }
+        ],
+        "findings": [],
+        "assessments": [
+          {
+            "credential_status": "not_checked",
+            "write_verification": "not_configured",
+            "execution_index": 0,
+            "identity_id": "bob",
+            "expected_access": "deny",
+            "decision": "inconclusive",
+            "source": "none",
+            "reason": "execution_error"
+          }
+        ]
+      }
+    },
+    {
+      "scenario": {
+        "id": "owner-wrongly-denied",
+        "path": "/edge/over-denial",
+        "method": "GET",
+        "actor": "alice",
+        "decision": "allow",
+        "violation": true
+      },
+      "oracle": {
+        "actor": "alice",
+        "accessed": false,
+        "writes": 0,
+        "status": 403,
+        "body": "{\"error\":\"forbidden\"}"
+      },
+      "verdict": "true_positive",
+      "inconclusive": false,
+      "gate_response": {
+        "test_case_id": "owner-wrongly-denied",
+        "executions": [
+          {
+            "identity_id": "alice",
+            "status_code": 403,
+            "observed_outcome": "deny",
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "duration_ms": 0,
+            "response_profile": {
+              "kind": "json",
+              "schema_hash": "4ef4f60c6e7b227f87734dde18d93dcc0169dc4cd29bcaabfbfd8560053945a5",
+              "fields": [
+                "$",
+                "$.error"
+              ]
+            }
+          }
+        ],
+        "findings": [
+          {
+            "category": "authorization_mismatch",
+            "severity": "low",
+            "confidence": "high",
+            "identity_id": "alice",
+            "message": "identity \"alice\" was denied access that should have been allowed",
+            "evidence": [
+              "observed_outcome=deny",
+              "status_code=403",
+              "identity_id=alice",
+              "url=GET http://127.0.0.1:54975/edge/over-denial"
+            ],
+            "detected_at": "2026-10-25T19:49:12.3023551Z"
+          }
+        ],
+        "assessments": [
+          {
+            "credential_status": "not_checked",
+            "write_verification": "not_configured",
+            "execution_index": 0,
+            "identity_id": "alice",
+            "expected_access": "allow",
+            "decision": "denied",
+            "source": "http_status",
+            "reason": "status_only"
+          }
+        ]
+      }
+    }
+  ]
+}

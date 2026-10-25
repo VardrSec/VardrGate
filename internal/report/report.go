@@ -91,6 +91,8 @@ func (s summary) headline() string {
 // inconclusiveReasons explains each assessment reason in terms an operator can
 // act on. Reasons are fixed codes from the engine, never response content.
 var inconclusiveReasons = map[string]string{
+	"identity_preflight_failed":    "a declared principal check failed; resource authorization requests were withheld",
+	"verifier_reset_failed":        "the fixture reset did not complete successfully; this identity's write was withheld",
 	"write_completion_unconfirmed": "the write returned 202 and no effect was observed; completion is unknown, so unchanged state cannot prove denial",
 	"write_environment_unverified": "write timing or isolation is unknown; use a resettable fixture with a reviewed synchronous write/read contract and exclusive access before drawing authorization conclusions",
 	"no_assertion_matched":         "no response assertion matched; the assertion may be stale or the response format changed",
@@ -161,6 +163,15 @@ func TextCase(b *strings.Builder, res engine.Result) {
 		}
 		fmt.Fprintf(b, "  %-12s %d %s\n", ex.IdentityID, ex.StatusCode, ex.ObservedOutcome)
 	}
+	if len(res.Assessments) > 0 {
+		b.WriteString("Assessments (scanner conclusions; findings require operator confirmation):\n")
+	}
+	for _, a := range res.Assessments {
+		fmt.Fprintf(b, "  %s expected %s -> %s | credentials: %s | write: %s | evidence: %s/%s\n", a.IdentityID, a.ExpectedAccess, a.Decision, recorded(a.CredentialStatus), recorded(a.WriteVerification), a.Source, a.Reason)
+		if v := a.Verification; v != nil {
+			fmt.Fprintf(b, "    reader %s (%s): before HTTP %v, after HTTP %d; %s/%s\n", v.ReaderIdentityID, recorded(v.ReaderCredentialStatus), v.BeforeStatuses, v.AfterStatus, v.Strategy, v.Environment)
+		}
+	}
 	inc := res.Inconclusive()
 	if len(inc) > 0 {
 		fmt.Fprintf(b, "\n%s (not a pass):\n", plural(len(inc), "inconclusive assessment", "inconclusive assessments"))
@@ -194,6 +205,19 @@ func Markdown(w io.Writer, cases []Case) error {
 	b.WriteString("| Case | Source | Result |\n|---|---|---|\n")
 	for _, c := range cases {
 		fmt.Fprintf(&b, "| %s | %s | %s |\n", md(c.Result.TestCaseID), md(c.Source), caseVerdict(c.Result))
+	}
+	b.WriteString("\n### Identity assessments\n\nScanner conclusions; findings require operator confirmation. Credential preflights are point-in-time checks.\n\n| Case | Identity | Expected | Assessed | Credentials | Write readback | Evidence |\n|---|---|---|---|---|---|---|\n")
+	for _, c := range cases {
+		for _, a := range c.Result.Assessments {
+			evidence := a.Source + "/" + a.Reason
+			if a.ExecutionIndex != nil {
+				evidence += fmt.Sprintf("; execution[%d]", *a.ExecutionIndex)
+			}
+			if v := a.Verification; v != nil {
+				evidence += fmt.Sprintf("; reader %s (%s), before HTTP %v, after HTTP %d; %s/%s", v.ReaderIdentityID, recorded(v.ReaderCredentialStatus), v.BeforeStatuses, v.AfterStatus, v.Strategy, v.Environment)
+			}
+			fmt.Fprintf(&b, "| %s | %s | %s | %s | %s | %s | %s |\n", md(c.Result.TestCaseID), md(a.IdentityID), md(string(a.ExpectedAccess)), md(string(a.Decision)), md(recorded(a.CredentialStatus)), md(recorded(a.WriteVerification)), md(evidence))
+		}
 	}
 
 	if s.findings > 0 {
@@ -231,6 +255,13 @@ func Markdown(w io.Writer, cases []Case) error {
 	}
 	_, err := io.WriteString(w, b.String())
 	return err
+}
+
+func recorded(value string) string {
+	if value == "" {
+		return "not_recorded"
+	}
+	return value
 }
 
 func caseVerdict(res engine.Result) string {

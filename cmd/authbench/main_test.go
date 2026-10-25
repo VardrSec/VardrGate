@@ -2,11 +2,19 @@ package main
 
 import (
 	"encoding/json"
+	"reflect"
 	"testing"
 
 	"github.com/VardrSec/vardrgate/internal/engine"
 	"github.com/VardrSec/vardrgate/internal/model"
 )
+
+func TestSignatureComparesProvenanceValuesNotPointerAddresses(t *testing.T) {
+	rows := []assessment{{Gate: json.RawMessage(`{"executions":[{"status_code":200}],"assessments":[{"identity_id":"peer","execution_index":0,"verification":{"before_statuses":[200,200],"after_status":200}}]}`)}}
+	if !reflect.DeepEqual(signature(rows), signature(rows)) {
+		t.Fatal("identical provenance was unstable")
+	}
+}
 
 func TestScoringDoesNotHideInconclusiveMisses(t *testing.T) {
 	s := scenario{Actor: "bob", Decision: model.AccessDecisionDeny, Violation: true}

@@ -8,6 +8,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Per-identity credential checks, raw execution indices and value-free write
+  readback provenance in JSON/text/Markdown. Failed preflights explain every
+  caller's untested outcome; optional verifier principal checks are honored.
+  See ADR 0026 and [identity evidence](docs/identity-evidence.md).
+
 - `regression save` retains an operator-confirmed unresolved case for the
   existing runner, with a template hash and literal credential guards. Request,
   setup, preflight and assertion references bind at execution. See ADR 0025.

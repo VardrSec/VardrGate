@@ -30,7 +30,7 @@ func validatePreflight(tc model.AuthorizationTestCase) error {
 			return errors.New("strict identity assurance requires at least one allow or deny expectation")
 		}
 	}
-	for _, identity := range tc.Identities {
+	for _, identity := range preflightIdentities(tc) {
 		p := identity.Preflight
 		if p == nil {
 			continue
@@ -99,7 +99,7 @@ func preflightOrigin(raw string) (string, error) {
 func (e *Engine) runPreflight(ctx context.Context, tc model.AuthorizationTestCase) ([]model.PreflightResult, bool) {
 	var results []model.PreflightResult
 	ready := true
-	for _, identity := range tc.Identities {
+	for _, identity := range preflightIdentities(tc) {
 		p := identity.Preflight
 		if p == nil {
 			continue

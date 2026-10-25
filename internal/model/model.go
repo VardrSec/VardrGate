@@ -266,12 +266,27 @@ const (
 // Assessment separates semantic access evidence from the raw HTTP outcome.
 // Assertion indices are safe to return; response data and asserted values are not.
 type Assessment struct {
-	IdentityID        string             `json:"identity_id"`
-	ExpectedAccess    AccessDecision     `json:"expected_access,omitempty"`
-	Decision          AssessmentDecision `json:"decision"`
-	Source            string             `json:"source"`
-	Reason            string             `json:"reason"`
-	MatchedAssertions []int              `json:"matched_assertions,omitempty"`
+	CredentialStatus  string                `json:"credential_status,omitempty"`
+	WriteVerification string                `json:"write_verification,omitempty"`
+	ExecutionIndex    *int                  `json:"execution_index,omitempty"`
+	Verification      *VerificationEvidence `json:"verification,omitempty"`
+	IdentityID        string                `json:"identity_id"`
+	ExpectedAccess    AccessDecision        `json:"expected_access,omitempty"`
+	Decision          AssessmentDecision    `json:"decision"`
+	Source            string                `json:"source"`
+	Reason            string                `json:"reason"`
+	MatchedAssertions []int                 `json:"matched_assertions,omitempty"`
+}
+
+// VerificationEvidence retains readback provenance without any observed values.
+type VerificationEvidence struct {
+	Strategy               string `json:"strategy"`
+	Environment            string `json:"environment"`
+	ReaderIdentityID       string `json:"reader_identity_id"`
+	ReaderCredentialStatus string `json:"reader_credential_status,omitempty"`
+	BeforeStatuses         []int  `json:"before_statuses"`
+	AfterStatus            int    `json:"after_status,omitempty"`
+	ResetStatus            int    `json:"reset_status,omitempty"`
 }
 
 // ExecutionResult captures the HTTP response for one identity.
