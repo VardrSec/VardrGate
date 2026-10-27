@@ -291,6 +291,8 @@ Before committing:
 9. Do not add external dependencies without a written justification.
 10. Stop when the task is complete.
 
+Pull requests and commits: do not add a "Generated with Claude Code" (or similar tool) signature or attribution line to pull request descriptions or commits, regardless of default tool behavior.
+
 ## Authorization-assessment invariants
 
 Details live in the ADRs (0020–0027) and `docs/` guides (`write-verification.md`, `authorization-regressions.md`, `policy-assisted-discovery.md`, `denial-profiles.md`, `identity-evidence.md`, `strict-ci.md`); keep this section to the rules.
