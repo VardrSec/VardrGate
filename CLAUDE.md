@@ -65,6 +65,11 @@ docs/
                              0015 GitHub Action · 0016 response assertions
                              0017 write verification · 0018 verifier
                              confidence · 0019 credential-rejected denials
+                             0020 strict identity assurance · 0021 write
+                             environment assurance · 0022 review-only generation
+                             0023 scoped denial profiles · 0024 explicit write
+                             strategies · 0025 saved regressions · 0026 identity
+                             evidence reporting · 0027 evidence hardening
 
 examples/
 ├── bola_check.json              three-identity unauthorized-access scenario
@@ -172,7 +177,7 @@ Renders `[]report.Case` (a source path plus an `engine.Result`) as text, Markdow
 
 ### `internal/scaffold`
 
-Shared starter-test-case builder used by the importers. `StarterCase(id, description, method, url)` returns a scaffold with the request pre-filled plus an `authenticated` (allow) and `anonymous` (deny) template identity; `Slug` normalizes a path into an id fragment.
+Shared starter-test-case builder used by the importers. `StarterCase(id, description, method, url)` returns a scaffold with the request pre-filled plus `authenticated` and `anonymous` template identities. The in-memory starter still carries allow/deny, but `gen` emits review-only cases: every decision is `TODO` and cannot run until a human sets it (ADR 0022); `Slug` normalizes a path into an id fragment.
 
 ### `internal/openapi` / `internal/postman`
 
@@ -255,6 +260,7 @@ Exit codes are shared by every command that executes a test case: `0` ran clean,
 | `run` | `--job <file>` (one envelope) or `--cases <file>` (a JSON array). A suite is fully validated via `engine.Validate` before any of it runs, so every authoring error is reported together |
 
 `policy run` and `run` share output flags: `--format json|text|markdown` (stdout; default `json`), `--out` (always JSON) and `--sarif`. With the default format and `--out` set, stdout stays empty — Runner's `run --job --out` contract. Outputs are written before `gate` decides the exit code.
+| `regression save` | `--cases --result --case --out NEW_DIRECTORY --confirmed` — retain one operator-confirmed finding as a new portable regression for the existing engine (ADR 0025/0027). Never overwrites; `--allow-unbound-result` is the explicit manual path for results lacking an input digest |
 | `demo` | Bundled policy against the `internal/demo` loopback fixture; prints a human summary rather than JSON |
 | `discover` | `--spec` [`--sample`] [`--out` dir] [`--roles`] — draft policies whose expectations are `TODO` and therefore unrunnable |
 | `gen` | `--spec` / `--postman` [`--base`] [`--out`] — starter cases through `scaffold.MarshalCases` |
@@ -284,6 +290,16 @@ Before committing:
 8. Do not introduce speculative interfaces or abstractions.
 9. Do not add external dependencies without a written justification.
 10. Stop when the task is complete.
+
+## Authorization-assessment invariants
+
+Details live in the ADRs (0020–0027) and `docs/` guides (`write-verification.md`, `authorization-regressions.md`, `policy-assisted-discovery.md`, `denial-profiles.md`, `identity-evidence.md`, `strict-ci.md`); keep this section to the rules.
+
+- **Generated cases are candidates.** `gen` and `discover` (including offline `--har ... --hypotheses`) emit review-only cases with `TODO` decisions. Never infer an executable allow/deny expectation from captured traffic, an OpenAPI document or a successful response; a different credential in a capture is a lead about identities, not proof of principals, ownership or tenancy. HAR parsing is bounded and keeps values in memory (only field names and capture indices leave it).
+- **Outcome vocabulary.** Every identity is `allowed`, `denied`, `inconclusive` or `skipped`. A rejected credential (401 for a deny-expected caller) is inconclusive, never a verified denial; unavailable resources and failed preflight are inconclusive. Failed authentication is never evidence that authorization is correct. Exit 0 does not mean secure.
+- **Write-effect verification** (`changed`, `created`, `deleted`; ADR 0017/0018/0024/0027): independent readback by a separate reader identity; a demonstrated allow-expected positive control before any denial; the environment is declared reviewed, synchronous and isolated; creation starts absent, deletion starts present; repeated attempts need a reviewed fixture reset that must reproduce the first stable baseline before each write. A write response alone proves nothing, and a failed response does not negate an effect proved by readback. If causality cannot be established (202, unreadable state, missing control), the result is inconclusive.
+- **Regressions** (`regression save`, ADR 0025/0027): save only a reviewed, unresolved template with literal credentials refused, bound to a result by the `sha256-json-compact-v1:` digest of the original case; resolve credential references only when the engine later loads the case. The digest correlates source and result; it is not cryptographic execution attestation and cannot detect result tampering. Do not claim otherwise.
+- Observed values stay in memory; evidence records field names, hashes and fixed reason codes, not secrets or response values.
 
 ## Map and Runner integration
 
