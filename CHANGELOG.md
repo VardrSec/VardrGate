@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Documentation
+
+- Separate packaged v0.1.0 installation from later strict-CI controls. Provide
+  an exact reviewed source build, local-binary invocation and Action installation
+  guidance so strict examples cannot silently select an older PATH binary.
+
 ### Added
 
 - Bind saved CLI regressions to the unresolved input digest and a relevant
