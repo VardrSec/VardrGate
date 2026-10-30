@@ -1,5 +1,36 @@
 # Strict identity assurance in CI
 
+## Build a compatible binary
+
+These controls are implemented on main but are not in the packaged v0.1.0
+release. That release supports the older `--require-identity-preflight` guard,
+not the complete-principal and inconclusive-gating settings used below.
+
+For this guide, use Go 1.25 or newer and build the reviewed source revision in
+a new directory (POSIX shell):
+
+```sh
+git clone https://github.com/VardrSec/VardrGate.git vardrgate-strict
+cd vardrgate-strict
+git checkout --detach 77e9b221ae34ef7dbac2cb2e7e049222e9c9f915
+go build -trimpath -o vardrgate ./cmd/vardrgate
+./vardrgate run --help > run-help.txt 2>&1 || test "$?" -eq 1
+grep -q -- '-strict-identity-preflight' run-help.txt
+grep -q -- '-fail-on-inconclusive' run-help.txt
+```
+
+The current CLI prints subcommand help with exit 1; the checks above handle that
+status and still fail if either required flag is missing. Inspect `run-help.txt`
+when a check fails.
+The commands below use `./vardrgate` to select this binary rather than an older
+copy on PATH. On Windows, build with `-o vardrgate.exe` and invoke
+`.\vardrgate.exe` in PowerShell. A source build is not a newly published release;
+retain the source revision with your CI configuration. When using the GitHub
+Action, provide this reviewed binary on PATH and set `install: false` so the
+Action does not download and select v0.1.0 instead.
+
+## Configure strict assessment
+
 Use these reviewed suite settings:
 
 ```yaml
@@ -35,9 +66,9 @@ with no allow/deny expectations is rejected.
 For standalone policies or JSON cases:
 
 ```sh
-vardrgate policy run --suite suite.yaml --fail-on high
-vardrgate policy run --policy profile.yaml --base https://api.example.com --identities identities.json --strict-identity-preflight --fail-on-inconclusive --fail-on high
-vardrgate run --cases cases.json --strict-identity-preflight --fail-on-inconclusive --fail-on high
+./vardrgate policy run --suite suite.yaml --fail-on high
+./vardrgate policy run --policy profile.yaml --base https://api.example.com --identities identities.json --strict-identity-preflight --fail-on-inconclusive --fail-on high
+./vardrgate run --cases cases.json --strict-identity-preflight --fail-on-inconclusive --fail-on high
 ```
 
 The HTTP API and job envelope use `require_identity_preflight: true` inside the
