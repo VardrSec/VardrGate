@@ -1,10 +1,9 @@
 # Authorization research roadmap: staged implementation
 
-Prepared 2026-10-25; status reconciled 2026-10-30. The five stages and companion
-Map/Runner changes are merged on their repositories' `main` branches and integrated
-by the source-built distribution. Merge/integration does not establish a packaged
-release or production deployment. The measurements below remain the original
-October 25 evidence, not a newly reproduced benchmark or current suite count.
+Implementation status, 2026-10-30: the five stages are implemented in Gate with
+matching Map/Runner support and included in the source-built distribution. The
+packaged Gate v0.1.0 release predates these features. Measurements below record the
+October 25 benchmark runs and test-suite counts.
 
 | Stage | Implemented behavior | Guide |
 |---|---|---|
@@ -14,11 +13,9 @@ October 25 evidence, not a newly reproduced benchmark or current suite count.
 | 4 | Save an operator-confirmed unresolved case and rerun it with the existing runner/CI outputs | [Regressions](authorization-regressions.md) |
 | 5 | Per-identity credential assurance and value-free readback provenance in Gate, Runner and Map | [Evidence](identity-evidence.md) |
 
-The original Gate review branches were stacked in stage order, with separate
-Map and Runner companion PRs; that review work is complete. The deployment
-compatibility rule remains: Map's semantic upload handling must be available
-before using the matching Gate/Runner reader evidence together. No automatic
-promotion of findings to confirmed vulnerabilities is introduced.
+Map's backend must support semantic uploads before receiving the matching
+Gate/Runner reader evidence. Findings still require human verification; evidence
+is not automatically promoted to a confirmed vulnerability.
 
 The distribution records exact integrated development pins in
 [versions.json](https://github.com/VardrSec/VardrSec/blob/main/versions.json) and its
