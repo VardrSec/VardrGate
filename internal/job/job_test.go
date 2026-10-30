@@ -136,3 +136,45 @@ func TestParse_LiteralCredentialsAreUntouched(t *testing.T) {
 		t.Errorf("credential value = %q, want %q", got, "plain-token")
 	}
 }
+
+func TestParseLiteral_DoesNotExpandReferences(t *testing.T) {
+	// A caller that resolved its own credentials needs them used as written: a
+	// resolved value that happens to contain ${...} must not be read again, and
+	// a job must not be able to pull variables from Gate's environment.
+	t.Setenv("VARDRGATE_TEST_LITERAL", "from-gate-environment")
+	env, err := ParseLiteral([]byte(`{
+	  "config": {
+	    "test_case": {
+	      "id": "tc",
+	      "identities": [
+	        {"id":"owner","credential":{"type":"bearer","value":"tok-${VARDRGATE_TEST_LITERAL}"}}
+	      ],
+	      "request": {
+	        "method":"GET",
+	        "url":"https://api.example.com/x?k=${VARDRGATE_TEST_LITERAL}",
+	        "headers":{"X-Probe":"${VARDRGATE_TEST_LITERAL}"}
+	      }
+	    }
+	  }
+	}`))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	tc := env.TestCase()
+	if got := tc.Identities[0].Credential.Value; got != "tok-${VARDRGATE_TEST_LITERAL}" {
+		t.Errorf("credential value = %q, want it unchanged", got)
+	}
+	if strings.Contains(tc.Request.URL, "from-gate-environment") || strings.Contains(tc.Request.Headers["X-Probe"], "from-gate-environment") {
+		t.Errorf("request was expanded from the environment: %+v", tc.Request)
+	}
+}
+
+func TestParseLiteral_UnsetReferenceIsNotAnError(t *testing.T) {
+	if _, err := ParseLiteral([]byte(`{
+	  "id": "tc",
+	  "identities": [{"id":"owner","credential":{"type":"bearer","value":"${VARDRGATE_DEFINITELY_UNSET}"}}],
+	  "request": {"method":"GET","url":"https://api.example.com/x"}
+	}`)); err != nil {
+		t.Fatalf("literal parsing must not resolve references: %v", err)
+	}
+}

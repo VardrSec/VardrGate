@@ -157,12 +157,16 @@ Flags:
 	allowMutating := fs.Bool("allow-mutating", false, "confirm that replaying an unsafe method (POST/PUT/PATCH/DELETE) once per identity is intended")
 	requirePreflight := fs.Bool("require-identity-preflight", false, "require at least one declared identity preflight (Runner compatibility guard)")
 	strictPreflight := fs.Bool("strict-identity-preflight", false, "require principal preflight for every assessed credentialed identity")
+	literalJob := fs.Bool("literal-job", false, "use the job envelope exactly as written, without ${VAR} expansion (--job only; for callers that resolve credentials themselves)")
 	timeout := fs.Duration("timeout", 0, "per-request timeout (--cases only; 0 uses the client default)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if (*jobPath == "") == (*casesPath == "") {
 		return errors.New("exactly one of --job or --cases is required")
+	}
+	if *literalJob && *jobPath == "" {
+		return errors.New("--literal-job requires --job")
 	}
 	if err := out.validate(); err != nil {
 		return err
@@ -179,7 +183,11 @@ Flags:
 	)
 
 	if *jobPath != "" {
-		env, err := job.Load(*jobPath)
+		load := job.Load
+		if *literalJob {
+			load = job.LoadLiteral
+		}
+		env, err := load(*jobPath)
 		if err != nil {
 			return err
 		}

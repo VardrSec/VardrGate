@@ -572,6 +572,11 @@ tokens and its `localhost:8081` URL are placeholders to replace, not a target
 that exists. Use `vardrgate demo` for something that runs as shipped. See
 [`docs/adr/0001-policy-input-and-run-cli.md`](docs/adr/0001-policy-input-and-run-cli.md).
 
+`${VAR}` references in a job are expanded from Gate's environment. Add
+`--literal-job` when the caller has already resolved every credential: the
+envelope is then used exactly as written. VardrRunner passes it on every job.
+See [ADR 0028](docs/adr/0028-literal-job-input.md).
+
 ## Security defaults
 
 - Only `http` and `https` targets are accepted.
