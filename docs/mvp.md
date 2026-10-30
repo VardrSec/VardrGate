@@ -1,5 +1,9 @@
 # VardrGate MVP
 
+Historical MVP baseline, with implemented extensions listed below. The original
+workflow and checklist describe that baseline, not the full current feature set.
+See the [current README](../README.md) for installation and CLI usage.
+
 ## Goal
 
 Give a security engineer or developer a single API call that answers the question:
@@ -47,13 +51,14 @@ The following were originally out of scope and are now implemented. See
 | CI gating | `--fail-on <severity>`: exit 2 on findings, exit 3 when a case reached nothing (ADR 0006) |
 | API inventory / spec import | `vardrgate gen --spec` / `--postman`, plus `vardrgate coverage` |
 | Persisted results | Runner job queue with a durable SQLite store (ADR 0003, 0004) |
+| Result formats | JSON, text, Markdown and SARIF; see [ADR 0014](adr/0014-report-formats.md) |
 
 ## Still not covered
 
 | Concern | Reason |
 |---|---|
 | Concurrent execution | Sequential per-identity execution is correct and sufficient at this scale |
-| SARIF / JUnit output | Findings are JSON only; the exit code is the CI contract (ADR 0006) |
+| JUnit output | Not implemented; use supported result formats and CI exit codes |
 | PostgreSQL store | The `Store` interface is ready for it; SQLite covers current needs |
 
 ## Inputs at MVP

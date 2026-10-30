@@ -8,6 +8,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Documentation
 
+- Correct the historical MVP output inventory (SARIF is implemented; JUnit is not)
+  and reconcile the five-stage research status with merged/integrated source,
+  preserving its original benchmark evidence and release boundary.
+
 - Separate packaged v0.1.0 installation from later strict-CI controls. Provide
   an exact reviewed source build, local-binary invocation and Action installation
   guidance so strict examples cannot silently select an older PATH binary.

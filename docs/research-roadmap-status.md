@@ -1,6 +1,10 @@
 # Authorization research roadmap: staged implementation
 
-Prepared 2026-10-25. These changes are review branches, not deployed releases.
+Prepared 2026-10-25; status reconciled 2026-10-30. The five stages and companion
+Map/Runner changes are merged on their repositories' `main` branches and integrated
+by the source-built distribution. Merge/integration does not establish a packaged
+release or production deployment. The measurements below remain the original
+October 25 evidence, not a newly reproduced benchmark or current suite count.
 
 | Stage | Implemented behavior | Guide |
 |---|---|---|
@@ -10,12 +14,19 @@ Prepared 2026-10-25. These changes are review branches, not deployed releases.
 | 4 | Save an operator-confirmed unresolved case and rerun it with the existing runner/CI outputs | [Regressions](authorization-regressions.md) |
 | 5 | Per-identity credential assurance and value-free readback provenance in Gate, Runner and Map | [Evidence](identity-evidence.md) |
 
-The Gate branches are stacked in stage order. Map and Runner have separate
-companion branches. Deploy the Map backend's semantic upload handling before
-using the new Gate/Runner reader evidence together. No migration or automatic
+The original Gate review branches were stacked in stage order, with separate
+Map and Runner companion PRs; that review work is complete. The deployment
+compatibility rule remains: Map's semantic upload handling must be available
+before using the matching Gate/Runner reader evidence together. No automatic
 promotion of findings to confirmed vulnerabilities is introduced.
 
-## Measured results
+The distribution records exact integrated development pins in
+[versions.json](https://github.com/VardrSec/VardrSec/blob/main/versions.json) and its
+[current alpha release gates](https://github.com/VardrSec/VardrSec/blob/main/docs/community-alpha-release.md).
+For standalone Gate, distinguish the packaged v0.1.0 release from later source
+features using the [README](../README.md) and [strict-CI guide](strict-ci.md).
+
+## Historical measured results (2026-10-25)
 
 - ZAP prerequisite completed first: all seven frozen VAmPI violations detected,
   seven false positives across the two modes, three stable repeats each. The
