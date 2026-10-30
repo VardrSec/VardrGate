@@ -126,6 +126,30 @@ func TestRunSetup_CapturedTokenBecomesTheCredential(t *testing.T) {
 	}
 }
 
+// A credential value is a secret: a failed substitution names the identity, not the value.
+func TestRunSetup_CredentialSubstitutionErrorOmitsTheValue(t *testing.T) {
+	tc := setupTC()
+	tc.Request.URL = "https://api.example.com/objects/1"
+	tc.Identities[1].Credential.Value = "s3cret-{{unterminated"
+	tc.Setup = []model.SetupStep{{
+		Name:    "login",
+		Request: model.RequestTemplate{Method: http.MethodGet, URL: "https://api.example.com/login"},
+		Capture: map[string]string{"token": "data.access_token"},
+	}}
+	exec := &recordingExecutor{fallback: model.ExecutionResult{StatusCode: 200, Body: []byte(`{"data":{"access_token":"t"}}`)}}
+
+	_, err := New(exec).Run(context.Background(), tc)
+	if err == nil {
+		t.Fatal("expected a substitution error")
+	}
+	if strings.Contains(err.Error(), "s3cret") {
+		t.Errorf("error exposes the credential value: %v", err)
+	}
+	if !strings.Contains(err.Error(), `"other"`) {
+		t.Errorf("error should name the identity: %v", err)
+	}
+}
+
 // The login step itself must not present a credential it does not have yet.
 func TestRunSetup_StepWithoutAsSendsNoCredential(t *testing.T) {
 	tc := setupTC()

@@ -70,6 +70,7 @@ docs/
                              0023 scoped denial profiles · 0024 explicit write
                              strategies · 0025 saved regressions · 0026 identity
                              evidence reporting · 0027 evidence hardening
+                             0028 literal job input
 
 examples/
 ├── bola_check.json              three-identity unauthorized-access scenario
@@ -257,7 +258,7 @@ Exit codes are shared by every command that executes a test case: `0` ran clean,
 |---|---|
 | `serve` (default) | HTTP API. Reads `PORT` (1–65535, default 8080), `ALLOW_PRIVATE_TARGETS`, `VARDRGATE_API_KEY(S)`, `VARDRGATE_DB`; wires `client → engine → handler` with a store (`ReadHeaderTimeout` 5 s, `ReadTimeout` 30 s, `WriteTimeout` 60 s, `IdleTimeout` 120 s; 10 s graceful shutdown on `SIGINT`/`SIGTERM`) |
 | `policy run` | Compile a policy against one environment and run it: `--policy --base --param name=value (repeatable) --identities [--tenant --id --fail-on --allow-private-targets --timeout]`. Or `--suite <file> [--base]` to run a suite; per-policy flags are rejected with `--suite`. Every compiled case is validated before any request; in suite mode a run-time failure (e.g. setup) is recorded in `Result.Error`, the rest continue, and the run exits 3 |
-| `run` | `--job <file>` (one envelope) or `--cases <file>` (a JSON array). A suite is fully validated via `engine.Validate` before any of it runs, so every authoring error is reported together |
+| `run` | `--job <file>` (one envelope) or `--cases <file>` (a JSON array). A suite is fully validated via `engine.Validate` before any of it runs, so every authoring error is reported together. `--literal-job` (with `--job` only) skips `${VAR}` expansion for callers that resolve credentials themselves (ADR 0028) |
 
 `policy run` and `run` share output flags: `--format json|text|markdown` (stdout; default `json`), `--out` (always JSON) and `--sarif`. With the default format and `--out` set, stdout stays empty — Runner's `run --job --out` contract. Outputs are written before `gate` decides the exit code.
 | `regression save` | `--cases --result --case --out NEW_DIRECTORY --confirmed` — retain one operator-confirmed finding as a new portable regression for the existing engine (ADR 0025/0027). Never overwrites; `--allow-unbound-result` is the explicit manual path for results lacking an input digest |
@@ -328,6 +329,9 @@ Details live in the ADRs (0020–0027) and `docs/` guides (`write-verification.m
   Never retain response values, headers or raw errors, infer expiry, or treat a
   probe as an authorization baseline. `--require-identity-preflight` is Runner's
   compatibility guard. See ADR 0011; automatic refresh remains future work.
+- Runner resolves credential references itself and runs `run --job --literal-job`,
+  so the envelope is used as written: no `${VAR}` expansion from Gate's inherited
+  environment. Other input paths keep expansion. See ADR 0028.
 
 ## Binary releases
 

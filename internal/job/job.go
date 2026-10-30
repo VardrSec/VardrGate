@@ -39,7 +39,7 @@ type Execution struct {
 	AllowPrivateTargets bool  `json:"allow_private_targets,omitempty"`
 }
 
-// Load reads and parses a job file.
+// Load reads and parses a job file, expanding ${VAR} references (see Parse).
 func Load(path string) (Envelope, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -48,10 +48,39 @@ func Load(path string) (Envelope, error) {
 	return Parse(data)
 }
 
-// Parse decodes a job envelope. For convenience it also accepts a bare
-// AuthorizationTestCase (a document with no "config" key), so a plain test case
-// file can be run directly without wrapping it in an envelope.
+// LoadLiteral reads and parses a job file without ${VAR} expansion (see ParseLiteral).
+func LoadLiteral(path string) (Envelope, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return Envelope{}, fmt.Errorf("read job: %w", err)
+	}
+	return ParseLiteral(data)
+}
+
+// Parse decodes a job envelope and resolves its ${VAR} references. For
+// convenience it also accepts a bare AuthorizationTestCase (a document with no
+// "config" key), so a plain test case file can be run directly without
+// wrapping it in an envelope.
 func Parse(data []byte) (Envelope, error) {
+	e, err := ParseLiteral(data)
+	if err != nil {
+		return Envelope{}, err
+	}
+	// Credential values may reference environment variables, the same as a
+	// policy binding or a generated suite. Without this, a job envelope written
+	// with ${TOKEN} would send those characters as the bearer token and the
+	// resulting 401s would read as authorization findings.
+	if err := secretref.ExpandCase(&e.Config.TestCase); err != nil {
+		return Envelope{}, err
+	}
+	return e, nil
+}
+
+// ParseLiteral decodes a job envelope exactly as written. A caller that has
+// already resolved its credentials, such as VardrRunner, uses it so a resolved
+// value is never read again as a ${VAR} reference and a job cannot name
+// variables from this process's environment. See ADR 0028.
+func ParseLiteral(data []byte) (Envelope, error) {
 	var probe map[string]json.RawMessage
 	if err := json.Unmarshal(data, &probe); err != nil {
 		return Envelope{}, fmt.Errorf("parse job: %w", err)
@@ -68,13 +97,6 @@ func Parse(data []byte) (Envelope, error) {
 			return Envelope{}, fmt.Errorf("parse job: %w", err)
 		}
 		e.Config.TestCase = tc
-	}
-	// Credential values may reference environment variables, the same as a
-	// policy binding or a generated suite. Without this, a job envelope written
-	// with ${TOKEN} would send those characters as the bearer token and the
-	// resulting 401s would read as authorization findings.
-	if err := secretref.ExpandCase(&e.Config.TestCase); err != nil {
-		return Envelope{}, err
 	}
 	return e, nil
 }

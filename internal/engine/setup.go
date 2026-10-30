@@ -114,7 +114,8 @@ func applySetupVars(tc model.AuthorizationTestCase, vars map[string]string) (mod
 	for i := range identities {
 		value, err := substitute(identities[i].Credential.Value, vars)
 		if err != nil {
-			return tc, fmt.Errorf("identity %q credential: %w", identities[i].ID, err)
+			// substitute quotes its input, which here is a secret.
+			return tc, fmt.Errorf("identity %q credential substitution failed", identities[i].ID)
 		}
 		identities[i].Credential.Value = value
 	}

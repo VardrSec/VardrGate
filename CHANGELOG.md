@@ -6,6 +6,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security
+
+- `run --job --literal-job` uses the job envelope exactly as written, with no
+  `${VAR}` expansion. A caller that resolves credentials itself, such as
+  VardrRunner, passes it so resolved values are never read again as
+  references and a stored case cannot pull variables from Gate's environment.
+  Existing input paths keep their expansion. Deploy this build before a
+  Runner release that requires the flag. See ADR 0028.
+
+- A failed `{{name}}` substitution in an identity's credential value no longer
+  quotes the value in the error message.
+
 ### Documentation
 
 - Correct the historical MVP output inventory (SARIF is implemented; JUnit is not)
