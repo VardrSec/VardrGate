@@ -580,8 +580,11 @@ See [ADR 0028](docs/adr/0028-literal-job-input.md).
 ## Security defaults
 
 - Only `http` and `https` targets are accepted.
-- Loopback, link-local, private (RFC-1918/4193), unspecified, and multicast
-  addresses are blocked by default.
+- Loopback, private (RFC-1918/4193), shared (100.64.0.0/10) and benchmarking
+  (198.18.0.0/15) addresses are blocked unless private targets are explicitly
+  allowed. Unspecified and 0.0.0.0/8, link-local, cloud metadata and multicast
+  addresses are always blocked. NAT64 and 6to4 addresses are judged by the IPv4
+  address they carry.
 - DNS rebinding is prevented: hostnames are resolved once inside a custom
   `DialContext`, every returned address is validated, and the connection is made
   to the pre-validated IP directly.
