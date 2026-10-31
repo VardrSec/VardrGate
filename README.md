@@ -523,9 +523,10 @@ Environment variables (serve mode):
 
 | Variable | Default | Description |
 |---|---|---|
+| `VARDRGATE_HOST` | `127.0.0.1` | Listening address (an IP or `localhost`). Set `0.0.0.0` or `::` to listen on every interface, with API keys configured. |
 | `PORT` | `8080` | Listening port (1–65535) |
 | `ALLOW_PRIVATE_TARGETS` | `false` | Permit loopback and RFC-1918 targets. Enable only for local lab testing. |
-| `VARDRGATE_API_KEY` | _(unset)_ | Single bearer token for the runner endpoints (`/jobs`, `/runner`, `/audit`); maps to the `default` tenant. Unset disables auth for local dev. |
+| `VARDRGATE_API_KEY` | _(unset)_ | Single bearer token for `/tests/execute` and the runner endpoints (`/jobs`, `/runner`, `/audit`); maps to the `default` tenant. Unset disables auth for local dev. |
 | `VARDRGATE_API_KEYS` | _(unset)_ | Per-tenant keys `"tenant-a:key1,tenant-b:key2"` for tenant isolation; takes precedence over `VARDRGATE_API_KEY`. |
 | `VARDRGATE_DB` | _(unset)_ | Path to a SQLite database for a durable job queue (jobs survive restart). Unset uses an in-memory store. |
 
@@ -596,8 +597,11 @@ See [ADR 0028](docs/adr/0028-literal-job-input.md).
 ## Security defaults
 
 - Only `http` and `https` targets are accepted.
-- Loopback, link-local, private (RFC-1918/4193), unspecified, and multicast
-  addresses are blocked by default.
+- Loopback, private (RFC-1918/4193), shared (100.64.0.0/10) and benchmarking
+  (198.18.0.0/15) addresses are blocked unless private targets are explicitly
+  allowed. Unspecified and 0.0.0.0/8, link-local, cloud metadata and multicast
+  addresses are always blocked. NAT64 and 6to4 addresses are judged by the IPv4
+  address they carry.
 - DNS rebinding is prevented: hostnames are resolved once inside a custom
   `DialContext`, every returned address is validated, and the connection is made
   to the pre-validated IP directly.
@@ -605,9 +609,11 @@ See [ADR 0028](docs/adr/0028-literal-job-input.md).
   response, finding, or log; URL userinfo and sensitive query params are redacted
   from evidence.
 - Redirects are not followed; response bodies are capped (5 MB default).
-- Standalone `/tests/execute` is unauthenticated even when queue bearer keys are
-  configured. Restrict access to that server appropriately; keys protect the queue,
-  runner and audit routes, not the synchronous executor.
+- `vardrgate serve` (and a bare `vardrgate`) listens on loopback unless
+  `VARDRGATE_HOST` says otherwise. When API keys are configured they protect
+  `/tests/execute` as well as the queue, runner and audit routes; only `/health`
+  stays open. Without keys every route is open, which is meant for local
+  development only.
 
 ## Project layout
 

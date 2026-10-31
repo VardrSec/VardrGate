@@ -108,8 +108,9 @@ Validates URLs and IP addresses before any network request is made.
 - `CheckIP` is exported so the transport `DialContext` can reuse the same policy at connect time.
 - Hostname targets are **not** resolved in `Check`; DNS resolution and IP validation happen inside `buildHTTPClient`'s `DialContext` to prevent DNS rebinding.
 
-Always blocked (even with `AllowPrivateTargets=true`): unspecified, link-local, multicast.
-Blocked by default, opt-in via `AllowPrivateTargets`: loopback, RFC-1918/4193 private ranges.
+Always blocked (even with `AllowPrivateTargets=true`): unspecified and 0.0.0.0/8, link-local, cloud metadata addresses outside link-local (100.100.100.200), multicast.
+Blocked by default, opt-in via `AllowPrivateTargets`: loopback, RFC-1918/4193 private ranges, shared address space 100.64.0.0/10, benchmarking 198.18.0.0/15.
+NAT64 (64:ff9b::/96) and 6to4 (2002::/16) addresses are also judged by the IPv4 address they carry.
 
 ### `internal/client`
 
@@ -245,7 +246,7 @@ Exposes the HTTP API. No business logic.
 - `GET /health` — 200 `{"status":"ok"}`.
 - `POST /tests/execute` — synchronous execution; 1 MB `MaxBytesReader`, single-decoder, second `Decode` must return `io.EOF`, stable error codes.
 - Runner job queue (in `jobs.go`), matching VardrRunner's client shapes: `POST /jobs`, `GET /jobs/pending`, `GET /jobs/{id}`, `POST /jobs/{id}/claim` (409 on double-claim), `PATCH /jobs/{id}`, `POST /jobs/{id}/done|failed|events|upload`, `POST /runner/heartbeat`. Uses Go 1.22 method+path routing.
-- `protected`/`resolveTenant` enforce per-tenant bearer keys (token→tenant map, constant-time compare) on `/jobs`, `/runner`, `/audit`; the resolved tenant is carried on the request context. Every job records its owning tenant; `requireOwned` returns 404 for cross-tenant access (existence never revealed), and pending/audit lists are tenant-filtered. `/health` and `/tests/execute` stay open. Empty key map = dev mode (`default` tenant). See ADR 0005.
+- `protected`/`resolveTenant` enforce per-tenant bearer keys (token→tenant map, constant-time compare) on `/tests/execute`, `/jobs`, `/runner`, `/audit`; the resolved tenant is carried on the request context. Every job records its owning tenant; `requireOwned` returns 404 for cross-tenant access (existence never revealed), and pending/audit lists are tenant-filtered. `/health` stays open. Empty key map = dev mode (`default` tenant). See ADR 0005.
 - `writeJSON` and `writeError` (stable `code` envelope) are shared helpers; all responses carry `Content-Type: application/json`.
 
 ### `cmd/vardrgate`
@@ -256,7 +257,7 @@ Exit codes are shared by every command that executes a test case: `0` ran clean,
 
 | Command | Purpose |
 |---|---|
-| `serve` (default) | HTTP API. Reads `PORT` (1–65535, default 8080), `ALLOW_PRIVATE_TARGETS`, `VARDRGATE_API_KEY(S)`, `VARDRGATE_DB`; wires `client → engine → handler` with a store (`ReadHeaderTimeout` 5 s, `ReadTimeout` 30 s, `WriteTimeout` 60 s, `IdleTimeout` 120 s; 10 s graceful shutdown on `SIGINT`/`SIGTERM`) |
+| `serve` (default) | HTTP API. Reads `VARDRGATE_HOST` (IP or `localhost`, default `127.0.0.1`), `PORT` (1–65535, default 8080), `ALLOW_PRIVATE_TARGETS`, `VARDRGATE_API_KEY(S)`, `VARDRGATE_DB`; wires `client → engine → handler` with a store (`ReadHeaderTimeout` 5 s, `ReadTimeout` 30 s, `WriteTimeout` 60 s, `IdleTimeout` 120 s; 10 s graceful shutdown on `SIGINT`/`SIGTERM`) |
 | `policy run` | Compile a policy against one environment and run it: `--policy --base --param name=value (repeatable) --identities [--tenant --id --fail-on --allow-private-targets --timeout]`. Or `--suite <file> [--base]` to run a suite; per-policy flags are rejected with `--suite`. Every compiled case is validated before any request; in suite mode a run-time failure (e.g. setup) is recorded in `Result.Error`, the rest continue, and the run exits 3 |
 | `run` | `--job <file>` (one envelope) or `--cases <file>` (a JSON array). A suite is fully validated via `engine.Validate` before any of it runs, so every authoring error is reported together. `--literal-job` (with `--job` only) skips `${VAR}` expansion for callers that resolve credentials themselves (ADR 0028) |
 
