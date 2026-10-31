@@ -34,6 +34,41 @@ func TestResolvePort(t *testing.T) {
 	}
 }
 
+func TestResolveHost(t *testing.T) {
+	tests := []struct {
+		env     string
+		want    string
+		wantErr bool
+	}{
+		{env: "", want: "127.0.0.1"},
+		{env: "0.0.0.0", want: "0.0.0.0"},
+		{env: "::1", want: "::1"},
+		{env: "localhost", want: "localhost"},
+		{env: "example.com", wantErr: true},
+		{env: "127.0.0.1:8080", wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run("env="+tt.env, func(t *testing.T) {
+			t.Setenv("VARDRGATE_HOST", tt.env)
+			got, err := resolveHost()
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if err == nil && got != tt.want {
+				t.Errorf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestIsLoopback(t *testing.T) {
+	for host, want := range map[string]bool{"127.0.0.1": true, "::1": true, "localhost": true, "0.0.0.0": false, "10.0.0.5": false} {
+		if got := isLoopback(host); got != want {
+			t.Errorf("isLoopback(%q) = %v, want %v", host, got, want)
+		}
+	}
+}
+
 func TestResolveAllowPrivateTargets(t *testing.T) {
 	tests := []struct {
 		env     string

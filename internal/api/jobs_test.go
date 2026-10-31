@@ -375,3 +375,31 @@ func TestTenantIsolation_OwnerCanClaim(t *testing.T) {
 		t.Fatalf("owner claim: expected 200, got %d", rr.Code)
 	}
 }
+
+// The synchronous executor sends caller-supplied credentials to any public
+// target, so configured keys protect it like the queue.
+func TestTestsExecute_RequiresAKeyWhenKeysAreConfigured(t *testing.T) {
+	h, _ := newJobHandler("secret-key")
+	for _, auth := range []string{"", "wrong-key"} {
+		if rr := do(h, http.MethodPost, "/tests/execute", auth, validTestCaseJSON()); rr.Code != http.StatusUnauthorized {
+			t.Errorf("auth %q: got %d, want 401", auth, rr.Code)
+		}
+	}
+	if rr := do(h, http.MethodPost, "/tests/execute", "secret-key", validTestCaseJSON()); rr.Code == http.StatusUnauthorized {
+		t.Errorf("a valid key was refused: %s", rr.Body.String())
+	}
+}
+
+func TestTestsExecute_StaysOpenWithoutKeys(t *testing.T) {
+	h, _ := newJobHandler("")
+	if rr := do(h, http.MethodPost, "/tests/execute", "", validTestCaseJSON()); rr.Code == http.StatusUnauthorized {
+		t.Errorf("development mode must not require a key: %s", rr.Body.String())
+	}
+}
+
+func TestHealth_StaysOpenWithKeys(t *testing.T) {
+	h, _ := newJobHandler("secret-key")
+	if rr := do(h, http.MethodGet, "/health", "", ""); rr.Code != http.StatusOK {
+		t.Errorf("health got %d, want 200", rr.Code)
+	}
+}

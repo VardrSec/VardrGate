@@ -53,15 +53,17 @@ type Handler struct {
 // New wires routes and returns a ready-to-serve Handler.
 //
 // st backs the runner job queue. keys maps each accepted bearer token to a
-// tenant; a token is required on the /jobs, /runner, and /audit endpoints, and
-// scopes the caller to that tenant's jobs. The synchronous /health and
-// /tests/execute endpoints are always open. An empty keys map disables auth
-// (dev only) — main logs a warning in that case.
+// tenant; a token is required on /tests/execute and the /jobs, /runner, and
+// /audit endpoints, and scopes the caller to that tenant's jobs. /health is
+// always open. An empty keys map disables auth (dev only) — main logs a warning
+// in that case.
 func New(log *slog.Logger, eng *engine.Engine, st store.Store, keys map[string]string) *Handler {
 	h := &Handler{log: log, mux: http.NewServeMux(), engine: eng, store: st, keys: keys}
 
 	h.mux.HandleFunc("/health", h.handleHealth)
-	h.mux.HandleFunc("/tests/execute", h.handleTestsExecute)
+	// The executor sends requests with caller-supplied credentials to any public
+	// target, so it is protected like the queue whenever keys are configured.
+	h.mux.HandleFunc("/tests/execute", h.protected(h.handleTestsExecute))
 
 	// Runner job queue (Bearer-protected). Method+path patterns require Go 1.22+.
 	h.mux.HandleFunc("POST /jobs", h.protected(h.handleCreateJob))

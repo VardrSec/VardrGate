@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -27,6 +28,11 @@ func serve() {
 		log.Error("invalid PORT", "error", err)
 		os.Exit(exitUsage)
 	}
+	host, err := resolveHost()
+	if err != nil {
+		log.Error("invalid VARDRGATE_HOST", "error", err)
+		os.Exit(exitUsage)
+	}
 
 	allowPrivate, err := resolveAllowPrivateTargets()
 	if err != nil {
@@ -42,7 +48,10 @@ func serve() {
 
 	keys := resolveAPIKeys()
 	if len(keys) == 0 {
-		log.Warn("no API keys configured; the /jobs, /runner, and /audit endpoints are unauthenticated (development only)")
+		log.Warn("no API keys configured; /tests/execute and the /jobs, /runner, and /audit endpoints are unauthenticated (development only)")
+		if !isLoopback(host) {
+			log.Warn("serving without API keys on a non-loopback address; any client that can reach it can run tests", "host", host)
+		}
 	} else {
 		log.Info("API key authentication enabled", "tenants", len(distinctTenants(keys)))
 	}
@@ -57,7 +66,7 @@ func serve() {
 	handler := api.New(log, eng, st, keys)
 
 	srv := &http.Server{
-		Addr:              fmt.Sprintf(":%d", port),
+		Addr:              net.JoinHostPort(host, strconv.Itoa(port)),
 		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       30 * time.Second,
@@ -101,6 +110,28 @@ func resolvePort() (int, error) {
 		return 0, fmt.Errorf("PORT must be an integer between 1 and 65535, got %q", raw)
 	}
 	return n, nil
+}
+
+// resolveHost returns the address to listen on: VARDRGATE_HOST, or loopback
+// when unset, so a bare `vardrgate` is reachable only from this machine. Set it
+// to 0.0.0.0 (or ::) to listen on every interface, together with API keys.
+func resolveHost() (string, error) {
+	raw := os.Getenv("VARDRGATE_HOST")
+	if raw == "" {
+		return "127.0.0.1", nil
+	}
+	if raw != "localhost" && net.ParseIP(raw) == nil {
+		return "", fmt.Errorf("VARDRGATE_HOST must be an IP address or localhost, got %q", raw)
+	}
+	return raw, nil
+}
+
+func isLoopback(host string) bool {
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 // resolveStore selects the job store from the environment. VARDRGATE_DB, when
