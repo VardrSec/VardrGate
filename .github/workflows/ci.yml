@@ -11,13 +11,16 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          go-version-file: go.mod
-          check-latest: true
+          persist-credentials: false
+
+      # The same toolchain the VardrSec distribution and Runner toolkit build with.
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: "1.27.3"
+          cache: false
 
       - name: Verify formatting
         run: |
@@ -37,6 +40,12 @@ jobs:
       - name: Build
         run: go build ./...
 
+      # Fails on a known vulnerability reachable from this module's code.
+      - name: Vulnerability check
+        env:
+          GOTOOLCHAIN: local
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+
       # Regression budgets are enforced by go test above (cmd/authbench). This
       # step records each mode so every run retains a reproducible report.
       - name: Authorization benchmark
@@ -46,7 +55,7 @@ jobs:
           go run ./cmd/authbench -assertions -verify -repeat 3 -out "$RUNNER_TEMP/authz-verified.json"
 
       - name: Retain benchmark reports
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: authz-benchmark
           path: ${{ runner.temp }}/authz-*.json

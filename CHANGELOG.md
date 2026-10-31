@@ -34,6 +34,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Documentation
 
+- Fix the GitHub Actions example, which referenced a `v0.2.0` tag that does not exist and
+  used suites and SARIF output the packaged v0.1.0 binary lacks. It now references the
+  action by a reviewed commit and builds that revision with `install: "false"`. CI pins
+  its actions by commit and Go to 1.27.3, and fails on a reachable known vulnerability
+  (`govulncheck`).
+
 - Correct the historical MVP output inventory (SARIF is implemented; JUnit is not)
   and reconcile the five-stage research status with merged/integrated source,
   preserving its original benchmark evidence and release boundary.
