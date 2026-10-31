@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-30
+
 ### Security
 
 - `vardrgate serve`, and a bare `vardrgate`, now listens on `127.0.0.1` unless
