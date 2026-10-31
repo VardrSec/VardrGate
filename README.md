@@ -31,11 +31,10 @@ and a run that reached nothing fails instead of passing.
 Download a checksummed archive from [GitHub Releases](https://github.com/VardrSec/VardrGate/releases)
 for Linux or macOS (amd64, arm64) or Windows (amd64), extract `vardrgate`
 (Windows: `vardrgate.exe`) and put it on your `PATH`. No Go installation is
-needed. See [verification and installation](docs/releases/v0.1.0.md).
-The packaged v0.1.0 release covers the original demo/policy workflow; current
-source documentation also describes later, unreleased features. Use the
-[pinned strict-CI build](docs/strict-ci.md#build-a-compatible-binary) for
-`--strict-identity-preflight` and `--fail-on-inconclusive`; v0.1.0 lacks both flags.
+needed. See [v0.2.0 installation and upgrade notes](docs/releases/v0.2.0.md).
+Version v0.2.0 includes `--literal-job`, `--strict-identity-preflight` and
+`--fail-on-inconclusive`. The older v0.1.0 archives lack these controls.
+The [strict-CI guide](docs/strict-ci.md) also provides an exact source build.
 
 ```sh
 vardrgate demo
