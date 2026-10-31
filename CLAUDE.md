@@ -108,8 +108,9 @@ Validates URLs and IP addresses before any network request is made.
 - `CheckIP` is exported so the transport `DialContext` can reuse the same policy at connect time.
 - Hostname targets are **not** resolved in `Check`; DNS resolution and IP validation happen inside `buildHTTPClient`'s `DialContext` to prevent DNS rebinding.
 
-Always blocked (even with `AllowPrivateTargets=true`): unspecified, link-local, multicast.
-Blocked by default, opt-in via `AllowPrivateTargets`: loopback, RFC-1918/4193 private ranges.
+Always blocked (even with `AllowPrivateTargets=true`): unspecified and 0.0.0.0/8, link-local, cloud metadata addresses outside link-local (100.100.100.200), multicast.
+Blocked by default, opt-in via `AllowPrivateTargets`: loopback, RFC-1918/4193 private ranges, shared address space 100.64.0.0/10, benchmarking 198.18.0.0/15.
+NAT64 (64:ff9b::/96) and 6to4 (2002::/16) addresses are also judged by the IPv4 address they carry.
 
 ### `internal/client`
 
