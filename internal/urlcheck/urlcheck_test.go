@@ -184,3 +184,68 @@ func TestCheckIP_BlocksAlways(t *testing.T) {
 		}
 	}
 }
+
+func TestCheckIP_NonPublicRangesFollowThePrivateOptIn(t *testing.T) {
+	for _, ip := range []string{
+		"100.64.0.1",      // shared address space (carrier-grade NAT, Tailscale)
+		"100.127.255.254", // top of 100.64.0.0/10
+		"198.18.0.1",      // benchmarking
+		"198.19.255.254",
+	} {
+		if err := CheckIP(net.ParseIP(ip), false); err == nil || !strings.Contains(err.Error(), "private-network") {
+			t.Errorf("CheckIP(%s, false) = %v, want a private-network refusal", ip, err)
+		}
+		if err := CheckIP(net.ParseIP(ip), true); err != nil {
+			t.Errorf("CheckIP(%s, true) = %v, want it allowed by the explicit opt-in", ip, err)
+		}
+	}
+}
+
+func TestCheckIP_AlwaysBlocksThisNetworkAndMetadata(t *testing.T) {
+	for _, c := range []struct{ ip, wantErr string }{
+		{"0.1.2.3", "unspecified"},
+		{"0.255.255.255", "unspecified"},
+		{"100.100.100.200", "metadata"}, // Alibaba Cloud metadata, inside 100.64.0.0/10
+	} {
+		for _, allowPrivate := range []bool{false, true} {
+			err := CheckIP(net.ParseIP(c.ip), allowPrivate)
+			if err == nil || !strings.Contains(err.Error(), c.wantErr) {
+				t.Errorf("CheckIP(%s, %v) = %v, want error containing %q", c.ip, allowPrivate, err, c.wantErr)
+			}
+		}
+	}
+}
+
+func TestCheckIP_JudgesTheIPv4InsideNAT64And6to4(t *testing.T) {
+	for _, c := range []struct {
+		ip             string
+		blockedDefault bool
+		blockedAlways  bool
+	}{
+		{"64:ff9b::7f00:1", true, false},       // NAT64 of 127.0.0.1
+		{"64:ff9b::a00:1", true, false},        // NAT64 of 10.0.0.1
+		{"64:ff9b::a9fe:a9fe", true, true},     // NAT64 of 169.254.169.254
+		{"2002:7f00:1::1", true, false},        // 6to4 of 127.0.0.1
+		{"2002:a9fe:a9fe::1", true, true},      // 6to4 of 169.254.169.254
+		{"64:ff9b::808:808", false, false},     // NAT64 of public 8.8.8.8
+		{"2001:4860:4860::8888", false, false}, // ordinary public IPv6
+	} {
+		err := CheckIP(net.ParseIP(c.ip), false)
+		if (err != nil) != c.blockedDefault {
+			t.Errorf("CheckIP(%s, false) = %v, want blocked=%v", c.ip, err, c.blockedDefault)
+		}
+		err = CheckIP(net.ParseIP(c.ip), true)
+		if (err != nil) != c.blockedAlways {
+			t.Errorf("CheckIP(%s, true) = %v, want blocked=%v", c.ip, err, c.blockedAlways)
+		}
+	}
+}
+
+func TestCheck_LiteralNonPublicHostsUseTheSameRules(t *testing.T) {
+	if err := Check(context.Background(), "http://100.64.1.1/", false); err == nil {
+		t.Error("expected a shared-address-space literal to be refused by default")
+	}
+	if err := Check(context.Background(), "http://[64:ff9b::7f00:1]/", true); err != nil {
+		t.Errorf("NAT64 loopback with the private opt-in: %v", err)
+	}
+}
