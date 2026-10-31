@@ -8,6 +8,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Security
 
+- `vardrgate serve`, and a bare `vardrgate`, now listens on `127.0.0.1` unless
+  `VARDRGATE_HOST` names another address (`0.0.0.0` or `::` for every interface);
+  it previously listened on every interface. Configured API keys now also protect
+  `/tests/execute`, which sends caller-supplied credentials to any public target;
+  only `/health` stays open. Without keys the server stays open for local
+  development and warns when it listens beyond loopback.
+
 - `run --job --literal-job` uses the job envelope exactly as written, with no
   `${VAR}` expansion. A caller that resolves credentials itself, such as
   VardrRunner, passes it so resolved values are never read again as
