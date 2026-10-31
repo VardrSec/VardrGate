@@ -6,6 +6,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Documentation
+
+- Agent instructions consolidated: `AGENTS.md` is the single source for Claude
+  Code and Codex and keeps every security and contract invariant; `CLAUDE.md`
+  imports it. Package responsibilities and the CLI surface moved to
+  [`docs/architecture.md`](docs/architecture.md). No behavior change.
+
 ## [0.2.0] - 2026-10-30
 
 ### Security
