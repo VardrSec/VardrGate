@@ -150,14 +150,25 @@ permissions:
   security-events: write   # only needed for the SARIF upload
 
 steps:
-  - uses: actions/checkout@v4
-  - uses: VardrSec/VardrGate@v0.2.0
+  - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+  - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+    with:
+      go-version: "1.27.3"
+  - name: Build vardrgate at the reviewed revision
+    shell: bash
+    run: |
+      git clone --quiet https://github.com/VardrSec/VardrGate.git "$RUNNER_TEMP/vardrgate-src"
+      git -C "$RUNNER_TEMP/vardrgate-src" checkout --quiet --detach c5682506ea1151eec98de6c957e59584e3e5a8fb
+      (cd "$RUNNER_TEMP/vardrgate-src" && go build -trimpath -o "$RUNNER_TEMP/bin/vardrgate" ./cmd/vardrgate)
+      echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+  - uses: VardrSec/VardrGate@c5682506ea1151eec98de6c957e59584e3e5a8fb
     env:
       VARDRGATE_BASE_URL: ${{ vars.STAGING_API }}
       VARDRGATE_OWNER_USER_ID: "42"
       VARDRGATE_OWNER_TOKEN: ${{ secrets.OWNER_TOKEN }}
       VARDRGATE_OTHER_USER_TOKEN: ${{ secrets.OTHER_USER_TOKEN }}
     with:
+      install: "false"
       args: policy run --suite vardrgate/suite.yaml --fail-on high --format markdown --sarif vardrgate.sarif
   - uses: github/codeql-action/upload-sarif@v3
     if: always()
@@ -165,9 +176,14 @@ steps:
       sarif_file: vardrgate.sarif
 ```
 
-The action installs the release named by its tag, verifies the archive against
-that release's `SHA256SUMS`, runs `vardrgate` with `args`, writes stdout to the
-job summary, and exposes the exit code as `steps.<id>.outputs.exit-code`. Set
+Policy suites, the text/Markdown/SARIF formats and this action are not in the
+packaged v0.1.0 binary, so the example builds the same reviewed revision it
+references the action by and sets `install: "false"`. With a release that
+includes them, reference the action by that release tag and drop the build step:
+the action then installs the release named by its tag (or its `version` input),
+verifies the archive against that release's `SHA256SUMS`, runs `vardrgate` with
+`args`, writes stdout to the job summary, and exposes the exit code as
+`steps.<id>.outputs.exit-code`. Set
 `verify-attestation: true` to also check build provenance with
 `gh attestation verify`. There is no implicit "latest": pin a release. See
 [ADR 0015](docs/adr/0015-github-action.md).
