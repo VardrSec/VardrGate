@@ -9,6 +9,7 @@ import (
 
 	"github.com/VardrSec/vardrgate/internal/compare"
 	"github.com/VardrSec/vardrgate/internal/model"
+	"github.com/VardrSec/vardrgate/internal/requestguard"
 )
 
 // ErrSetupFailed reports that a setup step did not complete, so the test case
@@ -70,7 +71,7 @@ func (e *Engine) runSetup(ctx context.Context, tc model.AuthorizationTestCase) (
 			return nil, fmt.Errorf("%w: step %q: %s", ErrSetupFailed, label, err)
 		}
 
-		exec := e.exec.Execute(ctx, actor, req)
+		exec := e.exec.Execute(requestguard.WithPhase(ctx, "setup"), actor, req)
 		if exec.Error != "" {
 			return nil, fmt.Errorf("%w: step %q: %s", ErrSetupFailed, label, exec.Error)
 		}

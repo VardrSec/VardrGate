@@ -1,5 +1,9 @@
 # VardrGate architecture
 
+The optional NM-1 fixed-request projection is described in
+[ADR 0029](adr/0029-nm1-request-projection.md). It adds no worker or permission
+issuer and leaves ordinary unguarded invocation unchanged.
+
 How the packages divide the work, what each one guarantees, and the CLI surface.
 The directory layout is in the [README](../README.md#project-layout); design
 decisions are in [`docs/adr/`](adr/). The rules an agent or contributor must not

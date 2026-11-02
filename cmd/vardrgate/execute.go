@@ -19,6 +19,7 @@ import (
 	"github.com/VardrSec/vardrgate/internal/model"
 	"github.com/VardrSec/vardrgate/internal/policy"
 	"github.com/VardrSec/vardrgate/internal/report"
+	"github.com/VardrSec/vardrgate/internal/requestguard"
 	"github.com/VardrSec/vardrgate/internal/secretref"
 	"github.com/VardrSec/vardrgate/internal/suite"
 )
@@ -158,6 +159,7 @@ Flags:
 	requirePreflight := fs.Bool("require-identity-preflight", false, "require at least one declared identity preflight (Runner compatibility guard)")
 	strictPreflight := fs.Bool("strict-identity-preflight", false, "require principal preflight for every assessed credentialed identity")
 	literalJob := fs.Bool("literal-job", false, "use the job envelope exactly as written, without ${VAR} expansion (--job only; for callers that resolve credentials themselves)")
+	guardPath := fs.String("request-guard", "", "NM-1 fixed-request projection (--job --literal-job only; permission is validated by Runner)")
 	timeout := fs.Duration("timeout", 0, "per-request timeout (--cases only; 0 uses the client default)")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -167,6 +169,9 @@ Flags:
 	}
 	if *literalJob && *jobPath == "" {
 		return errors.New("--literal-job requires --job")
+	}
+	if *guardPath != "" && (*jobPath == "" || !*literalJob || *allowMutating || flagProvided(fs, "strict-identity-preflight")) {
+		return errors.New("--request-guard requires an unchanged literal job and no execution overrides")
 	}
 	if err := out.validate(); err != nil {
 		return err
@@ -201,7 +206,25 @@ Flags:
 		if *allowMutating {
 			tc.Mutating = true
 		}
-		eng := engine.New(client.NewWithConfig(nil, env.ClientConfig()))
+		cfg := env.ClientConfig()
+		if *guardPath != "" {
+			projection, err := requestguard.Load(*guardPath)
+			if err != nil {
+				return err
+			}
+			binary, err := os.Executable()
+			if err != nil || projection.CheckBinary(binary) != nil {
+				return errors.New("request projection tool mismatch")
+			}
+			if projection.Execution.Timeout != env.Config.Execution.TimeoutSeconds || projection.Execution.MaxBytes != env.Config.Execution.MaxResponseBytes || projection.Execution.AllowPrivate != env.Config.Execution.AllowPrivateTargets {
+				return errors.New("request projection options mismatch")
+			}
+			cfg.RequestGuard, err = requestguard.New(projection)
+			if err != nil {
+				return err
+			}
+		}
+		eng := engine.New(client.NewWithConfig(nil, cfg))
 		res, err := eng.Run(context.Background(), tc)
 		if err != nil {
 			return runError(err)

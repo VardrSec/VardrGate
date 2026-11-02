@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/VardrSec/vardrgate/internal/model"
+	"github.com/VardrSec/vardrgate/internal/requestguard"
 	"github.com/VardrSec/vardrgate/internal/urlcheck"
 )
 
@@ -22,7 +23,8 @@ const (
 type Config struct {
 	Timeout             time.Duration
 	MaxBodyBytes        int64
-	AllowPrivateTargets bool // permit loopback and private-network targets
+	AllowPrivateTargets bool                // permit loopback and private-network targets
+	RequestGuard        *requestguard.Guard // explicit NM-1 fixed-request projection only
 }
 
 // Client executes HTTP requests on behalf of an identity.
@@ -104,6 +106,14 @@ func buildHTTPClient(allowPrivate bool) *http.Client {
 // with remaining identities.
 func (c *Client) Execute(ctx context.Context, identity model.Identity, tmpl model.RequestTemplate) model.ExecutionResult {
 	result := model.ExecutionResult{IdentityID: identity.ID}
+	if c.cfg.RequestGuard != nil {
+		if err := c.cfg.RequestGuard.Allow(ctx, identity, tmpl); err != nil {
+			result.Error = "authorization request projection denied"
+			result.ErrorKind = model.ErrorKindURLValidation
+			result.ObservedOutcome = model.OutcomeError
+			return result
+		}
+	}
 
 	// Pre-flight: validate scheme and literal IPs before spending the timeout budget.
 	// Hostname-based targets are validated at connect time by the DialContext.

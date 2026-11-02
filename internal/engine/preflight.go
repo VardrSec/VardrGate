@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/VardrSec/vardrgate/internal/model"
+	"github.com/VardrSec/vardrgate/internal/requestguard"
 )
 
 func validatePreflight(tc model.AuthorizationTestCase) error {
@@ -104,7 +105,7 @@ func (e *Engine) runPreflight(ctx context.Context, tc model.AuthorizationTestCas
 		if p == nil {
 			continue
 		}
-		ex := e.exec.Execute(ctx, identity, model.RequestTemplate{Method: "GET", URL: p.URL})
+		ex := e.exec.Execute(requestguard.WithPhase(ctx, "preflight"), identity, model.RequestTemplate{Method: "GET", URL: p.URL})
 		r := model.PreflightResult{IdentityID: identity.ID, Status: "failed", Reason: "unexpected_status", StatusCode: ex.StatusCode}
 		switch {
 		case ex.Error != "" || ex.ErrorKind != "":
