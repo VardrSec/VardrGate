@@ -6,6 +6,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Opt-in NM-1 fixed-request projection for literal Runner jobs: bind Gate binary
+  and options, guarding setup, preflight, resource, verification and reset before
+  dispatch. Ordinary invocation and evidence behavior remain unchanged; Runner
+  validates contract permission independently.
+
 ### Documentation
 
 - Agent instructions consolidated: `AGENTS.md` is the single source for Claude

@@ -13,6 +13,7 @@ import (
 	"github.com/VardrSec/vardrgate/internal/client"
 	"github.com/VardrSec/vardrgate/internal/compare"
 	"github.com/VardrSec/vardrgate/internal/model"
+	"github.com/VardrSec/vardrgate/internal/requestguard"
 )
 
 // Executor abstracts HTTP execution so the engine can be tested without a real network.
@@ -177,7 +178,7 @@ func (e *Engine) Run(ctx context.Context, tc model.AuthorizationTestCase) (Resul
 			// reported as such rather than as a verifier problem.
 			verified[identity.ID] = demoteRejectedCredential(tc, identity, exec, a)
 		} else {
-			exec = e.exec.Execute(ctx, identity, req)
+			exec = e.exec.Execute(requestguard.WithPhase(ctx, "resource"), identity, req)
 		}
 		exec.ResponseProfile = compare.Profile(exec.Body)
 		// The executor classifies against the default status mapping; it knows

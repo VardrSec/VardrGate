@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/VardrSec/vardrgate/internal/model"
+	"github.com/VardrSec/vardrgate/internal/requestguard"
 )
 
 // A write's own response cannot prove whether the write happened: an API can
@@ -170,7 +171,7 @@ func (e *Engine) observe(ctx context.Context, wv *model.WriteVerification, after
 	}
 	req := wv.Request
 	req.Method = verifierMethod(wv)
-	ex := e.exec.Execute(ctx, wv.Identity, req)
+	ex := e.exec.Execute(requestguard.WithPhase(ctx, "verification"), wv.Identity, req)
 	if ctx.Err() != nil {
 		return observedState{}, reasonCancelled
 	}
@@ -239,7 +240,7 @@ func (e *Engine) verifiedExecute(ctx context.Context, tc model.AuthorizationTest
 				actor = id
 			}
 		}
-		reset := e.exec.Execute(ctx, actor, wv.Reset.Request)
+		reset := e.exec.Execute(requestguard.WithPhase(ctx, "reset"), actor, wv.Reset.Request)
 		a.Verification.ResetStatus = reset.StatusCode
 		if reset.Error != "" || reset.ErrorKind != "" || reset.StatusCode < 200 || reset.StatusCode >= 300 || reset.StatusCode == 202 {
 			a.Reason = reasonResetFailed
@@ -292,7 +293,7 @@ func (e *Engine) verifiedExecute(ctx context.Context, tc model.AuthorizationTest
 		return model.ExecutionResult{IdentityID: identity.ID, Error: "write verification could not read the state before the request", ErrorKind: model.ErrorKindVerification}, a
 	}
 
-	exec := e.exec.Execute(ctx, identity, req)
+	exec := e.exec.Execute(requestguard.WithPhase(ctx, "resource"), identity, req)
 
 	after, reason := e.observe(ctx, wv, true)
 	a.Verification.AfterStatus = after.status
