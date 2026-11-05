@@ -6,6 +6,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed-request projections reject duplicate JSON body keys, including nested and
+  escaped-equivalent keys, before dispatch. Both actual requests and projected
+  bodies supplied directly to the guard are checked, preserving JSON number
+  comparison and ordinary unguarded behavior.
+
 ### Added
 
 - Opt-in NM-1 fixed-request projection for literal Runner jobs: bind Gate binary

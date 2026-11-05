@@ -195,3 +195,85 @@ func TestProjectionIsImmutableAndFileReadBounded(t *testing.T) {
 		t.Fatal("oversize file accepted")
 	}
 }
+
+func TestDuplicateBodyKeysDenied(t *testing.T) {
+	for _, tc := range []struct{ name, approved, duplicate string }{
+		{"root", `{"role":"reader"}`, `{"role":"admin","role":"reader"}`},
+		{"identical", `{"role":"reader"}`, `{"role":"reader","role":"reader"}`},
+		{"nested", `{"user":{"role":"reader"}}`, `{"user":{"role":"admin","role":"reader"}}`},
+		{"array", `[{"role":"reader"}]`, `[{"role":"admin","role":"reader"}]`},
+		{"escaped", `{"role":"reader"}`, `{"role":"admin","\u0072ole":"reader"}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p := fixturePlan()
+			p.Dispatches[0].Request.Body = json.RawMessage(tc.duplicate)
+			if _, err := New(p); err == nil {
+				t.Error("duplicate projected body accepted by New")
+			}
+			data, err := json.Marshal(p)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := Parse(data); err == nil {
+				t.Error("duplicate projected body accepted by Parse")
+			}
+			p.Dispatches[0].Request.Body = json.RawMessage(tc.approved)
+			g, err := New(p)
+			if err != nil {
+				t.Fatal(err)
+			}
+			ctx := WithPhase(context.Background(), "resource")
+			actor := model.Identity{ID: "owner"}
+			req := model.RequestTemplate{Method: "GET", URL: p.Dispatches[0].Request.URL, Body: json.RawMessage(tc.duplicate)}
+			if g.Allow(ctx, actor, req) == nil {
+				t.Error("duplicate actual body accepted")
+			}
+			if g.total != 0 || g.counts[0] != 0 || g.stage != -1 {
+				t.Error("denial changed guard state")
+			}
+			req.Body = json.RawMessage(tc.approved)
+			if err := g.Allow(ctx, actor, req); err != nil {
+				t.Fatal("subsequent valid request denied")
+			}
+		})
+	}
+}
+
+func TestBodyComparisonSemantics(t *testing.T) {
+	deep := strings.Repeat("[", 64) + "1" + strings.Repeat("]", 64)
+	for _, tc := range []struct {
+		name, approved, actual string
+		allowed                bool
+	}{
+		{"formatting and key order", `{"a":1,"b":true}`, " {\"b\":true, \"a\":1} \n", true},
+		{"escaped key", `{"role":"reader"}`, `{"\u0072ole":"reader"}`, true},
+		{"separate objects", `[{"a":1},{"a":2}]`, `[{"a":1},{"a":2}]`, true},
+		{"case distinct", `{"a":1,"A":2}`, `{"A":2,"a":1}`, true},
+		{"deep body", deep, deep, true},
+		{"large number", `1e400`, `1e400`, true},
+		{"precise integer", `9007199254740993`, `9007199254740992`, false},
+		{"number spelling", `1`, `1.0`, false},
+		{"number exponent", `1`, `1e0`, false},
+		{"string", `"hello"`, `"hello"`, true},
+		{"null", `null`, `null`, true},
+		{"empty", ``, ``, true},
+		{"absent and null", ``, `null`, true},
+		{"array order", `[1,2]`, `[2,1]`, false},
+		{"trailing value", `{}`, `{} {}`, false},
+		{"trailing junk", `{}`, `{} x`, false},
+		{"malformed", `{}`, `{"a":}`, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p := fixturePlan()
+			p.Dispatches[0].Request.Body = json.RawMessage(tc.approved)
+			g, err := New(p)
+			if err != nil {
+				t.Fatal(err)
+			}
+			err = g.Allow(WithPhase(context.Background(), "resource"), model.Identity{ID: "owner"}, model.RequestTemplate{Method: "GET", URL: p.Dispatches[0].Request.URL, Body: json.RawMessage(tc.actual)})
+			if (err == nil) != tc.allowed {
+				t.Fatalf("allowed=%v, want %v", err == nil, tc.allowed)
+			}
+		})
+	}
+}
