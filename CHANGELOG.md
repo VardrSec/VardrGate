@@ -8,6 +8,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Guarded literal managed runs cooperatively cancel HTTP work on SIGINT/SIGTERM,
+  publish best-effort partial JSON with fixed `execution_cancelled` diagnostics,
+  and exit nonzero. Completed observations remain evidence; interrupted work is
+  inconclusive. No lease or hard deadline is extended (ADR 0030).
+
 - Fixed-request projections reject duplicate JSON body keys, including nested and
   escaped-equivalent keys, before dispatch. Both actual requests and projected
   bodies supplied directly to the guard are checked, preserving JSON number
