@@ -115,6 +115,10 @@ func InconclusiveReasons() []string {
 // Run validates the test case, executes the request for each identity,
 // evaluates expected versus observed access, and returns findings.
 func (e *Engine) Run(ctx context.Context, tc model.AuthorizationTestCase) (Result, error) {
+	return e.run(ctx, tc, nil)
+}
+
+func (e *Engine) run(ctx context.Context, tc model.AuthorizationTestCase, checkpoint func(Result) error) (Result, error) {
 	if err := validate(tc); err != nil {
 		return Result{}, err
 	}
@@ -170,6 +174,11 @@ func (e *Engine) Run(ctx context.Context, tc model.AuthorizationTestCase) (Resul
 	verified := make(map[string]model.Assessment)
 	verification := verificationSession{}
 	for _, identity := range executionOrder(tc) {
+		if checkpoint != nil && ctx.Err() == nil {
+			if err := checkpoint(checkpointResult(tc, result.Preflight, execByID)); err != nil {
+				return Result{}, errors.New("managed checkpoint unavailable")
+			}
+		}
 		var exec model.ExecutionResult
 		if ea, ok := expectedFor(tc, identity.ID); ok && tc.WriteVerification != nil && ea.Decision != model.AccessDecisionSkip {
 			var a model.Assessment

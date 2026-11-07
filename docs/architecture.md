@@ -4,6 +4,12 @@ The optional NM-1 fixed-request projection is described in
 [ADR 0029](adr/0029-nm1-request-projection.md). It adds no worker or permission
 issuer and leaves ordinary unguarded invocation unchanged.
 
+Guarded literal jobs with an output file preserve synchronous local checkpoints
+before resource dispatch. `execution_in_progress` is private progress, never a
+terminal result; healthy final evaluation replaces it. See
+[ADR 0030](adr/0030-managed-cooperative-cancellation.md) for confirmed-stop promotion
+and the unchanged deadline and installed-acceptance limits.
+
 How the packages divide the work, what each one guarantees, and the CLI surface.
 The directory layout is in the [README](../README.md#project-layout); design
 decisions are in [`docs/adr/`](adr/). The rules an agent or contributor must not

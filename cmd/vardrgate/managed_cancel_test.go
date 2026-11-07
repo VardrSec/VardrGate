@@ -36,6 +36,12 @@ func managedCancelJob(t *testing.T, base string, mode string) ([]string, string)
 	if mode == "preflight" {
 		tc.Identities[0].Preflight = &model.IdentityPreflight{URL: base + "/session", ExpectedStatus: 200, JSONFields: map[string]string{"subject": "owner"}}
 	}
+	if mode == "checkpoint" {
+		for i := 0; i < 2; i++ {
+			id := tc.Identities[i].ID
+			tc.Identities[i].Preflight = &model.IdentityPreflight{URL: base + "/session/" + id, ExpectedStatus: 200, JSONFields: map[string]string{"subject": id}}
+		}
+	}
 	if mode == "invalid" {
 		tc.Identities[0].Credential.Type = "invalid"
 	}
