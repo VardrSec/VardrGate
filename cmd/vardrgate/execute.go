@@ -7,9 +7,11 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/VardrSec/vardrgate/internal/client"
@@ -35,6 +37,7 @@ const (
 // outputs are the result destinations shared by every command that executes a
 // test case.
 type outputs struct {
+	atomic bool // guarded managed output is published only after a complete write
 	out    *string
 	sarif  *string
 	format *string
@@ -66,7 +69,11 @@ func (o outputs) validate() error {
 // relies on.
 func (o outputs) emit(payload any, cases []report.Case) error {
 	if *o.out != "" {
-		if err := writeJSON(*o.out, payload); err != nil {
+		write := writeJSON
+		if o.atomic {
+			write = writeJSONAtomic
+		}
+		if err := write(*o.out, payload); err != nil {
 			return err
 		}
 	}
@@ -139,6 +146,12 @@ const failOnNone = "none"
 // --cases closes the loop with `gen`, which emits a JSON array: before this the
 // generated file had no command that would accept it back.
 func runCases(args []string) error {
+	return runCasesContext(context.Background(), args)
+}
+
+// The context seam tests ordinary HTTP cancellation without sending OS signals.
+// Signal handling is enabled only for a validated fixed-request managed job.
+func runCasesContext(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("run", flag.ContinueOnError)
 	fs.Usage = func() {
 		fmt.Fprint(fs.Output(), `Usage: vardrgate run (--job <file> | --cases <file>) [flags]
@@ -183,8 +196,9 @@ Flags:
 	}
 
 	var (
-		results []engine.Result
-		payload any
+		results     []engine.Result
+		payload     any
+		interrupted bool
 	)
 
 	if *jobPath != "" {
@@ -224,10 +238,31 @@ Flags:
 				return err
 			}
 		}
+		runCtx := ctx
+		stop := func() {}
+		if *guardPath != "" {
+			runCtx, stop = signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
+			defer stop()
+			out.atomic = true
+		}
 		eng := engine.New(client.NewWithConfig(nil, cfg))
-		res, err := eng.Run(context.Background(), tc)
+		res, err := eng.Run(runCtx, tc)
+		interrupted = *guardPath != "" && runCtx.Err() != nil
 		if err != nil {
-			return runError(err)
+			if !interrupted || !errors.Is(err, engine.ErrSetupFailed) {
+				return runError(err)
+			}
+			// Setup did not establish its precondition. Do not invent executions.
+			res = engine.Result{TestCaseID: tc.ID, Executions: []model.ExecutionResult{}, Findings: []model.Finding{}, Assessments: []model.Assessment{}}
+		}
+		if interrupted {
+			res.Error = "execution_cancelled"
+			for i := range res.Executions {
+				if res.Executions[i].Error != "" {
+					// Transport errors can contain a URL/query; retain no raw values.
+					res.Executions[i].Error = "execution_cancelled"
+				}
+			}
 		}
 		results = []engine.Result{res}
 		// A single job keeps emitting a single object, which is the shape
@@ -277,6 +312,13 @@ Flags:
 	}
 	if err := out.emit(payload, reportCases(source, results)); err != nil {
 		return err
+	}
+	if interrupted {
+		code := exitInconclusive
+		if len(results[0].Executions) == 0 || results[0].Unreached() {
+			code = exitNotExecuted
+		}
+		return exitError{code: code, err: errors.New("managed execution interrupted")}
 	}
 	if err := gate(results, threshold); err != nil {
 		return err
@@ -745,6 +787,32 @@ func writeJSON(path string, v any) error {
 		return err
 	}
 	if err := os.WriteFile(path, out, 0o644); err != nil {
+		return fmt.Errorf("write result: %w", err)
+	}
+	return nil
+}
+
+// writeJSONAtomic publishes a complete guarded result without truncating an
+// existing destination first. A forced process exit can still prevent output;
+// this best-effort write adds no grace period or deadline extension.
+func writeJSONAtomic(path string, v any) error {
+	data, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode result: %w", err)
+	}
+	f, err := os.CreateTemp(filepath.Dir(path), ".vardrgate-result-*")
+	if err != nil {
+		return fmt.Errorf("write result: %w", err)
+	}
+	defer os.Remove(f.Name())
+	if _, err := f.Write(append(data, '\n')); err != nil {
+		_ = f.Close()
+		return fmt.Errorf("write result: %w", err)
+	}
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("write result: %w", err)
+	}
+	if err := os.Rename(f.Name(), path); err != nil {
 		return fmt.Errorf("write result: %w", err)
 	}
 	return nil

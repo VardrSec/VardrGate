@@ -103,7 +103,8 @@ in `docs/` (`write-verification.md`, `authorization-regressions.md`,
   the Runner/Map contract: a clean run serializes `[]`, not `null`. Preserve fields.
 - Exit codes: `0` clean, `1` usage/input error, `2` findings at or above
   `--fail-on` (default `none`), `3` a case reached nothing (per case; outranks
-  findings), `4` inconclusive only with `--fail-on-inconclusive`. Any unrecognized
+  findings), `4` inconclusive with `--fail-on-inconclusive`, or a guarded managed
+  interruption after a resource response (ADR 0030). Any unrecognized
   argument is an error, never a fallthrough to `serve`. `Result.PreflightFailed`,
   `Unreached` and `Inconclusive` are the single definitions every report and gate
   uses; no format may present an inconclusive or unreached case as a pass.

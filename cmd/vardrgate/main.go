@@ -26,7 +26,7 @@ const (
 	exitUsage        = 1 // bad arguments, unreadable input, malformed document
 	exitFindings     = 2 // findings at or above the --fail-on threshold
 	exitNotExecuted  = 3 // every identity errored; nothing was actually tested
-	exitInconclusive = 4 // --fail-on-inconclusive: an expectation could not be judged
+	exitInconclusive = 4 // opted-in inconclusive gating, or interrupted guarded work
 )
 
 // exitError carries a specific exit code out of a subcommand.

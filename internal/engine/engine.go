@@ -51,7 +51,7 @@ type Result struct {
 	Preflight   []model.PreflightResult `json:"preflight,omitempty"`
 	// Error records why a case in a suite could not run, such as a failed
 	// setup step, so the rest of the suite still runs and reports. Run never
-	// sets it; a single case returns its error instead.
+	// sets it; the CLI also uses a fixed code for interrupted guarded jobs.
 	Error string `json:"error,omitempty"`
 }
 
