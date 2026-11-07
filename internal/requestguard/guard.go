@@ -84,7 +84,7 @@ func Parse(data []byte) (Plan, error) {
 		return plan, errDenied
 	}
 	d := json.NewDecoder(bytes.NewReader(data))
-	if err := unique(d, 0); err != nil {
+	if err := unique(d, 0, 32); err != nil {
 		return plan, errDenied
 	}
 	if _, err := d.Token(); err != io.EOF {
@@ -114,8 +114,8 @@ func Load(path string) (Plan, error) {
 	return Parse(data)
 }
 
-func unique(d *json.Decoder, depth int) error {
-	if depth > 32 {
+func unique(d *json.Decoder, depth, maxDepth int) error {
+	if maxDepth >= 0 && depth > maxDepth {
 		return errDenied
 	}
 	token, err := d.Token()
@@ -139,13 +139,13 @@ func unique(d *json.Decoder, depth int) error {
 				return errDenied
 			}
 			seen[name] = true
-			if err := unique(d, depth+1); err != nil {
+			if err := unique(d, depth+1, maxDepth); err != nil {
 				return err
 			}
 		}
 	case '[':
 		for d.More() {
-			if err := unique(d, depth+1); err != nil {
+			if err := unique(d, depth+1, maxDepth); err != nil {
 				return err
 			}
 		}
@@ -250,6 +250,14 @@ func body(raw json.RawMessage) (any, error) {
 	}
 	if _, err := d.Token(); err != io.EOF {
 		return nil, errDenied
+	}
+	// Decode above retains the JSON decoder's syntax and nesting limits. Check
+	// decoded key names before map equality can hide duplicates in the raw bytes
+	// sent by the client. UseNumber also accepts numbers outside float64 range.
+	d = json.NewDecoder(bytes.NewReader(raw))
+	d.UseNumber()
+	if err := unique(d, 0, -1); err != nil {
+		return nil, err
 	}
 	return value, nil
 }
