@@ -29,3 +29,19 @@ separate Runner integration. Existing stop/result receipt exclusivity remains.
 Tests inject cancellation into ordinary local HTTP requests; they send no OS
 signals and make no new containment claim. Rollback removes this guarded-only
 handling; forced-stop and missing-artifact recovery remain Runner concerns.
+
+Managed jobs with an explicit output file now synchronously checkpoint completed
+preflight and resource observations before each resource identity. The existing
+atomic writer publishes the existing result shape with local `execution_in_progress`
+diagnostics and pending identities marked inconclusive. Findings wait for final
+evaluation; incomplete write verification asserts no effect. Ordinary final output
+replaces the checkpoint. A checkpoint failure refuses subsequent dispatch and
+extends no timeout. Unguarded/API/library calls keep their existing behavior.
+
+This local marker is not a Map result or proof of cancellation. Only Runner's
+independent confirmed-stop lane may promote it into a cancelled private copy,
+with the original reviewed case binding. Normal return must reject a stale
+checkpoint. The original checkpoint bytes remain unchanged. No checkpoint is
+promised before successful setup/preflight, after storage failure, or after an
+unconfirmed exit. Ordinary HTTP tests observe the real file before dispatch;
+they do not establish native termination or installed platform acceptance.

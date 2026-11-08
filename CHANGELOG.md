@@ -8,6 +8,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Guarded managed jobs checkpoint actual observations before resource dispatch.
+  The private `execution_in_progress` snapshot is replaced by ordinary final
+  output; it supplies no completion or stop proof and extends no deadline.
+
 - Guarded literal managed runs cooperatively cancel HTTP work on SIGINT/SIGTERM,
   publish best-effort partial JSON with fixed `execution_cancelled` diagnostics,
   and exit nonzero. Completed observations remain evidence; interrupted work is

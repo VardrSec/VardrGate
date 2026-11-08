@@ -246,7 +246,14 @@ Flags:
 			out.atomic = true
 		}
 		eng := engine.New(client.NewWithConfig(nil, cfg))
-		res, err := eng.Run(runCtx, tc)
+		var res engine.Result
+		if *guardPath != "" && *out.out != "" {
+			res, err = eng.RunWithCheckpoint(runCtx, tc, func(progress engine.Result) error {
+				return writeJSONAtomic(*out.out, progress)
+			})
+		} else {
+			res, err = eng.Run(runCtx, tc)
+		}
 		interrupted = *guardPath != "" && runCtx.Err() != nil
 		if err != nil {
 			if !interrupted || !errors.Is(err, engine.ErrSetupFailed) {
