@@ -493,3 +493,8 @@ include SHA-256 checksums and GitHub build provenance. See
 ### Dependencies
 
 - Added `gopkg.in/yaml.v3` for policy parsing (see ADR 0001).
+
+## Agent security audit (unreleased)
+
+- Ignore agent-local credential/session files while preserving shared instructions.
+- Reuse the pinned, checksum-verified Gitleaks history scan from VardrMap.
