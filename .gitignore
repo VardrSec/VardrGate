@@ -37,3 +37,15 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# Agent-local credentials and session state; shared instructions remain tracked.
+.claude/settings.local.json
+.claude/*.local.json
+.claude/.credentials.json
+.claude/projects/
+.claude/history.jsonl
+.codex/auth.json
+.codex/config.local.toml
+.codex/sessions/
+.codex/history.jsonl
+.mcp.local.json
