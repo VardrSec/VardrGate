@@ -498,3 +498,5 @@ include SHA-256 checksums and GitHub build provenance. See
 
 - Ignore agent-local credential/session files while preserving shared instructions.
 - Reuse the pinned, checksum-verified Gitleaks history scan from VardrMap.
+
+- Limit historical nonsecret exclusions to reviewed exact Gitleaks fingerprints: Two SHA-256 input provenance digests under inputs_sha256, not authentication credentials. No rule/path-wide suppression.

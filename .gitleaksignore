@@ -1,0 +1,4 @@
+# Reviewed nonsecret historical findings only. New findings remain blocking.
+# Two SHA-256 input provenance digests under inputs_sha256, not authentication credentials.
+c142bd95230d6540aab808938adef53b28b85943:benchmarks/roadmap-lab/reports/profiles-authzlab.json:generic-api-key:861
+c142bd95230d6540aab808938adef53b28b85943:benchmarks/roadmap-lab/reports/profiles-authzlab.json:generic-api-key:862
