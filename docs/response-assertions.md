@@ -4,7 +4,7 @@ Status alone misjudges two common responses: protected data returned with 403,
 404 or 500, and a refusal returned with HTTP 200. Response assertions let a
 policy say which JSON values prove access was granted or refused. They are
 optional. Without them, findings are exactly what the status-based evaluator
-produced before. See [ADR 0016](adr/0016-response-assertions.md).
+produced before.
 
 ## In a policy
 
@@ -71,7 +71,7 @@ Every result has an `assessments` array with one entry per identity:
 
 The last row applies after every other rule: a 401 to a credentialed caller is
 what a dead or expired token produces, so it never counts as a verified denial
-unless the case sets `unauthorized_is_denial` (ADR 0019).
+unless the case sets `unauthorized_is_denial`.
 
 Any one matching assertion is enough unless an opposing one also matches. To
 require several properties together, compare a whole object at a pointer.

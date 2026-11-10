@@ -1,41 +1,13 @@
 # Changelog
-All notable changes to VardrGate are documented here. The format is based on
-[Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
-adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-- Align public documentation with retained guides and remove references to private working records.
-
-### Fixed
-
-- Guarded managed jobs checkpoint actual observations before resource dispatch.
-  The private `execution_in_progress` snapshot is replaced by ordinary final
-  output; it supplies no completion or stop proof and extends no deadline.
-
-- Guarded literal managed runs cooperatively cancel HTTP work on SIGINT/SIGTERM,
-  publish best-effort partial JSON with fixed `execution_cancelled` diagnostics,
-  and exit nonzero. Completed observations remain evidence; interrupted work is
-  inconclusive. No lease or hard deadline is extended (ADR 0030).
-
-- Fixed-request projections reject duplicate JSON body keys, including nested and
-  escaped-equivalent keys, before dispatch. Both actual requests and projected
-  bodies supplied directly to the guard are checked, preserving JSON number
-  comparison and ordinary unguarded behavior.
-
-### Added
-
-- Opt-in NM-1 fixed-request projection for literal Runner jobs: bind Gate binary
-  and options, guarding setup, preflight, resource, verification and reset before
-  dispatch. Ordinary invocation and evidence behavior remain unchanged; Runner
-  validates contract permission independently.
-
-### Documentation
-
-- Agent instructions consolidated: `AGENTS.md` is the single source for Claude
-  Code and Codex and keeps every security and contract invariant; `CLAUDE.md`
-  imports it. Package responsibilities and the CLI surface moved to
-  [`docs/architecture.md`](docs/architecture.md). No behavior change.
+- Bind controlled fixed requests to reviewed case and binary hashes while
+  preserving ordinary standalone CLI behavior.
+- Support cooperative cancellation without background execution.
+- Reject duplicate JSON keys at the fixed-request boundary.
+- Protect agent-local credentials and preserve secret-scanning coverage.
+- Separate public user documentation from private planning and validation notes.
 
 ## [0.2.0] - 2026-10-30
 
@@ -128,7 +100,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   configured, assertions decide the result with no status fallback, and they
   outrank `deny_status`/`deny_when`. Unmatched or conflicting evidence is
   inconclusive. Evidence carries assertion indices only. See
-  [ADR 0016](docs/adr/0016-response-assertions.md) and
+  ADR 0016 and
   `docs/response-assertions.md`.
 - **Write verification.** Policy `verify` and `write_verification` in the HTTP
   API name a separate reader that observes the target's state before and after
@@ -137,7 +109,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   concurrent changes, an already-present target value and unexpected changes
   are inconclusive. The request is withheld when its before-state cannot be
   read. Only reason codes are reported. See
-  [ADR 0017](docs/adr/0017-write-verification.md) and
+  ADR 0017 and
   `docs/write-verification.md`.
 - **Request body in policies.** `api.body` (JSON) and `api.headers` are sent
   by every identity, so a policy can test a write endpoint that reads JSON.
@@ -164,7 +136,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   compiled and validated before any request is sent. An entry that fails at run
   time, such as a failed setup step, is reported as not run while the rest of
   the suite continues, and the run exits 3. See
-  [ADR 0013](docs/adr/0013-policy-suites.md) and `examples/suite.yaml`.
+  ADR 0013 and `examples/suite.yaml`.
 - **Report formats.** `policy run` and `run` accept `--format text|markdown`
   for readable stdout and `--sarif <file>` for SARIF 2.1.0 (GitHub code
   scanning). JSON remains the default and `--out` always writes JSON, so
@@ -172,13 +144,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   before the exit code is decided. Every format states when a case tested
   nothing, and SARIF marks such a run unsuccessful instead of showing an empty
   scan. SARIF fingerprints use only the case id, category and identity, so
-  alerts track across runs. See [ADR 0014](docs/adr/0014-report-formats.md).
+  alerts track across runs. See ADR 0014.
 - **GitHub Action.** `uses: VardrSec/VardrGate@vX.Y.Z` installs the matching
   release, verifies it against `SHA256SUMS` (optionally also its build
   provenance), runs `vardrgate` with the given arguments, writes stdout to the
   job summary, and exposes the exit code. It never installs an unpinned
   "latest". CI exercises it on Ubuntu, macOS and Windows. See
-  [ADR 0015](docs/adr/0015-github-action.md).
+  ADR 0015.
 - `SECURITY.md` with private reporting instructions and scope.
 
 ### Changed
@@ -190,7 +162,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   authorization with 401 opt out with the new `response.unauthorized_is_denial`
   (JSON `unauthorized_is_denial`). Listing 401 in `deny_status` behaves exactly
   as before and does not opt out. Findings are unchanged. See
-  [ADR 0019](docs/adr/0019-credential-rejected-denials.md).
+  ADR 0019.
 - Reports now show status-only ambiguous outcomes (for example, an undeclared
   404 on an expected denial) as inconclusive. Findings and exit codes are
   unchanged.
@@ -211,7 +183,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   observed effects still prove access even when the write reports an error.
 - Unchanged deny-expected writes require a demonstrated allow-expected positive
   control; missing or failed controls are explicit inconclusive assessments.
-  See [ADR 0018](docs/adr/0018-verifier-confidence.md).
+  See ADR 0018.
 - Reports now explain the four ADR 0018 inconclusive reasons
   (`no_positive_control`, `positive_control_failed`, `write_execution_error`,
   `verifier_unexpected_status`) instead of printing the bare code. A test now
@@ -245,7 +217,7 @@ include SHA-256 checksums and GitHub build provenance. See
   same-origin GET before authorization requests. Any failure aborts the case with
   safe per-identity diagnostics and CLI exit 3. Add a required-preflight CLI guard
   for Runner compatibility. No automatic refresh or new dependency is introduced.
-  See [ADR 0011](docs/adr/0011-identity-preflight.md).
+  See ADR 0011.
 
 ### Documentation
 
@@ -494,10 +466,3 @@ include SHA-256 checksums and GitHub build provenance. See
 ### Dependencies
 
 - Added `gopkg.in/yaml.v3` for policy parsing (see ADR 0001).
-
-## Agent security audit (unreleased)
-
-- Ignore agent-local credential/session files while preserving shared instructions.
-- Reuse the pinned, checksum-verified Gitleaks history scan from VardrMap.
-
-- Limit historical nonsecret exclusions to reviewed exact Gitleaks fingerprints: Two SHA-256 input provenance digests under inputs_sha256, not authentication credentials. No rule/path-wide suppression.
