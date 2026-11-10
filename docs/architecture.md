@@ -12,8 +12,8 @@ and the unchanged deadline and installed-acceptance limits.
 
 How the packages divide the work, what each one guarantees, and the CLI surface.
 The directory layout is in the [README](../README.md#project-layout); design
-decisions are in [`docs/adr/`](adr/). The rules an agent or contributor must not
-break are summarised in [`AGENTS.md`](../AGENTS.md); this document explains them.
+decisions are in [`docs/adr/`](adr/). This document explains the contributor-facing
+architecture and security invariants.
 
 Beyond the README layout, `cmd/authbench/` holds the authorization benchmark (a
 vulnerable loopback lab, versioned corpus, scorer and regression budgets) and

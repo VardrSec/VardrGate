@@ -49,3 +49,10 @@ go.work.sum
 .codex/sessions/
 .codex/history.jsonl
 .mcp.local.json
+
+# Local working notes and agent instructions are not published artifacts.
+AGENTS.md
+CLAUDE.md
+/.private-notes/
+/internal-notes/
+/VardrSec-Internal-Notes/
