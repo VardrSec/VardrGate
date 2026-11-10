@@ -30,7 +30,7 @@ A write endpoint's response does not show whether it wrote. An API can return
 204 after changing only the caller's own record, or 500 after committing the
 change. Write verification reads the target's state before and after each
 identity's request, using a separate reader, and judges access from the
-difference. See [ADR 0017](adr/0017-write-verification.md).
+difference.
 
 ## In a policy
 
@@ -125,7 +125,7 @@ even in compatibility mode. These settings do not poll for asynchronous jobs;
 a timeout or an observation deadline cannot prove that a write was denied.
 Use a resettable dedicated resource and a fresh, unique attempted value when
 possible. Gate does not provide resource-version checks or remote locking.
-See [ADR 0021](adr/0021-write-environment-assurance.md).
+
 
 - Read the victim's record, not the caller's own.
 - Prefer a GET that any reviewed reader can make. Avoid oracles that depend
@@ -148,7 +148,7 @@ See [ADR 0021](adr/0021-write-environment-assurance.md).
 Successful HTTP statuses with the same selected value are equivalent; a 200
 becoming 201 alone does not prove a write. After a successful baseline, 404
 continues to represent absent state for deletion checks. Other 3xx/4xx verifier
-responses do not establish state. See [ADR 0018](adr/0018-verifier-confidence.md).
+responses do not establish state.
 
 For reviewed resets, each identity must observe the same selected baseline as
 the first stable reset baseline in this run. A successful reset response with a

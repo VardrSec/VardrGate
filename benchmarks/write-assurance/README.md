@@ -70,6 +70,6 @@ go build -o /tmp/vardrgate ./cmd/vardrgate
 python scripts/integration/strict_vampi.py --lab /path/to/vardrgate-lab --gate /tmp/vardrgate --write-environment synchronous_isolated --out /tmp/write-vampi.json
 ```
 
-The driver does not manage container lifecycle. Both containers were stopped
-again after this recorded run. Broader suite/Action/report parity and an
-independently configured study remain separate roadmap work.
+The driver does not manage container lifecycle. Stop the disposable containers
+after use. Results apply only to the selected fixtures and configuration; they
+do not establish general detection accuracy.

@@ -56,3 +56,25 @@ CLAUDE.md
 /.private-notes/
 /internal-notes/
 /VardrSec-Internal-Notes/
+
+# Private planning, decision records and acceptance receipts stay outside this repository.
+/docs/adr/
+/docs/evidence/
+/docs/*roadmap*
+/docs/*handoff*
+/docs/*checkpoint*
+/docs/*development-notes*
+/docs/architecture.md
+/docs/authorization-hardening-plan.md
+/docs/mvp.md
+/docs/research-roadmap-status.md
+/benchmarks/roadmap-lab/reports/
+/benchmarks/roadmap-lab/competitors/results/
+
+# Generated local comparison records are not public documentation.
+/benchmarks/comparison/*.json
+/benchmarks/comparison/*.txt
+
+# Unpublished development fragments belong in local notes; public changes go in CHANGELOG.md.
+/changelog/nm*.md
+/changelog/unreleased*.md

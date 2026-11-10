@@ -116,8 +116,7 @@ Paths are relative to the suite file, `--base` overrides `base`, and every entry
 is compiled and validated before any request is sent, so all authoring errors
 are reported at once. If one entry fails at run time, such as a failed setup
 step, it is reported as not run and the rest of the suite still runs. An entry
-may also set `tenant`, `id` and its own `identities` file. See
-[ADR 0013](docs/adr/0013-policy-suites.md).
+may also set `tenant`, `id` and its own `identities` file.
 
 ## Run it in CI
 
@@ -184,8 +183,7 @@ verifies the archive against that release's `SHA256SUMS`, runs `vardrgate` with
 `args`, writes stdout to the job summary, and exposes the exit code as
 `steps.<id>.outputs.exit-code`. Set
 `verify-attestation: true` to also check build provenance with
-`gh attestation verify`. There is no implicit "latest": pin a release. See
-[ADR 0015](docs/adr/0015-github-action.md).
+`gh attestation verify`. There is no implicit "latest": pin a release.
 
 ### Output formats
 
@@ -202,8 +200,7 @@ verifies the archive against that release's `SHA256SUMS`, runs `vardrgate` with
 All outputs are written before the exit code is decided, so they exist on exit 2
 and 3. Every format states when a case tested nothing, and SARIF marks the
 invocation unsuccessful rather than showing an empty, clean-looking scan. Run
-from the repository root so SARIF locations resolve to the policy files. See
-[ADR 0014](docs/adr/0014-report-formats.md).
+from the repository root so SARIF locations resolve to the policy files.
 
 ## Finding categories
 
@@ -221,7 +218,7 @@ from the repository root so SARIF locations resolve to the policy files. See
 
 The engine only elevates beyond `unexpected_access` when the test case supplies
 explicit ownership/tenant/role context. It never guesses a high-severity
-category from a weak signal. See [`docs/adr/0002-ownership-aware-classification.md`](docs/adr/0002-ownership-aware-classification.md).
+category from a weak signal. See `docs/adr/0002-ownership-aware-classification.md`.
 
 ## Writing policies
 
@@ -256,13 +253,13 @@ means 401 or 403 and a 404 is ambiguous — correct as a default, but it means
 every 404 from an API that hides existence goes unevaluated. `tenant_field` lets
 the engine read the object's tenant out of the response body, so
 `cross_tenant_access` does not require knowing the target's tenant in advance.
-See [`docs/adr/0007-policy-driven-deny-classification.md`](docs/adr/0007-policy-driven-deny-classification.md).
+See `docs/adr/0007-policy-driven-deny-classification.md`.
 
 A 401 to an identity that sent credentials is reported inconclusive
 (`credential_rejected`), not as a correct denial: a dead or expired token gets
 the same answer. If this API refuses authenticated callers with 401, set
 `response.unauthorized_is_denial: true`. Listing 401 in `deny_status` does not
-change this. See [ADR 0019](docs/adr/0019-credential-rejected-denials.md).
+change this.
 
 ### When the API refuses with a success status
 
@@ -279,7 +276,7 @@ response:
 
 A body matching any populated field is a denial, and the condition outranks the
 status line. Findings carry `deny_when_matched:` evidence so it is clear why a
-200 was read as a refusal. See [`docs/adr/0008-body-aware-deny-and-mutation-safety.md`](docs/adr/0008-body-aware-deny-and-mutation-safety.md).
+200 was read as a refusal. See `docs/adr/0008-body-aware-deny-and-mutation-safety.md`.
 
 ### Judging access by response content
 
@@ -364,7 +361,7 @@ cannot be confused.
 Create-as-one-identity-then-read-as-another is the sharpest object-level
 authorization test there is, and it needs this. A failed setup step aborts the
 run with exit 3: the precondition was not met, so nothing was tested. See
-[`docs/adr/0010-setup-steps.md`](docs/adr/0010-setup-steps.md).
+`docs/adr/0010-setup-steps.md`.
 
 ### Check sessions before authorization requests
 
@@ -386,7 +383,6 @@ matched values are not retained. Never put secrets in field matches or URLs.
 Unconfigured cases retain their behavior. This does not refresh tokens or replace
 a legitimate allow baseline on the resource. Runner uses
 `run --require-identity-preflight` so older Gate builds fail before traffic.
-See [ADR 0011](docs/adr/0011-identity-preflight.md).
 
 ## Drafting policies for an API you have not covered yet
 
@@ -407,7 +403,7 @@ rather than advised: discovery can infer the *shape* of a control, but who
 should be allowed to call an endpoint is a decision recorded nowhere a machine
 can read, and a plausible-looking guess is exactly what VardrGate must never put
 behind a finding. Inference informs authoring; it never becomes an assertion.
-See [`docs/adr/0009-policy-discovery.md`](docs/adr/0009-policy-discovery.md).
+See `docs/adr/0009-policy-discovery.md`.
 
 ## Starting from a spec
 
@@ -535,7 +531,7 @@ For continuous, distributed execution, VardrGate exposes a job queue that
 [VardrRunner](https://github.com/VardrSec/VardrRunner) drives: it polls for pending jobs, claims them,
 streams events, uploads results, and marks them done or failed. The endpoint
 shapes match VardrRunner's existing client, so VardrGate is a drop-in backend.
-See [`docs/adr/0003-runner-job-queue.md`](docs/adr/0003-runner-job-queue.md).
+See `docs/adr/0003-runner-job-queue.md`.
 
 | Endpoint | Purpose |
 |---|---|
@@ -586,12 +582,11 @@ vardrgate run --job job.json --out result.json
 sanitized result JSON. `examples/job_profile_check.json` is a **template** — its
 tokens and its `localhost:8081` URL are placeholders to replace, not a target
 that exists. Use `vardrgate demo` for something that runs as shipped. See
-[`docs/adr/0001-policy-input-and-run-cli.md`](docs/adr/0001-policy-input-and-run-cli.md).
+`docs/adr/0001-policy-input-and-run-cli.md`.
 
 `${VAR}` references in a job are expanded from Gate's environment. Add
 `--literal-job` when the caller has already resolved every credential: the
 envelope is then used exactly as written. VardrRunner passes it on every job.
-See [ADR 0028](docs/adr/0028-literal-job-input.md).
 
 ## Security defaults
 
@@ -646,7 +641,6 @@ internal/
   urlcheck/          — URL and IP validation
 docs/
   mvp.md             — first supported workflow
-  adr/               — architecture decision records
 examples/            — policies, a suite, identities, test case, and job examples
 ```
 
@@ -661,5 +655,5 @@ gofmt -l .
 CI runs formatting, vet, race tests, and build on every push. Releases use the
 version in `VERSION`; a matching `vX.Y.Z` tag verifies source, builds all five
 platform archives, attests their provenance and publishes them with checksums.
-See [ADR 0012](docs/adr/0012-binary-releases.md) and
+See
 [`CHANGELOG.md`](CHANGELOG.md) for release notes.
