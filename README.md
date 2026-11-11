@@ -218,7 +218,7 @@ from the repository root so SARIF locations resolve to the policy files.
 
 The engine only elevates beyond `unexpected_access` when the test case supplies
 explicit ownership/tenant/role context. It never guesses a high-severity
-category from a weak signal. See `docs/adr/0002-ownership-aware-classification.md`.
+category from a weak signal. See [identity evidence](docs/identity-evidence.md).
 
 ## Writing policies
 
@@ -253,7 +253,7 @@ means 401 or 403 and a 404 is ambiguous — correct as a default, but it means
 every 404 from an API that hides existence goes unevaluated. `tenant_field` lets
 the engine read the object's tenant out of the response body, so
 `cross_tenant_access` does not require knowing the target's tenant in advance.
-See `docs/adr/0007-policy-driven-deny-classification.md`.
+See [reviewed denial profiles](docs/denial-profiles.md).
 
 A 401 to an identity that sent credentials is reported inconclusive
 (`credential_rejected`), not as a correct denial: a dead or expired token gets
@@ -276,7 +276,8 @@ response:
 
 A body matching any populated field is a denial, and the condition outranks the
 status line. Findings carry `deny_when_matched:` evidence so it is clear why a
-200 was read as a refusal. See `docs/adr/0008-body-aware-deny-and-mutation-safety.md`.
+200 was read as a refusal. See [response assertions](docs/response-assertions.md)
+and [write verification](docs/write-verification.md).
 
 ### Judging access by response content
 
@@ -360,8 +361,7 @@ cannot be confused.
 
 Create-as-one-identity-then-read-as-another is the sharpest object-level
 authorization test there is, and it needs this. A failed setup step aborts the
-run with exit 3: the precondition was not met, so nothing was tested. See
-`docs/adr/0010-setup-steps.md`.
+run with exit 3: the precondition was not met, so nothing was tested.
 
 ### Check sessions before authorization requests
 
@@ -403,7 +403,7 @@ rather than advised: discovery can infer the *shape* of a control, but who
 should be allowed to call an endpoint is a decision recorded nowhere a machine
 can read, and a plausible-looking guess is exactly what VardrGate must never put
 behind a finding. Inference informs authoring; it never becomes an assertion.
-See `docs/adr/0009-policy-discovery.md`.
+See [policy-assisted discovery](docs/policy-assisted-discovery.md).
 
 ## Starting from a spec
 
@@ -531,7 +531,6 @@ For continuous, distributed execution, VardrGate exposes a job queue that
 [VardrRunner](https://github.com/VardrSec/VardrRunner) drives: it polls for pending jobs, claims them,
 streams events, uploads results, and marks them done or failed. The endpoint
 shapes match VardrRunner's existing client, so VardrGate is a drop-in backend.
-See `docs/adr/0003-runner-job-queue.md`.
 
 | Endpoint | Purpose |
 |---|---|
@@ -581,8 +580,7 @@ vardrgate run --job job.json --out result.json
 `run` reads a job envelope, executes the embedded test case, and writes the
 sanitized result JSON. `examples/job_profile_check.json` is a **template** — its
 tokens and its `localhost:8081` URL are placeholders to replace, not a target
-that exists. Use `vardrgate demo` for something that runs as shipped. See
-`docs/adr/0001-policy-input-and-run-cli.md`.
+that exists. Use `vardrgate demo` for something that runs as shipped.
 
 `${VAR}` references in a job are expanded from Gate's environment. Add
 `--literal-job` when the caller has already resolved every credential: the
