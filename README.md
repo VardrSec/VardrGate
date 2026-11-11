@@ -5,12 +5,12 @@ see [strict identity assurance](docs/strict-ci.md), including its pinned source
 build. These controls postdate the packaged v0.1.0 release. Existing configurations
 keep their compatibility defaults unless strict settings are supplied.
 
-Scanners cannot find broken access control, because the rules an API is meant
-to enforce are not written down anywhere a tool can read. VardrGate has you write
-them down: a short policy per endpoint stating which callers should be allowed.
+Generic scanners cannot reliably infer an application's intended authorization
+rules. VardrGate has you write those rules down: a short policy per endpoint
+stating which callers should be allowed.
 It replays the request as each caller and reports every place the API disagrees,
-with request and response evidence. It runs locally or in CI and exits non-zero
-when it finds something.
+with request and response evidence. It runs locally or in CI; configure
+`--fail-on` to fail on findings at or above the selected severity threshold.
 
 ```yaml
 api:
@@ -25,6 +25,23 @@ expect:
 Findings are candidates for review, not verdicts. VardrGate reports a
 high-severity category only when the policy supplies the context to justify it,
 and a run that reached nothing fails instead of passing.
+
+## Choose standalone or integrated use
+
+The CLI examples below use Gate independently. For the integrated platform, use
+[VardrSec Full](https://github.com/VardrSec/VardrSec/blob/main/docs/installation.md)
+for Map's engagement UI, reviewed cases and results, or
+[VardrSec Mapless](https://github.com/VardrSec/VardrSec/blob/main/docs/mapless.md)
+for local Runner workspaces without Map or PostgreSQL. Both installation paths
+use the same Gate engine at the distribution's pinned revision. They do not
+require you to configure Gate's separate HTTP job queue.
+
+Gate evaluates the supplied cases; it does not grant permission to test a target
+or infer the business rules omitted from a policy. The distribution and Runner
+own their execution-authorization, credential-grant and lifecycle controls.
+Standalone Gate invocation does not acquire those controls merely by using the
+same binary. Review [security defaults](#security-defaults) and
+[strict CI settings](docs/strict-ci.md) for Gate's own boundaries.
 
 ## See it work
 
