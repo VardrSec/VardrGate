@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Replace retired design-document references with current user guides.
+
 - Bind controlled fixed requests to reviewed case and binary hashes while
   preserving ordinary standalone CLI behavior.
 - Support cooperative cancellation without background execution.
