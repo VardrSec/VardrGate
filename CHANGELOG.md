@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [0.3.0] — source version prepared, not published
+
+This section assigns changes to source version 0.3.0; it does not announce
+published archives or a release date. See [source-version notes](docs/releases/v0.3.0.md).
+
 - Build and verify with Go 1.27.4 to address GO-2026-6859 in the Go standard library.
 
 - Replace retired design-document references with current user guides.
@@ -12,6 +17,9 @@
 - Reject duplicate JSON keys at the fixed-request boundary.
 - Protect agent-local credentials and preserve secret-scanning coverage.
 - Separate public user documentation from private planning and validation notes.
+
+- Reconcile standalone and Full/Mapless setup guidance, execution ownership and
+  explicit finding-severity exit gating with the current implementation.
 
 ## [0.2.0] - 2026-10-30
 
