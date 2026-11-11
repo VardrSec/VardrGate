@@ -168,7 +168,7 @@ steps:
   - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
   - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
     with:
-      go-version: "1.27.3"
+      go-version: "1.27.4"
   - name: Build vardrgate at the reviewed revision
     shell: bash
     run: |
