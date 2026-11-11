@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Build and verify with Go 1.27.4 to address GO-2026-6859 in the Go standard library.
+
 - Replace retired design-document references with current user guides.
 
 - Bind controlled fixed requests to reviewed case and binary hashes while
