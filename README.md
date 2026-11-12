@@ -26,6 +26,10 @@ Findings are candidates for review, not verdicts. VardrGate reports a
 high-severity category only when the policy supplies the context to justify it,
 and a run that reached nothing fails instead of passing.
 
+For paired ownership, tenant, privileged-function, credential-failure and
+state-dependent examples, reproduce the [compact authorization cases](docs/authorization-cases.md).
+The guide separates reviewed expectations, observed effects and unsupported inputs.
+
 ## Choose standalone or integrated use
 
 The CLI examples below use Gate independently. For the integrated platform, use

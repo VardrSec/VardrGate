@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Add six reviewable authorization cases and a separate unsupported-contract
+  control, replayed against paired loopback fixtures through the existing CLI tests.
+
 ## [0.3.0] — source version prepared, not published
 
 This section assigns changes to source version 0.3.0; it does not announce
