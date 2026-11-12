@@ -1,0 +1,116 @@
+[
+  {
+    "id": "ownership",
+    "description": "Only the owner may read this record.",
+    "require_identity_preflight": true,
+    "identities": [
+      {"id": "owner", "role": "user", "tenant_id": "A", "credential": {"type": "bearer", "value": "${AUTHCASE_OWNER_TOKEN}"}, "preflight": {"url": "${AUTHCASE_URL}/me", "expected_status": 200, "json_fields": {"id": "owner", "role": "user", "tenant": "A"}}},
+      {"id": "peer", "role": "user", "tenant_id": "A", "credential": {"type": "bearer", "value": "${AUTHCASE_PEER_TOKEN}"}, "preflight": {"url": "${AUTHCASE_URL}/me", "expected_status": 200, "json_fields": {"id": "peer", "role": "user", "tenant": "A"}}},
+      {"id": "anonymous", "credential": {"type": "static_header"}}
+    ],
+    "request": {"method": "GET", "url": "${AUTHCASE_URL}/records/1"},
+    "expected_access": [
+      {"identity_id": "owner", "decision": "allow", "response_assertions": [{"json_pointer": "/access", "equals": "allowed", "decision": "allow"}, {"json_pointer": "/access", "equals": "denied", "decision": "deny"}]},
+      {"identity_id": "peer", "decision": "deny", "response_assertions": [{"json_pointer": "/access", "equals": "allowed", "decision": "allow"}, {"json_pointer": "/access", "equals": "denied", "decision": "deny"}]},
+      {"identity_id": "anonymous", "decision": "deny", "response_assertions": [{"json_pointer": "/access", "equals": "allowed", "decision": "allow"}, {"json_pointer": "/access", "equals": "denied", "decision": "deny"}]}
+    ],
+    "resource": {"type": "record", "object_id": "1", "owner_identity": "owner"}
+  },
+  {
+    "id": "tenant",
+    "description": "Tenant A members may read; a tenant B member must be denied.",
+    "require_identity_preflight": true,
+    "identities": [
+      {"id": "owner", "role": "user", "tenant_id": "A", "credential": {"type": "bearer", "value": "${AUTHCASE_OWNER_TOKEN}"}, "preflight": {"url": "${AUTHCASE_URL}/me", "expected_status": 200, "json_fields": {"id": "owner", "role": "user", "tenant": "A"}}},
+      {"id": "peer", "role": "user", "tenant_id": "A", "credential": {"type": "bearer", "value": "${AUTHCASE_PEER_TOKEN}"}, "preflight": {"url": "${AUTHCASE_URL}/me", "expected_status": 200, "json_fields": {"id": "peer", "role": "user", "tenant": "A"}}},
+      {"id": "outsider", "role": "user", "tenant_id": "B", "credential": {"type": "bearer", "value": "${AUTHCASE_OUTSIDER_TOKEN}"}, "preflight": {"url": "${AUTHCASE_URL}/me", "expected_status": 200, "json_fields": {"id": "outsider", "role": "user", "tenant": "B"}}}
+    ],
+    "request": {"method": "GET", "url": "${AUTHCASE_URL}/tenants/A/records/1"},
+    "expected_access": [
+      {"identity_id": "owner", "decision": "allow", "response_assertions": [{"json_pointer": "/access", "equals": "allowed", "decision": "allow"}, {"json_pointer": "/access", "equals": "denied", "decision": "deny"}]},
+      {"identity_id": "peer", "decision": "allow", "response_assertions": [{"json_pointer": "/access", "equals": "allowed", "decision": "allow"}, {"json_pointer": "/access", "equals": "denied", "decision": "deny"}]},
+      {"identity_id": "outsider", "decision": "deny", "response_assertions": [{"json_pointer": "/access", "equals": "allowed", "decision": "allow"}, {"json_pointer": "/access", "equals": "denied", "decision": "deny"}]}
+    ],
+    "resource": {"type": "record", "object_id": "1", "tenant_id": "A"}
+  },
+  {
+    "id": "privileged-function",
+    "description": "Only an administrator may export.",
+    "require_identity_preflight": true,
+    "identities": [
+      {"id": "admin", "role": "admin", "tenant_id": "A", "credential": {"type": "bearer", "value": "${AUTHCASE_ADMIN_TOKEN}"}, "preflight": {"url": "${AUTHCASE_URL}/me", "expected_status": 200, "json_fields": {"id": "admin", "role": "admin", "tenant": "A"}}},
+      {"id": "peer", "role": "user", "tenant_id": "A", "credential": {"type": "bearer", "value": "${AUTHCASE_PEER_TOKEN}"}, "preflight": {"url": "${AUTHCASE_URL}/me", "expected_status": 200, "json_fields": {"id": "peer", "role": "user", "tenant": "A"}}},
+      {"id": "anonymous", "credential": {"type": "static_header"}}
+    ],
+    "request": {"method": "GET", "url": "${AUTHCASE_URL}/admin/export"},
+    "expected_access": [
+      {"identity_id": "admin", "decision": "allow", "response_assertions": [{"json_pointer": "/access", "equals": "allowed", "decision": "allow"}, {"json_pointer": "/access", "equals": "denied", "decision": "deny"}]},
+      {"identity_id": "peer", "decision": "deny", "response_assertions": [{"json_pointer": "/access", "equals": "allowed", "decision": "allow"}, {"json_pointer": "/access", "equals": "denied", "decision": "deny"}]},
+      {"identity_id": "anonymous", "decision": "deny", "response_assertions": [{"json_pointer": "/access", "equals": "allowed", "decision": "allow"}, {"json_pointer": "/access", "equals": "denied", "decision": "deny"}]}
+    ],
+    "resource": {"type": "export", "required_role": "admin"},
+    "role_hierarchy": ["user", "admin"]
+  },
+  {
+    "id": "credential-failure",
+    "description": "Deliberately expired peer credential: the entire case must be not tested, never a successful deny.",
+    "require_identity_preflight": true,
+    "identities": [
+      {"id": "owner", "role": "user", "tenant_id": "A", "credential": {"type": "bearer", "value": "${AUTHCASE_OWNER_TOKEN}"}, "preflight": {"url": "${AUTHCASE_URL}/me", "expected_status": 200, "json_fields": {"id": "owner", "role": "user", "tenant": "A"}}},
+      {"id": "peer", "role": "user", "tenant_id": "A", "credential": {"type": "bearer", "value": "${AUTHCASE_EXPIRED_TOKEN}"}, "preflight": {"url": "${AUTHCASE_URL}/me", "expected_status": 200, "json_fields": {"id": "peer", "role": "user", "tenant": "A"}}}
+    ],
+    "request": {"method": "GET", "url": "${AUTHCASE_URL}/records/1"},
+    "expected_access": [
+      {"identity_id": "owner", "decision": "allow", "response_assertions": [{"json_pointer": "/access", "equals": "allowed", "decision": "allow"}, {"json_pointer": "/access", "equals": "denied", "decision": "deny"}]},
+      {"identity_id": "peer", "decision": "deny", "response_assertions": [{"json_pointer": "/access", "equals": "allowed", "decision": "allow"}, {"json_pointer": "/access", "equals": "denied", "decision": "deny"}]}
+    ]
+  },
+  {
+    "id": "draft-publish",
+    "description": "Owner may publish any invoice; peer may publish only after approval. Reset before every identity.",
+    "require_identity_preflight": true,
+    "identities": [
+      {"id": "owner", "role": "user", "tenant_id": "A", "credential": {"type": "bearer", "value": "${AUTHCASE_OWNER_TOKEN}"}, "preflight": {"url": "${AUTHCASE_URL}/me", "expected_status": 200, "json_fields": {"id": "owner", "role": "user", "tenant": "A"}}},
+      {"id": "peer", "role": "user", "tenant_id": "A", "credential": {"type": "bearer", "value": "${AUTHCASE_PEER_TOKEN}"}, "preflight": {"url": "${AUTHCASE_URL}/me", "expected_status": 200, "json_fields": {"id": "peer", "role": "user", "tenant": "A"}}}
+    ],
+    "request": {"method": "POST", "url": "${AUTHCASE_URL}/invoice/publish"},
+    "mutating": true,
+    "write_verification": {
+      "strategy": "changed",
+      "environment": "synchronous_isolated",
+      "identity": {"id": "reader", "role": "user", "tenant_id": "A", "credential": {"type": "bearer", "value": "${AUTHCASE_READER_TOKEN}"}, "preflight": {"url": "${AUTHCASE_URL}/me", "expected_status": 200, "json_fields": {"id": "reader", "role": "user", "tenant": "A"}}},
+      "request": {"method": "GET", "url": "${AUTHCASE_URL}/invoice"},
+      "json_pointer": "/state",
+      "changed_to": "published",
+      "reset": {"name": "reset-invoice", "as": "owner", "request": {"method": "POST", "url": "${AUTHCASE_URL}/invoice/reset", "body": {"state": "draft"}}}
+    },
+    "expected_access": [
+      {"identity_id": "owner", "decision": "allow"},
+      {"identity_id": "peer", "decision": "deny"}
+    ]
+  },
+  {
+    "id": "approved-publish",
+    "description": "Owner may publish any invoice; peer may publish only after approval. Reset before every identity.",
+    "require_identity_preflight": true,
+    "identities": [
+      {"id": "owner", "role": "user", "tenant_id": "A", "credential": {"type": "bearer", "value": "${AUTHCASE_OWNER_TOKEN}"}, "preflight": {"url": "${AUTHCASE_URL}/me", "expected_status": 200, "json_fields": {"id": "owner", "role": "user", "tenant": "A"}}},
+      {"id": "peer", "role": "user", "tenant_id": "A", "credential": {"type": "bearer", "value": "${AUTHCASE_PEER_TOKEN}"}, "preflight": {"url": "${AUTHCASE_URL}/me", "expected_status": 200, "json_fields": {"id": "peer", "role": "user", "tenant": "A"}}}
+    ],
+    "request": {"method": "POST", "url": "${AUTHCASE_URL}/invoice/publish"},
+    "mutating": true,
+    "write_verification": {
+      "strategy": "changed",
+      "environment": "synchronous_isolated",
+      "identity": {"id": "reader", "role": "user", "tenant_id": "A", "credential": {"type": "bearer", "value": "${AUTHCASE_READER_TOKEN}"}, "preflight": {"url": "${AUTHCASE_URL}/me", "expected_status": 200, "json_fields": {"id": "reader", "role": "user", "tenant": "A"}}},
+      "request": {"method": "GET", "url": "${AUTHCASE_URL}/invoice"},
+      "json_pointer": "/state",
+      "changed_to": "published",
+      "reset": {"name": "reset-invoice", "as": "owner", "request": {"method": "POST", "url": "${AUTHCASE_URL}/invoice/reset", "body": {"state": "approved"}}}
+    },
+    "expected_access": [
+      {"identity_id": "owner", "decision": "allow"},
+      {"identity_id": "peer", "decision": "allow"}
+    ]
+  }
+]

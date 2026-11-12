@@ -1,0 +1,99 @@
+[
+  {
+    "id": "unverified-write-environment",
+    "description": "Unknown timing/isolation does not support this explicit change/reset contract: expect validation refusal before traffic, no result, and no protection claim.",
+    "require_identity_preflight": true,
+    "identities": [
+      {
+        "id": "owner",
+        "role": "user",
+        "tenant_id": "A",
+        "credential": {
+          "type": "bearer",
+          "value": "${AUTHCASE_OWNER_TOKEN}"
+        },
+        "preflight": {
+          "url": "${AUTHCASE_URL}/me",
+          "expected_status": 200,
+          "json_fields": {
+            "id": "owner",
+            "role": "user",
+            "tenant": "A"
+          }
+        }
+      },
+      {
+        "id": "peer",
+        "role": "user",
+        "tenant_id": "A",
+        "credential": {
+          "type": "bearer",
+          "value": "${AUTHCASE_PEER_TOKEN}"
+        },
+        "preflight": {
+          "url": "${AUTHCASE_URL}/me",
+          "expected_status": 200,
+          "json_fields": {
+            "id": "peer",
+            "role": "user",
+            "tenant": "A"
+          }
+        }
+      }
+    ],
+    "request": {
+      "method": "POST",
+      "url": "${AUTHCASE_URL}/invoice/publish"
+    },
+    "mutating": true,
+    "write_verification": {
+      "strategy": "changed",
+      "environment": "unknown",
+      "identity": {
+        "id": "reader",
+        "role": "user",
+        "tenant_id": "A",
+        "credential": {
+          "type": "bearer",
+          "value": "${AUTHCASE_READER_TOKEN}"
+        },
+        "preflight": {
+          "url": "${AUTHCASE_URL}/me",
+          "expected_status": 200,
+          "json_fields": {
+            "id": "reader",
+            "role": "user",
+            "tenant": "A"
+          }
+        }
+      },
+      "request": {
+        "method": "GET",
+        "url": "${AUTHCASE_URL}/invoice"
+      },
+      "json_pointer": "/state",
+      "changed_to": "published",
+      "reset": {
+        "name": "reset-invoice",
+        "as": "owner",
+        "request": {
+          "method": "POST",
+          "url": "${AUTHCASE_URL}/invoice/reset",
+          "body": {
+            "state": "draft"
+          }
+        }
+      }
+    },
+    "expected_access": [
+      {
+        "identity_id": "owner",
+        "decision": "allow"
+      },
+      {
+        "identity_id": "peer",
+        "decision": "deny"
+      }
+    ]
+  }
+]
