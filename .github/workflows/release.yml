@@ -7,6 +7,8 @@ on:
     paths:
       - .github/workflows/release.yml
       - VERSION
+      - scripts/release_archive.py
+      - scripts/test_release_archive.py
 
 permissions:
   contents: read
@@ -25,6 +27,7 @@ jobs:
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version: "1.27.4"
+          cache: false
       - name: Verify version, tag and release notes
         id: version
         env:
@@ -70,22 +73,47 @@ jobs:
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version: "1.27.4"
-      - name: Build and archive binary
+          cache: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.12"
+      - name: Verify deterministic archive writer
+        run: python -m unittest discover -s scripts -p 'test_release_archive.py'
+      - name: Build twice offline, compare and archive binary
+        env:
+          GOTOOLCHAIN: local
+          GOWORK: "off"
+          GOFLAGS: ""
         run: |
-          stage="$RUNNER_TEMP/vardrgate-stage"
-          mkdir -p "$stage" dist
+          set -euo pipefail
+          repository="$PWD"
+          commit=$(git rev-parse HEAD)
+          tree=$(git rev-parse 'HEAD^{tree}')
           binary=vardrgate
           if [ "$GOOS" = windows ]; then binary=vardrgate.exe; fi
-          go build -trimpath -buildvcs=true -ldflags "-s -w -X main.version=$RELEASE_TAG" -o "$stage/$binary" ./cmd/vardrgate
-          go version -m "$stage/$binary"
-          if [ "$GOOS/$GOARCH" = linux/amd64 ]; then test "$("$stage/$binary" version)" = "$RELEASE_TAG"; fi
-          cp README.md LICENSE "$stage/"
           archive="vardrgate_${RELEASE_VERSION}_${GOOS}_${GOARCH}"
-          if [ "$GOOS" = windows ]; then
-            zip -j "dist/$archive.zip" "$stage/$binary" "$stage/README.md" "$stage/LICENSE"
-          else
-            tar -czf "dist/$archive.tar.gz" -C "$stage" "$binary" README.md LICENSE
-          fi
+          suffix=tar.gz
+          if [ "$GOOS" = windows ]; then suffix=zip; fi
+          mkdir dist
+          for attempt in a b; do
+            work="$RUNNER_TEMP/gate-$attempt"
+            mkdir -p "$work/source" "$work/stage"
+            git archive HEAD | tar -xf - -C "$work/source"
+            export GOCACHE="$work/cache" GOMODCACHE="$work/modules"
+            cd "$work/source"
+            go mod download all
+            go mod verify
+            cmp go.mod "$repository/go.mod"
+            cmp go.sum "$repository/go.sum"
+            GOPROXY=off go build -mod=readonly -trimpath -buildvcs=false -ldflags "-s -w -X main.version=$RELEASE_TAG" -o "$work/stage/$binary" ./cmd/vardrgate
+            if [ "$GOOS/$GOARCH" = linux/amd64 ]; then test "$("$work/stage/$binary" version)" = "$RELEASE_TAG"; fi
+            python "$repository/scripts/release_archive.py" --source "$work/source" --stage "$work/stage" --binary "$binary" --commit "$commit" --tree "$tree" --version "$RELEASE_TAG" --output "$work/$archive.$suffix"
+            cd "$repository"
+          done
+          cmp "$RUNNER_TEMP/gate-a/stage/$binary" "$RUNNER_TEMP/gate-b/stage/$binary"
+          cmp "$RUNNER_TEMP/gate-a/$archive.$suffix" "$RUNNER_TEMP/gate-b/$archive.$suffix"
+          cp "$RUNNER_TEMP/gate-a/$archive.$suffix" dist/
+          echo "Verified two independent binary builds and canonical archives for $GOOS/$GOARCH" >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: vardrgate-${{ matrix.goos }}-${{ matrix.goarch }}
