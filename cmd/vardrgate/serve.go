@@ -33,6 +33,15 @@ func serve() {
 		log.Error("invalid VARDRGATE_HOST", "error", err)
 		os.Exit(exitUsage)
 	}
+	keys, err := resolveAPIKeys()
+	if err != nil {
+		log.Error("invalid VARDRGATE_API_KEYS", "error", err)
+		os.Exit(exitUsage)
+	}
+	if len(keys) == 0 && !isLoopback(host) {
+		log.Error("non-loopback bind requires VARDRGATE_API_KEYS or VARDRGATE_API_KEY")
+		os.Exit(exitUsage)
+	}
 
 	allowPrivate, err := resolveAllowPrivateTargets()
 	if err != nil {
@@ -46,12 +55,8 @@ func serve() {
 	c := client.NewWithConfig(nil, client.Config{AllowPrivateTargets: allowPrivate})
 	eng := engine.New(c)
 
-	keys := resolveAPIKeys()
 	if len(keys) == 0 {
 		log.Warn("no API keys configured; /tests/execute and the /jobs, /runner, and /audit endpoints are unauthenticated (development only)")
-		if !isLoopback(host) {
-			log.Warn("serving without API keys on a non-loopback address; any client that can reach it can run tests", "host", host)
-		}
 	} else {
 		log.Info("API key authentication enabled", "tenants", len(distinctTenants(keys)))
 	}
@@ -157,24 +162,26 @@ func resolveStore(log *slog.Logger) (store.Store, func(), error) {
 //	VARDRGATE_API_KEYS="tenant-a:key1,tenant-b:key2"  → per-tenant isolation
 //	VARDRGATE_API_KEY="key"                           → single "default" tenant
 //
-// VARDRGATE_API_KEYS takes precedence. An empty result disables auth (dev only).
-func resolveAPIKeys() map[string]string {
+// A nonempty VARDRGATE_API_KEYS takes precedence and every pair must be valid.
+// An empty result disables auth for loopback development.
+func resolveAPIKeys() (map[string]string, error) {
 	keys := map[string]string{}
 	if multi := os.Getenv("VARDRGATE_API_KEYS"); multi != "" {
 		for _, pair := range strings.Split(multi, ",") {
 			pair = strings.TrimSpace(pair)
 			tenant, key, ok := strings.Cut(pair, ":")
 			tenant, key = strings.TrimSpace(tenant), strings.TrimSpace(key)
-			if ok && tenant != "" && key != "" {
-				keys[key] = tenant
+			if !ok || tenant == "" || key == "" {
+				return nil, errors.New("each entry must contain a nonempty tenant and key separated by ':'")
 			}
+			keys[key] = tenant
 		}
-		return keys
+		return keys, nil
 	}
 	if single := os.Getenv("VARDRGATE_API_KEY"); single != "" {
 		keys[single] = "default"
 	}
-	return keys
+	return keys, nil
 }
 
 func distinctTenants(keys map[string]string) map[string]struct{} {
