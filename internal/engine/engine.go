@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/VardrSec/vardrgate/internal/client"
 	"github.com/VardrSec/vardrgate/internal/compare"
 	"github.com/VardrSec/vardrgate/internal/model"
 	"github.com/VardrSec/vardrgate/internal/requestguard"
@@ -29,11 +28,6 @@ type Engine struct {
 // New returns an Engine backed by the provided Executor.
 func New(exec Executor) *Engine {
 	return &Engine{exec: exec}
-}
-
-// DefaultEngine returns an Engine wired to a production HTTP client.
-func DefaultEngine() *Engine {
-	return New(client.New(nil))
 }
 
 // Result is the complete output of a single test case run.
