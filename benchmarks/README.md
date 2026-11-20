@@ -152,17 +152,15 @@ one miss, and at most six inconclusive assessments. The command itself remains a
 measurement tool and does not enforce these detection thresholds.
 
 See [response assertion semantics](../docs/response-assertions.md) for configuration,
-limits, and evidence handling. Write postconditions and independent third-party
-app validation remain future work.
+limits, and evidence handling. This corpus does not establish accuracy on
+independent third-party applications.
 
 ## Write verification
 
 `-verify` adds a write verifier to the three write cases. It reads the owner's
 view of the document through a lab endpoint (`/secure/documents/1/content`),
-never through the scorer's audit. With `-assertions -verify`, the
-write-before-500 case becomes a true positive: TP=9 FP=0 missed=0 TN=8
-inconclusive=5. Without `-verify`, every count is unchanged. A regression test
-keeps this budget.
+never through the scorer's audit. See the [write-assurance guide](write-assurance/README.md#existing-authorization-corpus)
+for the corpus and its limits, and the [recorded results](write-assurance/compatibility.json) for the counts.
 
 ## Port to the current engine
 
