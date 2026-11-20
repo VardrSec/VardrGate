@@ -25,6 +25,7 @@ jobs:
         with:
           persist-credentials: false
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        if: github.event_name != 'pull_request'
         with:
           go-version: "1.27.4"
           cache: false
@@ -42,10 +43,13 @@ jobs:
           grep -Fq "## [$version]" CHANGELOG.md
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
-      - name: Verify formatting
-        run: test -z "$(gofmt -l .)"
-      - run: go vet ./...
-      - run: go test -race ./...
+      # ci.yml verifies the same checkout on every pull request.
+      - name: Verify tagged Go source
+        if: github.event_name != 'pull_request'
+        run: |
+          test -z "$(gofmt -l .)"
+          go vet ./...
+          go test -race ./...
 
   build:
     name: Build ${{ matrix.goos }} ${{ matrix.goarch }}
