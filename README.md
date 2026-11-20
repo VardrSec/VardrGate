@@ -628,41 +628,6 @@ envelope is then used exactly as written. VardrRunner passes it on every job.
   stays open. Without keys every route is open, which is meant for local
   development only.
 
-## Project layout
-
-```
-action.yml           — GitHub Action: verified install + run
-cmd/vardrgate/       — subcommand dispatch, exit codes
-  main.go            — dispatch, usage, version
-  execute.go         — run, policy run (--policy, --suite), demo; output flags, --fail-on gating
-  discover.go        — discover
-  importers.go       — gen, coverage
-  serve.go           — HTTP API and its environment config
-internal/
-  api/               — HTTP handlers (GET /health, POST /tests/execute, job queue)
-  client/            — HTTP execution, credential application, SSRF protection
-  compare/           — body/status comparison, sensitivity tiers, deny predicates
-  coverage/          — OpenAPI-vs-test-case coverage reporting
-  demo/              — vulnerable loopback fixture for `vardrgate demo`
-  discover/          — draft policies proposed from a spec (never executable)
-  engine/            — validation, execution, ownership-aware finding evaluation
-                       + setup.go: pre-request steps and variable capture
-  job/               — offline job envelope (vardrgate run --job)
-  model/             — domain types and constants
-  openapi/           — OpenAPI 3 parsing + starter test-case generation
-  postman/           — Postman v2.1 collection import
-  policy/            — declarative YAML policy parsing, compilation, bindings
-  report/            — text, Markdown and SARIF renderers
-  scaffold/          — starter test-case builder and its on-disk format
-  secretref/         — ${VAR} credential references
-  store/             — runner job queue + registry (in-memory + SQLite Store)
-  suite/             — suite files: many policies bound to one environment
-  urlcheck/          — URL and IP validation
-docs/
-  mvp.md             — first supported workflow
-examples/            — policies, a suite, identities, test case, and job examples
-```
-
 ## Development
 
 ```sh
