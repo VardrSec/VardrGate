@@ -174,6 +174,9 @@ func resolveAPIKeys() (map[string]string, error) {
 			if !ok || tenant == "" || key == "" {
 				return nil, errors.New("each entry must contain a nonempty tenant and key separated by ':'")
 			}
+			if assignedTenant, exists := keys[key]; exists && assignedTenant != tenant {
+				return nil, errors.New("an API key is assigned to multiple tenants")
+			}
 			keys[key] = tenant
 		}
 		return keys, nil

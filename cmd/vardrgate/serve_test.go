@@ -175,6 +175,8 @@ func TestServeAPIKeyStartup(t *testing.T) {
 	for _, tt := range []struct{ name, host, multi, single, want string }{
 		{"malformed on loopback", "localhost", "secret-broken", "", malformed},
 		{"mixed with fallback", "0.0.0.0", "a:secret-valid,secret-broken", "secret-single", malformed},
+		{"key shared by tenants", "localhost", "a:secret-shared,b:secret-shared", "secret-single", "API key is assigned to multiple tenants"},
+		{"key repeated for one tenant", "localhost", "a:secret-shared,a:secret-shared", "", storeError},
 		{"default loopback", "", "", "", storeError},
 		{"IPv4 loopback", "127.0.0.2", "", "", storeError},
 		{"IPv6 loopback", "::1", "", "", storeError},
